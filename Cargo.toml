@@ -1,0 +1,10 @@
+[package]
+name = "deep-bubocore"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+
+[lib]
+name = "bubocoreserver"
+path = "src/lib.rs"
