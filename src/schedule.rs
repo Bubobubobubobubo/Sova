@@ -1,18 +1,23 @@
-// Doit faire traduction (Event, MusicTime) en (ProtocolMessage, SyncTime)
+// Doit faire traduction (Event, TimeSpan) en (ProtocolMessage, SyncTime)
 
 use std::sync::mpsc::Sender;
 
-use crate::protocol::TimedMessage;
+use crate::{lang::variable::VariableStore, pattern::Pattern, protocol::TimedMessage};
 
 pub struct Scheduler {
-    world_iface : Sender<TimedMessage>
+    pub pattern : Pattern,
+    pub globals : VariableStore,
+
+    world_iface : Sender<TimedMessage>,
 }
 
 impl Scheduler {
 
     pub fn new(world_iface : Sender<TimedMessage>) -> Scheduler {
         Scheduler {
-            world_iface
+            world_iface,
+            pattern : Default::default(),
+            globals : Default::default()
         }
     }
 
