@@ -69,7 +69,6 @@ impl World {
 
     pub fn add_message(&mut self, msg : TimedMessage) {
         self.queue.push(msg);
-        self.refresh_next_timeout();
     }
 
     fn refresh_next_timeout(&mut self) {
@@ -93,7 +92,11 @@ impl World {
                 let mut clock_time = self.get_clock_micros();
                 clock_time %= 60 * 1000 * 1000;
                 let time = time % (60 * 1000 * 1000);
-                println!("{} {} | Time : {} ; Wanted : {}", log_message.level, log_message.msg, clock_time, time);
+                println!("{} {} | Time : {} ; Wanted : {}",
+                    log_message.level,
+                    log_message.msg,
+                    clock_time, time
+                );
             },
         }
     }

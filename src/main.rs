@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use clock::MusicTime;
+use clock::TimeSpan;
 use lang::{Event, Instruction, Program};
 use protocol::{log::{LogMessage, Severity}, ProtocolMessage};
 use world::World;
@@ -14,6 +14,7 @@ pub mod protocol;
 pub mod lang;
 pub mod dummytranslator;
 pub mod dummyast;
+pub mod pattern;
 
 fn main() {
 
@@ -25,24 +26,26 @@ fn main() {
 
     let sender2 = message_sender.clone();
 
-    let log0 = LogMessage::new(Severity::Debug, "Hello world !".to_owned());
-    let log0 = ProtocolMessage::LOG(log0).timed(now + 3 * 1000 * 1000);
-    sender2.send(log0).unwrap();
+    for i in 0..10 {
+        let log0 = LogMessage::new(Severity::Debug, "Hello world !".to_owned());
+        let log0 = ProtocolMessage::LOG(log0).timed(now + i * 1000 * 1000 * (i % 2));
+        sender2.send(log0).unwrap();
+    }
 
     // This is a test program for the scheduler
     let crashtest_program: Program = vec![
         Instruction::Effect(
-            Event::Note(60, MusicTime::Micros(1)),
-            MusicTime::Micros(2)
+            Event::Note(60, TimeSpan::Micros(1)),
+            TimeSpan::Micros(2)
         ),
         Instruction::Effect(
             Event::Exit,
-            MusicTime::Micros(4)
+            TimeSpan::Micros(4)
         )
     ];
 
     // This is a test program obtained from a script
     let crashtest_parsed_program: Program = translate("N 5 2 1 N 3 4 5");
 
-    handle.join();
+    handle.join().expect("Thread error");
 }

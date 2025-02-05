@@ -2,16 +2,19 @@ use rusty_link::{
     AblLink,
     SessionState
 };
+use serde::{Deserialize, Serialize};
 
 pub type SyncTime = u64;
 
-#[derive(Debug)]
-pub enum MusicTime {
+/// Time duration: either absolute
+/// or relative to musical tempo
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum TimeSpan {
     Micros(SyncTime),
     Beats(u64)
 }
 
-/// Struct representing the time server itself
+/// Ableton Link Server and Clock
 pub struct Clock {
     pub link: AblLink,
     pub session_state: SessionState,

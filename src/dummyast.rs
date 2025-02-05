@@ -1,5 +1,5 @@
 use crate::lang::{Program, Instruction, Event};
-use crate::clock::MusicTime;
+use crate::clock::TimeSpan;
 
 #[derive(Debug)]
 pub struct Prog {
@@ -32,8 +32,8 @@ impl Inst {
         use self::Inst::*;
         match self {
             EventPlayNote(n, d, p) => Instruction::Effect(
-                Event::Note(n, MusicTime::Micros(d*100000)),
-                MusicTime::Micros(p*100000)
+                Event::Note(n, TimeSpan::Micros(d*100000)),
+                TimeSpan::Micros(p*100000)
             ),
         }
     }
