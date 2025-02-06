@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-priority-queue = "2.1.2"
 midir = "0.10.1"
 rosc = "0.10.1"
 rusty_link = "0.4.4"
