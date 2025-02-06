@@ -9,7 +9,7 @@ pub mod control_asm;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Event {
     Nop,
-    Note(i64, TimeSpan),
+    Note(u64, TimeSpan),
     Break,
     Exit
 }
