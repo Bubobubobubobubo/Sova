@@ -1,8 +1,7 @@
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{collections::HashMap, time::{SystemTime, UNIX_EPOCH}};
 
 use clock::TimeSpan;
-use compiler::{Compiler, ExternalCompiler};
-use dummytranslator::DummyCompiler;
+use compiler::{dummyast::DummyCompiler, Compiler, ExternalCompiler};
 use lang::{Event, Instruction, Program};
 use protocol::{log::{LogMessage, Severity}, ProtocolMessage};
 use world::World;
@@ -13,8 +12,6 @@ pub mod io;
 pub mod world;
 pub mod protocol;
 pub mod lang;
-pub mod dummytranslator;
-pub mod dummyast;
 pub mod pattern;
 pub mod compiler;
 
@@ -30,7 +27,6 @@ fn main() {
 
     let bete = ExternalCompiler("bete".to_owned());
     let dummy = DummyCompiler;
-
 
     for i in 0..10 {
         let log0 = LogMessage::new(Severity::Debug, "Hello world !".to_owned());
