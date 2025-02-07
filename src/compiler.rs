@@ -2,6 +2,9 @@ use std::{collections::HashMap, io::Write, process::{Command, Stdio}, string::Fr
 
 use crate::lang::Program;
 
+pub mod dummyast;
+pub mod boinx;
+
 #[derive(Debug, Clone, Copy)]
 pub struct CompilationError;
 impl From<std::io::Error> for CompilationError {

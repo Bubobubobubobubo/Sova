@@ -1,13 +1,40 @@
-use std::collections::HashMap;
+use std::{collections::HashMap, ops::{Add, AddAssign}};
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum VariableValue {
     Integer(i64),
     Float(f64),
     Bool(bool),
     Str(String)
+}
+
+impl PartialOrd for VariableValue {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        match (self, other) {
+            (VariableValue::Integer(x), VariableValue::Integer(y)) => x.partial_cmp(y),
+
+            (VariableValue::Float(x), VariableValue::Float(y)) => x.partial_cmp(y),
+            (VariableValue::Integer(x), VariableValue::Float(y)) => (*x as f64).partial_cmp(y),
+            (VariableValue::Float(x), VariableValue::Integer(y)) => x.partial_cmp(&(*y as f64)),
+
+            (VariableValue::Bool(x), VariableValue::Bool(y)) => x.partial_cmp(y),
+            (VariableValue::Bool(x), VariableValue::Integer(y)) => (*x as i64).partial_cmp(y),
+            (VariableValue::Integer(x), VariableValue::Bool(y)) => x.partial_cmp(&(*y as i64)),
+
+            (VariableValue::Str(x), VariableValue::Str(y)) => x.partial_cmp(y),
+            _ => None
+        }
+    }
+}
+
+impl Add for VariableValue {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        todo!()
+    }
 }
 
 impl VariableValue {
@@ -28,11 +55,6 @@ impl VariableValue {
             VariableValue::Bool(b) => *b,
             VariableValue::Str(s) => s.len() > 0,
         }
-    }
-
-    pub fn make_consistents(value1 : &mut VariableValue, value2 : &mut VariableValue) -> bool {
-
-        true
     }
 
 }
