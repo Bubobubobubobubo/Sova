@@ -11,7 +11,8 @@ pub type SyncTime = u64;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum TimeSpan {
     Micros(SyncTime),
-    Beats(u64)
+    Beats(f64),
+    Steps(f64)
 }
 
 /// Ableton Link Server and Clock
