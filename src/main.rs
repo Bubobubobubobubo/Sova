@@ -45,7 +45,7 @@ fn main() {
     ];
 
     // This is a test program obtained from a script
-    let crashtest_parsed_program: Program = translate("N 5 2 1 N 3 4 5");
+    let crashtest_parsed_program: Program = translate("N 5 2 1 C 3 7 100 4 5");
 
     handle.join().expect("Thread error");
 }
