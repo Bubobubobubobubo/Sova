@@ -14,6 +14,19 @@ pub enum TimeSpan {
     Beats(u64)
 }
 
+impl TimeSpan {
+
+    pub fn to_micros(&self, clock : &Clock) -> SyncTime {
+        match self {
+            TimeSpan::Micros(m) => *m,
+            TimeSpan::Beats(b) => {
+                todo!()
+            },
+        }
+    }
+
+}
+
 /// Ableton Link Server and Clock
 pub struct Clock {
     pub link: AblLink,
@@ -35,12 +48,12 @@ impl Clock {
     }
 
     /// Pousser un nouvel état
-    pub fn commit_app_state(&mut self) {
+    pub fn commit_app_state(&self) {
         self.link.commit_app_session_state(&self.session_state);
     }
 
     /// Pousser la synchronisation
-    pub fn set_start_stop_sync(&mut self) {
+    pub fn set_start_stop_sync(&self) {
         let state = self.link.is_start_stop_sync_enabled();
         self.link.enable_start_stop_sync(!state);
         self.commit_app_state();
