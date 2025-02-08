@@ -2,7 +2,7 @@
 
 use std::{rc::Rc, sync::{mpsc::Sender, Arc}};
 
-use crate::{clock::{Clock, SyncTime}, device_map::DeviceMap, lang::{variable::VariableStore, Event}, pattern::{script::{Script, ScriptExecution}, Pattern}, protocol::{ProtocolMessage, TimedMessage}};
+use crate::{clock::{Clock, SyncTime}, device_map::DeviceMap, lang::variable::VariableStore, pattern::{script::{Script, ScriptExecution}, Pattern}, protocol::{ProtocolMessage, TimedMessage}};
 
 pub const SCHEDULED_DRIFT : SyncTime = 30_000;
 
@@ -40,10 +40,9 @@ impl Scheduler {
             if !exec.is_ready(scheduled_date) {
                 return true;
             }
-            let script_date = exec.scheduled_time;
-            if let Some(event) = exec.execute_next(&mut self.globals, &self.clock) {
+            if let Some((event, date)) = exec.execute_next(&mut self.globals, &self.clock) {
                 let protocol = self.devices.map_event(event);
-                let timed = protocol.timed(script_date);
+                let timed = protocol.timed(date);
                 let _ = self.world_iface.send(timed);
             }
             exec.has_terminated()
