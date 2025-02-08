@@ -9,7 +9,10 @@ impl DeviceMap {
     }
 
     pub fn map_event(&self, event : Event) -> ProtocolMessage {
-        todo!()
+        match event {
+            Event::Nop => todo!(),
+            Event::Note(_, time_span) => todo!(),
+        }
     }
 
 }

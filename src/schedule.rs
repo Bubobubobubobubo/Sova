@@ -1,6 +1,6 @@
 // Doit faire traduction (Event, TimeSpan) en (ProtocolMessage, SyncTime)
 
-use std::{rc::Rc, sync::{mpsc::{self, Receiver, Sender}, Arc}, thread::JoinHandle};
+use std::{collections::HashMap, rc::Rc, sync::{mpsc::{self, Receiver, Sender, TryRecvError}, Arc}, thread::JoinHandle};
 
 use thread_priority::ThreadBuilder;
 
@@ -40,8 +40,8 @@ impl Scheduler {
         Scheduler {
             world_iface,
             pattern : Default::default(),
-            globals : Default::default(),
-            executions : Default::default(),
+            globals : HashMap::new(),
+            executions : Vec::new(),
             devices,
             clock,
             message_source : receiver
@@ -49,10 +49,14 @@ impl Scheduler {
     }
 
     pub fn do_your_thing(&mut self) {
-        if let Ok(msg) = self.message_source.try_recv() {
-
+        loop {
+            match self.message_source.try_recv() {
+                Err(TryRecvError::Disconnected) => break,
+                Ok(_) => (),
+                Err(_) => (),
+            }
+            self.execution_loop();
         }
-        self.execution_loop();
     }
 
     pub fn kill_all(&mut self) {

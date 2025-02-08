@@ -1,4 +1,4 @@
-use std::{collections::HashMap, ops::{Add, AddAssign}};
+use std::{collections::HashMap, ops::{Add, AddAssign, Not}};
 
 use serde::{Deserialize, Serialize};
 
@@ -37,6 +37,18 @@ impl Add for VariableValue {
     }
 }
 
+impl Not for VariableValue {
+    type Output = Self;
+
+    fn not(self) -> Self::Output {
+        match self {
+            VariableValue::Integer(i) => VariableValue::Integer(!i),
+            VariableValue::Bool(b) => VariableValue::Bool(!b),
+            _ => self
+        }
+    }
+}
+
 impl VariableValue {
 
     pub fn clone_type(&self) -> VariableValue {
@@ -59,7 +71,7 @@ impl VariableValue {
 
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Variable {
     Global(String),
     Persistent(String),

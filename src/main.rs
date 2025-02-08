@@ -4,7 +4,7 @@ use crate::clock::ClockServer;
 use clock::TimeSpan;
 use compiler::{dummyast::DummyCompiler, Compiler, ExternalCompiler};
 use device_map::DeviceMap;
-use lang::{Event, Instruction, Program};
+use lang::{control_asm::ControlASM, Event, Instruction, Program};
 use protocol::{log::{LogMessage, Severity}, ProtocolMessage};
 use schedule::Scheduler;
 use world::World;
@@ -48,10 +48,7 @@ fn main() {
             Event::Note(60, TimeSpan::Micros(1)),
             TimeSpan::Micros(2)
         ),
-        Instruction::Effect(
-            Event::Exit,
-            TimeSpan::Micros(4)
-        )
+        Instruction::Control(ControlASM::Exit)
     ];
 
     // This is a test program obtained from a script
