@@ -62,10 +62,6 @@ impl ScriptExecution {
                 None
             },
             Instruction::Effect(event, time_span) => {
-                if *event == Event::Exit {
-                    self.stop();
-                    return None;
-                }
                 self.current_instruction += 1;
                 let wait = time_span.as_micros(clock);
                 let res = (event.clone(), self.scheduled_time);
@@ -95,6 +91,7 @@ impl ScriptExecution {
                     return;
                 }
             },
+            _ => ()
         }
         self.current_instruction += 1;
         match control {
@@ -117,7 +114,13 @@ impl ScriptExecution {
             ControlASM::Sub(x, y) => todo!(),
             ControlASM::And(x, y) => todo!(),
             ControlASM::Or(x, y) => todo!(),
-            ControlASM::Not(variable) => todo!(),
+            ControlASM::Not(x) => {
+                let value = x.evaluate(globals, & *persistents, ephemer).unwrap();
+                x.set(!value, globals, &mut *persistents, ephemer);
+            },
+            ControlASM::Exit => {
+                self.current_instruction = usize::MAX
+            },
         }
     }
 

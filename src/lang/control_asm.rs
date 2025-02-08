@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::variable::Variable;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ControlASM {
     Mov(Variable, Variable),
     JumpIfLess(Variable, Variable, usize),
@@ -12,4 +12,5 @@ pub enum ControlASM {
     And(Variable, Variable),
     Or(Variable, Variable),
     Not(Variable),
+    Exit
 }
