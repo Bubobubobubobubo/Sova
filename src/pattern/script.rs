@@ -1,7 +1,6 @@
-use core::time;
 use std::{cell::RefCell, collections::HashMap, rc::Rc};
 
-use crate::{clock::{Clock, SyncTime, TimeSpan}, lang::{control_asm::ControlASM, variable::{Variable, VariableStore}, Event, Instruction, Program}};
+use crate::{clock::{Clock, SyncTime}, lang::{control_asm::ControlASM, variable::{Variable, VariableStore}, Event, Instruction, Program}};
 
 #[derive(Debug, Default)]
 pub struct Script {
@@ -52,7 +51,7 @@ impl ScriptExecution {
         self.scheduled_time <= date
     }
 
-    pub fn execute_next(&mut self, globals : &mut VariableStore, clock : &Clock) -> Option<Event> {
+    pub fn execute_next(&mut self, globals : &mut VariableStore, clock : &Clock) -> Option<(Event, SyncTime)> {
         if self.current_instruction >= self.script.compiled.len() {
             return None;
         }
@@ -64,9 +63,10 @@ impl ScriptExecution {
             },
             Instruction::Effect(event, time_span) => {
                 self.current_instruction += 1;
-                let micros = time_span.as_micros(clock);
-                self.scheduled_time += micros;
-                Some(event.clone())
+                let wait = time_span.as_micros(clock);
+                let res = (event.clone(), self.scheduled_time);
+                self.scheduled_time += wait;
+                Some(res)
             },
         }
     }
