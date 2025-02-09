@@ -20,10 +20,12 @@ pub struct ScriptExecution {
 
 impl Script {
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.content.is_empty()
     }
 
+    #[inline]
     pub fn is_compiled(&self) -> bool {
         !self.compiled.is_empty()
     }
@@ -41,22 +43,27 @@ impl ScriptExecution {
         }
     }
 
+    #[inline]
     pub fn stop(&mut self) {
         self.instruction_index = usize::MAX;
     }
 
+    #[inline]
     pub fn has_terminated(&self) -> bool {
         self.instruction_index >= self.script.compiled.len()
     }
 
+    #[inline]
     pub fn is_ready(&self, date : SyncTime) -> bool {
         self.scheduled_time <= date
     }
 
+    #[inline]
     pub fn remaining_before(&self, date : SyncTime) -> SyncTime {
         self.scheduled_time - date
     }
 
+    #[inline]
     pub fn current_instruction(&self) -> &Instruction {
         &self.script.compiled[self.instruction_index]
     }
@@ -137,6 +144,7 @@ impl ScriptExecution {
             ControlASM::Exit => {
                 self.instruction_index = usize::MAX
             },
+            ControlASM::Goto(i) => self.instruction_index = *i,
         }
     }
 

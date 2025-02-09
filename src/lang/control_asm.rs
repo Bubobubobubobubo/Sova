@@ -12,5 +12,6 @@ pub enum ControlASM {
     And(Variable, Variable),
     Or(Variable, Variable),
     Not(Variable),
+    Goto(usize),
     Exit
 }
