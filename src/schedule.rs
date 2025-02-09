@@ -20,7 +20,9 @@ pub struct Scheduler {
     devices : Arc<DeviceMap>,
     clock : Clock,
 
-    message_source : Receiver<SchedulerMessage>
+    message_source : Receiver<SchedulerMessage>,
+
+    current_step : usize,
 }
 
 impl Scheduler {
@@ -34,7 +36,12 @@ impl Scheduler {
         let handle = ThreadBuilder::default()
             .name("deep-BuboCore-scheduler")
             .spawn(move |_| {
-                let mut sched = Scheduler::new(clock_server.into(), devices, world_iface, rx);
+                let mut sched = Scheduler::new(
+                    clock_server.into(), 
+                    devices, 
+                    world_iface, 
+                    rx
+                );
                 sched.do_your_thing();
             }).expect("Unable to start World");
         (handle, tx)
@@ -53,8 +60,30 @@ impl Scheduler {
             executions : Vec::new(),
             devices,
             clock,
-            message_source : receiver
+            message_source : receiver,
+            current_step : 0,
         }
+    }
+
+    fn step_index(&self, date : SyncTime) -> (usize, f64) {
+        let track = self.pattern.current_track();
+        let track_len : f64 = track.steps.iter().sum();
+        let beat = self.clock.beat_at_date(date);
+        let mut beat = beat % (track_len * track.speed_factor);
+        let mut start_beat = 0.0f64;
+        for i in 0..track.steps.len() {
+            let step_len = track.steps[i] * track.speed_factor;
+            if beat <= step_len {
+                return (i, start_beat);
+            }
+            beat -= step_len;
+            start_beat += track.steps[i];
+        }
+        return (track.steps.len() - 1, start_beat);
+    }
+
+    pub fn process_message(&mut self, msg : SchedulerMessage) {
+
     }
 
     pub fn do_your_thing(&mut self) {
@@ -63,19 +92,36 @@ impl Scheduler {
             match self.message_source.try_recv() {
                 Err(TryRecvError::Disconnected) => break,
                 Err(TryRecvError::Empty) => (),
-                Ok(_) => (),
+                Ok(msg) => self.process_message(msg),
             }
             let track = self.pattern.current_track();
+            
+            let date = self.theoretical_date();
+            
+            let (step, start_beat) = self.step_index(date);
+            if step != self.current_step {
+                let scheduled_date = self.clock.date_at_beat(start_beat);
+                let script = Rc::clone(&track.scripts[step]);
+                self.start_execution(script, scheduled_date);
+                self.current_step = step;
+            }
+            
             self.execution_loop();
         }
     }
 
+    #[inline]
+    pub fn theoretical_date(&self) -> SyncTime {
+        self.clock.micros() + SCHEDULED_DRIFT
+    }
+
+    #[inline]
     pub fn kill_all(&mut self) {
         self.executions.clear();
     }
 
     fn execution_loop(&mut self) {
-        let scheduled_date = self.clock.micros() + SCHEDULED_DRIFT;
+        let scheduled_date = self.theoretical_date();
         self.executions.retain_mut(|exec| {
             if !exec.is_ready(scheduled_date) {
                 return true;
@@ -90,8 +136,8 @@ impl Scheduler {
         });
     }
 
-    pub fn start_execution(&mut self, script : &Rc<Script>, scheduled_date : SyncTime) {
-        let execution = ScriptExecution::execute_at(Rc::clone(script), scheduled_date);
+    pub fn start_execution(&mut self, script : Rc<Script>, scheduled_date : SyncTime) {
+        let execution = ScriptExecution::execute_at(script, scheduled_date);
         self.executions.push(execution);
     } 
 

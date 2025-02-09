@@ -81,9 +81,22 @@ impl Clock {
         self.server.link.clock_micros() as SyncTime
     }
 
+    pub fn date_at_beat(&self, beat : f64) -> SyncTime {
+        self.session_state.time_at_beat(beat, self.server.quantum) as SyncTime
+    }
+
     pub fn date_at_relative_beats(&self, beats : f64) -> SyncTime {
         let beat = self.session_state.beat_at_time(self.server.link.clock_micros(), self.server.quantum) + beats;
         self.session_state.time_at_beat(beat, self.server.quantum) as SyncTime
+    }
+
+    pub fn beat_at_date(&self, date : SyncTime) -> f64 {
+        self.session_state.beat_at_time(date as i64, self.server.quantum)
+    }
+
+    pub fn beat_at_relative_date(&self, date : SyncTime) -> f64 {
+        let rel_date = self.server.link.clock_micros() + date as i64;
+        self.session_state.beat_at_time(rel_date, self.server.quantum)
     }
 
     pub fn beats_to_micros(&self, beats : f64) -> SyncTime {
