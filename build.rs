@@ -1,3 +1,5 @@
 fn main() {
-    lalrpop::process_root().unwrap();
+    //lalrpop::Configuration::new()
+    //    .force_build(true);
+    lalrpop::process_src().unwrap();
 }

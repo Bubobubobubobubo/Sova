@@ -2,7 +2,7 @@ use std::{collections::HashMap, io::Write, process::{Command, Stdio}, string::Fr
 
 use crate::lang::Program;
 
-pub mod dummyast;
+pub mod dummylang;
 pub mod boinx;
 
 #[derive(Debug, Clone, Copy)]
