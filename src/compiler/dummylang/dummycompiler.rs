@@ -1,7 +1,6 @@
-use lalrpop_util::lalrpop_mod;
 use crate::{compiler::{CompilationError, Compiler}, lang::Program};
 
-use super::dummygrammar;
+use crate::compiler::dummylang::dummygrammar;
 
 pub struct DummyCompiler;
 impl Compiler for DummyCompiler {
