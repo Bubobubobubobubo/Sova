@@ -1,5 +1,5 @@
 use std::str::FromStr;
-use crate::compiler::dummyast::{Inst, Prog};
+use crate::compiler::dummylang::dummyast::{Inst, Prog};
 
 grammar;
 
@@ -9,6 +9,7 @@ pub Prog: Prog = {
 };
 
 Expr: Inst = {
+    "A" <s: NumSeq> => Inst::EventPlayArpeggio(s),
     "C" <s: NumSeq> => Inst::EventPlayChord(s),
     "N" <s: NumSeq> => Inst::EventPlayNote(s),
 };

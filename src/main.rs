@@ -3,7 +3,7 @@ use std::{sync::Arc, vec};
 use crate::clock::ClockServer;
 use crate::pattern::Pattern;
 use clock::TimeSpan;
-use compiler::{dummyast::DummyCompiler, Compiler, ExternalCompiler};
+use compiler::{dummylang::DummyCompiler, Compiler, ExternalCompiler};
 use device_map::DeviceMap;
 use lang::{control_asm::ControlASM, event::Event, variable::{Variable, VariableValue}, Instruction, Program};
 use pattern::{script::Script, Track};
@@ -60,7 +60,10 @@ fn main() {
             ControlASM::JumpIfLess(Variable::Constant((-1).into()), var.clone(), 1)
         ),
     ];
-    let crashtest_parsed_program: Program = dummy.compile("N 5 2 1 C 3 7 100 4 5").unwrap();
+
+    // This is a test program obtained from a script
+    let crashtest_parsed_program: Program = dummy.compile("N 5 2 1 C 3 7 100 4 5 A 1 3 5 8 6 3").unwrap();
+    print!("{:?}", crashtest_parsed_program);
 
     let track = Track {
         steps: vec![1.0, 4.0],
@@ -76,9 +79,6 @@ fn main() {
     };
     let message = SchedulerMessage::UploadPattern(pattern);
     let _ = sched_iface.send(message);
-
-    // This is a test program obtained from a script
-
 
     sched_handle.join().expect("Scheduler thread error");
     world_handle.join().expect("World thread error");
