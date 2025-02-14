@@ -121,9 +121,97 @@ In other words:
 - if there is a persistent variable $v$ declared by some instruction $i$ in a theLanguage program and there exists an environment variable or a global variable also called $v$, then any reading or writing to $v$ after the execution of $i$ will be on the persistent variable;
 - if there is a global variable $v$ declared by som instruction $i$ in a theLanguage program and there exists an environment variable also called $v$, then any reading or writing to $v$ in any theLanguage program after the execution of $i$ will be on the global variable.
 
+== A few words on functions
+
+#text(blue)[TODO: à écrire]
+
 = theLanguage: theTool Intermediate Low-level Language
 
+In this section we describe all the control instructions (@sec:control) and all the effect instructions (@sec:effect) available in the theLanguage language.
+These instructions use variables and durations and we explain how they behave in @sec:variables and @sec:timing respectively.
+We also list the environment variables (@sec:envvariables).
+
+== Variables <sec:variables>
+
+=== Types of variables
+
+Each variable (being environment, global, persistent or ephemeral) and constant has a type.
+The possible types are defined in ``` src/lang/variable.rs```:
+
+#raw("pub enum VariableValue {
+    Integer(i64),
+    Float(f64),
+    Bool(bool),
+    Str(String),
+    Func(Program),
+}
+")
+#text(red)[TODO: je pense que ce serait bien d'uniformiser, genre Int, Float, Bool, Str, Func ou bien Integer, Floating, Boolean, String, Function]
+
+Integers, float, bool and str variables are used to store values that can be read or written by the instructions of a program.
+
+Function (Func) variables are programs themselves, they can be executed by calling them with particular call control instruction. #text(red)[TODO: pas encore implanté]
+
+=== Type casting
+
+#text(red)[TODO: est-ce que cet ajustement des types est déjà fait ?]
+
+Instructions arguments are typed: each instruction expects a particular type for each of its input arguments (unless specified otherwise) and has to respect the type of its (potential) output argument when writing to it.
+
+In order to avoid errors, values that have not the expected type will be casted to the correct type, following the rules given in @tab:casting.
+In this table, $bot$ denotes a function that does nothing (the program is an empty vector).
+
+#figure(
+table(
+  columns: 6,
+  inset: 10pt,
+  fill: (x, y) =>
+    if x !=0 and x == y { 
+      gray 
+    } else if x == 0 or y == 0 {
+      green.lighten(80%)
+    },
+  align: horizon,
+  table.header(
+    [*From\\To*], [*Integer*], [*Float*], [*Bool*], [*Str*], [*Func*]
+  ),
+  [*Integer*], [], [Represented\ as float], [$0  arrow #false$\ $!= 0 arrow #true $], [Decimal\ representation], [$bot$],
+  [*Float*], [Rounded\ to integer], [], [$0  arrow #false$\ $!= 0 arrow #true $], [Decimal\ representation], [$bot$],
+  [*Bool*], [$#false arrow 0$\ $#true arrow 1$], [$#false arrow 0.0$\ $#true arrow 1.0$], [], [$#false arrow$ "False"\ $#true arrow$ "True"], [$bot$],
+  [*Str*], [Parsed as integer\ (0 if error)], [Parsed as float\ (0 if error)], ["" $arrow #false$ \ $!=$"" $arrow #true$], [], [$bot$],
+  [*Func*], [$bot arrow 0$\ $!=bot arrow 1$], [$bot arrow 0.0$\ $!=bot arrow 1.0$], [$bot arrow #false$\ $!=bot arrow #true$], [Name of the\ function], [],
+)) <tab:casting>
+
+
 == Control instructions <sec:control>
+
+Control instructions allow to perform basic operations (boolean and arithmetic) over variables.
+They also can change the control-flow of a program.
+
+Concretely, a theLanguage program is a vector of instructions. 
+At any time, the next instruction to be executed is given by a position in this vector (think of the program counter for a processor) that the scheduler stores.
+After executing an instruction, by default this position is increased by one.
+To alter the control-flow, a few instructions allow to arbitrarily change this position (jump instructions) or even to change the vector that represents the current program (call and return instructions).
+
+The existing control instructions are defined in ``` scr/lang/control_asm.rs```:
+
+#raw("
+pub enum ControlASM {
+    Mov(Variable, Variable),
+    JumpIfLess(Variable, Variable, usize),
+    JumpIf(Variable, usize),
+    Add(Variable, Variable),
+    Sub(Variable, Variable),
+    And(Variable, Variable),
+    Or(Variable, Variable),
+    Cmp(Variable, Variable),
+    Not(Variable),
+    Goto(usize),
+    Exit
+}
+")
+
+== Timing operators <sec:timing>
 
 == Effect instructions <sec:effect>
 
