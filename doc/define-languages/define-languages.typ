@@ -32,7 +32,7 @@ At the end we also give a few guidelines on how to properly integrate a new scri
 
 = The theTool scheduler
 
-#text(blue)[TODO: pattern = tableau de sequences, sequence = tableau de pas. Les sequences d'un pattern sont exécutées en parallèle, les sequences sont ce que j'ai déjà défini plus bas + ajouter les instructions et la gestion du temps pour toute une séquence ?]
+#text(blue)[TODO: pattern = tableau de sequences, sequence = tableau de pas. Les sequences d'un pattern sont exécutées en parallèle, les sequences sont ce que j'ai déjà défini plus bas + ajouter les instructions et la gestion du temps pour toute une séquence ? Peut-être que chaque séquence vit dans un espace différent ? i.e. on ne peut pas toucher aux pas d'une autre séquences depuis un pas d'une séquence donnée ?]
 
 == General overview
 
@@ -624,6 +624,8 @@ We describe here the stop events as the corresponding pause events have the same
 
 
 == Environment variables <sec:envvariables>
+
+#text(blue)[TODO: on aurait envie d'avoir des variables d'environnement qui sont des ensembles, comment faire ? Ça demande sans doute d'ajouter un type de variable ?]
 
 theTool provides the following environment variables:
 
