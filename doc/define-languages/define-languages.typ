@@ -32,7 +32,7 @@ At the end we also give a few guidelines on how to properly integrate a new scri
 
 = The theTool scheduler
 
-#text(red)[TODO: pattern = tableau de sequences, sequence = tableau de pas. Les sequences d'un pattern sont exécutées en parallèle, les sequences sont ce que j'ai déjà défini plus bas]
+#text(blue)[TODO: pattern = tableau de sequences, sequence = tableau de pas. Les sequences d'un pattern sont exécutées en parallèle, les sequences sont ce que j'ai déjà défini plus bas + ajouter les instructions et la gestion du temps pour toute une séquence ?]
 
 == General overview
 
@@ -73,14 +73,14 @@ A theLanguage program is a sequence of _instructions_ (@lst:instruction) that ca
   #set align(left)
   #raw("pub enum Instruction {
     Control(ControlASM),
-    Effect(Event, TimeSpan),
+    Effect(Event, Variable),
 }")
   ],
   caption: "Instruction definition"
 ) <lst:instruction>
 
 The effect instructions are the ones that generate emissions of events to the World.
-Any effect instruction contains two informations: an event $e$ and a duration $d$.
+Any effect instruction contains two parts: an event $e$ and a duration $d$ (in @lst:instruction this last part is represented by a Variable, this will be explained later).
 In the following, such an instruction is denoted by $(e, d)$.
 
 The control instructions are all the other instructions: they are silent from the point of view of the World.
@@ -103,12 +103,28 @@ This means that control instructions are executed as fast as possible but that t
 When several programs execute in parallel (as in step 3 in @fig:steps) each runs as described in @sec:execsingle.
 The scheduler executes, in turn, one instruction from each program.
 The order in which the programs are considered is the order in which they started their execution.
-In case a program shall execute an effect instruction but the time for the event emission has not yet been met, its turn is skipped.
+In case a program shall execute an effect instruction but the time for the event emission has not yet been met, its turn is skipped (so it does not pause all the program executions).
 
 == How variables are handled
 
 theLanguage programs can manipulate variables with control instructions and use them in effect instructions.
-These variables are of four kinds: environment variables, global variables, persistent variables and ephemeral variables.
+These variables are of four kinds: environment variables, global variables, persistent variables and ephemeral variables (@lst:variables).
+
+
+#figure([
+  #set align(left)
+  #raw("pub enum Variable {
+    Environment(String),
+    Global(String),
+    Persistent(String),
+    Ephemeral(String),
+    Constant(VariableValue),
+}")
+  ],
+  caption: "Kinds of variables"
+) <lst:variables>
+
+
 
 === Environment variables
 
@@ -176,8 +192,6 @@ The possible types are given in @lst:types, which is an extract of the file ``` 
 
 #text(red)[TODO: je pense que ce serait bien d'uniformiser, genre Int, Float, Bool, Str, Func ou bien Integer, Floating, Boolean, String, Function. J'ai pris la première option, mais ce n'est peut-être pas possible en Rust si les types sont déjà utilisés ?]
 
-#text(red)[TODO: je ne sais pas si c'est exactement comme ça qu'il faut rajouter le temps dans les types de variables]
-
 Integers, float, bool and str variables are used to store values that can be read or written by the instructions of a program.
 
 Function (Func) variables are programs themselves, they can be executed by calling them with particular call control instruction. #text(red)[TODO: pas encore implanté]
@@ -215,6 +229,56 @@ In this table, $bot$ denotes a function that does nothing (the program is an emp
 )
 ) <tab:casting>
 
+== Dealing with durations <sec:timing>
+
+According to @lst:timespan (which is an extract of the file ``` src/clock.rs```), variables representing durations can hold three kinds of values: microseconds, beats, and steps.
+A duration expressed as microseconds is an absolute time.
+A duration expressed as beats is a relative time: the exact duration depends on the number of microseconds in a beat.
+A duration expressed as steps is a relative time as well: the exact duration depends on the number of beats in the step associated to the theLanguage program in which the duration is used (that is, the step at which the program execution started).
+The duration of a beat or a step can be changed by theLanguage programs and by the environment.
+
+
+// en tout cas, il faut pouvoir convertir de n'importe quelle sorte vers n'importe quelle autre
+
+// tempo => beat duration in ms
+
+#figure([
+  #set align(left)
+  #raw("pub enum TimeSpan {
+    Micros(u64),
+    Beats(f64),
+    Steps(f64),
+}")
+  ],
+  caption: "TimeSpan definition"
+) <lst:timespan>
+
+Concrete durations are always expressed in microseconds, so when a time-stamp must be associated to an event or when a delay must be applied the corresponding durations are converted to microseconds if needed.
+Before that, durations are always kept as general as possible: when an arithmetic operation is performed between two durations, the most concrete one is converted to the kind of the most general, as show in @tab:duration.
+
+#figure(
+  caption: "Result kinds in arithmetic operations between durations",
+  table(
+  columns: 4,
+  inset: 10pt,
+  fill: (x, y) =>
+    if x !=0 and x < y { 
+      gray 
+    } else if x == 0 or y == 0 {
+      green.lighten(80%)
+    },
+  align: horizon,
+  table.header(
+    [], [*microseconds*], [*beats*], [*steps*],
+  ),
+  [*microseconds*], [microseconds], [beats], [steps],
+  [*beats*], [], [beats], [steps],
+  [*steps*], [], [], [steps],
+)
+) <tab:duration>
+
+Sometimes, one may want the result of a computation on durations not to be as general as possible, e.g to be evaluated as microseconds immediately, to prevent the duration to change with changes to the beat duration or to a step duration.
+For that, we provide operations to change the concreteness of a duration in @sec:control.
 
 == Control instructions <sec:control>
 
@@ -252,6 +316,10 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     ShiftRightL(Variable, Variable, Variable),
     // String operations
     Concat(Variable, Variable, Variable),
+    // Time manipulation
+    AsBeats(Variable, Variable),
+    AsMicros(Variable, Variable),
+    AsSteps(Variable, Variable),
     // Memory manipulation
     DeclareEphemeral(String, Variable),
     DeclareGlobal(String, Variable),
@@ -372,6 +440,16 @@ table(
   [Concat], [$z <- x.y$], [string concatenation],
 )) <tab:string>
 
+=== Time manipulation
+
+These instructions allow to perform conversions on durations.
+
+*AsMicros(d, v).* Casts $d$ to a duration. Set this duration to microseconds, cast it to the type of $v$, and then store it in $v$.
+
+*AsBeats(d, v).* Casts $d$ to a duration. Set this duration to beats, cast it to the type of $v$, and then store it in $v$.
+
+*AsSteps(d, v).* Casts $d$ to a duration. Set this duration to steps, cast it to the type of $v$, and then store it in $v$.
+
 === Memory manipulation
 
 The three variable declaration instructions (DeclareEphemeral, DeclareGlobal, DeclarePersistent) are of the form ``` Declare(name, value)``` and will create a new (Ephemeral, Globale or Persistent respectively) variable named ``` name``` and initialize its value to ``` value```.
@@ -482,7 +560,7 @@ In this section we give the semantics of these events.
 
 *Nop.* Does nothing.
 
-*List(e).* Performs all the events in $e$ as fast as possible, in the order of the list.
+*List(e).* Performs all the events in $e$ as fast as possible (that is, kind of simultaneously it there are not to much events in $e$), in the order in which they are given.
 
 === Music events
 
@@ -544,37 +622,34 @@ We describe here the stop events as the corresponding pause events have the same
 
 *StopYoungest(k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago).
 
-== Timing operators <sec:timing>
-
-// on peut mettre un entier en tant que ms, pulsations, pas, etc et la duration reste la plus précise possible (donc ne convertit rien en ms)
-
-// faire des calculs sur les durées (en ms, pulsations, etc)
-// une durée pourrait être un "calcul" genre un arbre de calcul
-
-// en tout cas, il faut pouvoir convertir de n'importe quelle sorte vers n'importe quelle autre
-
-// tempo => beat duration in ms
-
-#figure([
-  #set align(left)
-  #raw("pub enum TimeSpan {
-    Micros(SyncTime),
-    Beats(f64),
-    Steps(f64),
-}")
-  ],
-  caption: "TimeSpan definition"
-) <lst:timespan>
 
 == Environment variables <sec:envvariables>
 
+theTool provides the following environment variables:
+
+- *ProgInstanceID.* Number of this program instance.
+- *ProgStepID.* Number of the step associated to this program instance.
+- *ProgStepBeats.* Number of beats in the step associated to this program instance.
+- *ProgStepMicros.* Number of microseconds in the step associated to this program instance.
+- *ProgStepNumInstances.* Same as NumInstances but only for instances corresponding to the step associated to this program instance.
+- *ProgStepNumRunning.* Same as NumRunning but only for instances corresponding to the step associated to this program instance.
+- *ProgStepNumPaused.* Same as NumPaused but only for instances corresponding to the step associated to this program instance.
+- *CurrentStepID.* Number of the step currently executed.
+- *CurrentStepBeats.* Number of beats in the step currently executed.
+- *CurrentStepMicros.* Number of microseconds in the step currently executed.
+- *CurrentStepNumInstances.* Same as NumInstances but only for instances corresponding to the step currently executed.
+- *CurrentStepNumRunning.* Same as NumRunning but only for instances corresponding to the step currently executed.
+- *CurrentStepNumPaused.* Same as NumPaused but only for instances corresponding to the step currently executed.
+- *NumSteps.* Number of steps.
+- *NumInstances.* Number of instances currently running or paused.
+- *NumRunning.* Number of instances currently running
+- *NumPaused.* Number of instances currently paused.
+- *TotalSteps.* Number of steps since the launch of theTool.
+- *TotalBeats.* Number of beats since the launch of theTool.
+- *TotalMicros.* Number of microseconds since the launch of theTool. This cannot be computed from TotalSteps or TotalBeats as the duration of a step/a beat may have changed over time.
+- *BeatMicros.* Number of microseconds in a beat. 
+
 // temps
-// instances en cours pour un pas
-// nombre de pas
-// numéro du pas courant
-// numéro du pas associé à ce programme (celui où il a démarré)
-// instances en pause
-// numéro d'instance du programme courant
 
 = Guidelines for building a custom scripting language
 
@@ -600,6 +675,6 @@ As an example, one can have a look at the _dummylang_ language that has been cre
 - it is exported in ``` src/compiler/dummylang/dummylang.rs``` by the line ``` pub use dummycompiler::DummyCompiler;```,
 - it is declared in ``` src/compiler.rs``` by the line ``` pub mod dummylang;```.
 
-== Compiler as standalone binary
+== Compiler as a standalone binary
 
-#text(red)[TODO (pas encore possible, à coder d'abord)]
+#text(blue)[TODO: regarder comment ça marche et faire un exemple]
