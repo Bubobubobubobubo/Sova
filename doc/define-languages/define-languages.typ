@@ -4,6 +4,8 @@
 #set par(justify: true)
 #set heading(numbering: "1.1")
 #set raw(lang: "rust")
+#set figure(placement: auto)
+
 
 #let smallCell(body, factor: 7pt) = {
   text(factor)[#body]
@@ -20,19 +22,21 @@
   ),
 )
 
-#align(center, text(17pt)[
-  *Messing Around with theLanguage\ or\ #title*
-])
+#align(center)[
+  #text(21pt)[*Messing Around with theLanguage*\ ]
+  #text(17pt)[*#title*]
+]
 
+\
 
-theTool has been designed so that it is (relatively) simple for a user to define their own scripting language(s) to be used for Live-Coding the steps of a pattern.
+*Abstract.* theTool has been designed so that it is (relatively) simple for a user to define their own scripting language(s) to be used for Live-Coding the steps of a pattern.
 The general idea is to write a compiler that will translate scripts to a low-level language – theLanguage – that is interpreted by the theTool scheduler.
 This requires to know theLanguage and to understand how the theTool scheduler works, which is the object of this document.
-At the end we also give a few guidelines on how to properly integrate a new script language into theTool.
+At the end we also give a few guidelines on how to properly integrate a new scripting language into theTool.
+
+\
 
 = The theTool scheduler
-
-#text(blue)[TODO: pattern = tableau de sequences, sequence = tableau de pas. Les sequences d'un pattern sont exécutées en parallèle, les sequences sont ce que j'ai déjà défini plus bas + ajouter les instructions et la gestion du temps pour toute une séquence ? Peut-être que chaque séquence vit dans un espace différent ? i.e. on ne peut pas toucher aux pas d'une autre séquences depuis un pas d'une séquence donnée ?]
 
 == General overview
 
@@ -40,7 +44,7 @@ As show in @fig:overview, the scheduler is responsible for emitting (time-stampe
 These events are mostly sent to the World, the interface between theTool and the different devices — hardware or software — that it controls.
 They can also occasionally be sent to other parts of theTool.
 
-For that the scheduler loops forever, executing an "infinite" sequence of steps (each taken into a finite set of steps).
+For that the scheduler loops forever, executing sequences of steps (each taken into a finite set of steps).
 The events that shall be emitted at each of these steps are specified as a sequence of instructions (a program) written in the theTool Intermediate Low-level Language (theLanguage).
 So, each step is associated to a theLanguage program.
 
@@ -105,10 +109,25 @@ The scheduler executes, in turn, one instruction from each program.
 The order in which the programs are considered is the order in which they started their execution.
 In case a program shall execute an effect instruction but the time for the event emission has not yet been met, its turn is skipped (so it does not pause all the program executions).
 
+== Pattern, sequences, steps and some vocabulary
+
+For the moment, we abstracted the exact way in which theTool scheduler handles steps.
+The idea is that there is an object that we call a _pattern_ which is an array of objects called _sequences_. 
+Each of these sequences is itself an array of _steps_.
+A step is constituted of a theLanguage program (that we call the program _associated_ to this step) and a duration.
+
+The theTool scheduler executes all the sequences in the pattern in parallel.
+For executing a sequence it starts at the first step in the array.
+Each steps is occurring for a time corresponding to its duration.
+At the end of a step, the scheduler switches to the next step in the same sequence.
+At the end of a sequence, the scheduler goes back to the start of this sequence.
+At the beginning of any step, the scheduler starts an execution of the corresponding theLanguage program.
+We call this execution an _instance_ of the program.
+
 == How variables are handled
 
 theLanguage programs can manipulate variables with control instructions and use them in effect instructions.
-These variables are of four kinds: environment variables, global variables, persistent variables and ephemeral variables (@lst:variables).
+These variables are of five kinds: environment variables, global variables, sequence variables, step variables and instance variables (@lst:variables).
 
 
 #figure([
@@ -116,14 +135,16 @@ These variables are of four kinds: environment variables, global variables, pers
   #raw("pub enum Variable {
     Environment(String),
     Global(String),
-    Persistent(String),
-    Ephemeral(String),
+    Sequence(String),
+    Step(String),
+    Instance(String),
     Constant(VariableValue),
 }")
   ],
   caption: "Kinds of variables"
 ) <lst:variables>
 
+#text(red)[TODO: changer les noms dans le code]
 
 
 === Environment variables
@@ -136,14 +157,19 @@ A list of these variables is given in @sec:envvariables.
 
 Global variables are shared among all the theLanguage program executions.
 
-=== Persistent variables
+=== Sequence variables
 
-Persistent variables are local to the theLanguage program in which they are declared but are shared between all the executions of this program.
+Sequence variables are shared among all the theLanguage programs of a given sequence (the sequence in which they are declared).
+They cannot be seen by programs associated to steps from other sequences.
 
-=== Ephemeral variables
+=== Step variables
 
-Ephemeral variables are local to the theLanguage program execution in which they are declared.
-So, if several executions (parallel or not) of the same program exist, each of these executions has its own version of these variables.
+Step variables are shared among all the instances of the theLanguage program in which they are declared but are not seen by other programs.
+
+=== Instance variables
+
+Ephemeral variables are local to the instance of theLanguage program in which they are declared.
+So, if several instances (parallel or not) of the same program exist, each of them has its own version of these variables.
 
 === Variables with similar names
 
@@ -170,7 +196,7 @@ We also list the environment variables (@sec:envvariables).
 
 == Types of variables <sec:variables>
 
-Each variable (being environment, global, persistent or ephemeral) and constant has a type.
+Each variable (being environment, global, sequence, step, or instance) and constant has a type.
 
 === Existing types
 
@@ -184,7 +210,7 @@ The possible types are given in @lst:types, which is an extract of the file ``` 
     Bool(bool),
     Str(String),
     Func(Program),
-    Duration(TimeSpan),
+    Dur(TimeSpan),
   }")
   ],
   caption: "Types"
@@ -192,9 +218,9 @@ The possible types are given in @lst:types, which is an extract of the file ``` 
 
 #text(red)[TODO: je pense que ce serait bien d'uniformiser, genre Int, Float, Bool, Str, Func ou bien Integer, Floating, Boolean, String, Function. J'ai pris la première option, mais ce n'est peut-être pas possible en Rust si les types sont déjà utilisés ?]
 
-Integers, float, bool and str variables are used to store values that can be read or written by the instructions of a program.
+Integers, Float, Bool, Str and Dur variables are used to store values that can be read or written by the instructions of a program.
 
-Function (Func) variables are programs themselves, they can be executed by calling them with particular call control instruction. #text(red)[TODO: pas encore implanté]
+Func variables are programs themselves, they can be executed by calling them with the CallFunction control instruction. #text(red)[TODO: pas encore implanté]
 
 === Type casting
 
@@ -218,14 +244,14 @@ In this table, $bot$ denotes a function that does nothing (the program is an emp
     },
   align: horizon,
   table.header(
-    [*From\\To*], [*Int*], [*Float*], [*Bool*], [*Str*], [*Func*], [*Duration*],
+    [*From\\To*], [*Int*], [*Float*], [*Bool*], [*Str*], [*Func*], [*Dur*],
   ),
   [*Int*], [], smallCell[Represented\ as float], smallCell[$0  arrow #false$\ $!= 0 arrow #true $], smallCell[Decimal\ representation], smallCell[$bot$], smallCell[Int as milliseconds],
   [*Float*], smallCell[Rounded\ to int], smallCell[], smallCell[$0  arrow #false$\ $!= 0 arrow #true $], smallCell[Decimal\ representation], smallCell[$bot$], smallCell[Rounded to int as milliseconds],
   [*Bool*], smallCell[$#false arrow 0$\ $#true arrow 1$], smallCell[$#false arrow 0.0$\ $#true arrow 1.0$], smallCell[], smallCell[$#false arrow$ "False"\ $#true arrow$ "True"], smallCell[$bot$], smallCell[?],
   [*Str*], smallCell[Parsed as int\ (0 if error)], smallCell[Parsed as float\ (0 if error)], smallCell["" $arrow #false$ \ $!=$"" $arrow #true$], smallCell[], smallCell[$bot$], smallCell[Parsed as time duration (0 if error)],
   [*Func*], smallCell[$bot arrow 0$\ $!=bot arrow 1$], smallCell[$bot arrow 0.0$\ $!=bot arrow 1.0$], smallCell[$bot arrow #false$\ $!=bot arrow #true$], smallCell[Name of the\ function], smallCell[], smallCell[?],
-  [*Duration*], smallCell[Milliseconds as int], smallCell[Milliseconds represented as float], smallCell[$0$ms $-> #false$\ $!=0$ms $-> #true$], smallCell[Time as string], smallCell[$bot$], smallCell[],
+  [*Dur*], smallCell[Milliseconds as int], smallCell[Milliseconds represented as float], smallCell[$0$ms $-> #false$\ $!=0$ms $-> #true$], smallCell[Time as string], smallCell[$bot$], smallCell[],
 )
 ) <tab:casting>
 
@@ -253,7 +279,8 @@ The duration of a beat or a step can be changed by theLanguage programs and by t
   caption: "TimeSpan definition"
 ) <lst:timespan>
 
-Concrete durations are always expressed in microseconds, so when a time-stamp must be associated to an event or when a delay must be applied the corresponding durations are converted to microseconds if needed.
+Concrete durations are always expressed in microseconds. 
+So, when a time-stamp must be associated to an event or when a delay must be applied the corresponding durations are converted to microseconds if needed.
 Before that, durations are always kept as general as possible: when an arithmetic operation is performed between two durations, the most concrete one is converted to the kind of the most general, as show in @tab:duration.
 
 #figure(
@@ -299,6 +326,7 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     // Arithmetic operations
     Add(Variable, Variable, Variable),
     Div(Variable, Variable, Variable),
+    Mod(Variable, Variable, Variable),
     Mul(Variable, Variable, Variable),
     Sub(Variable, Variable, Variable),
     // Boolean operations
@@ -321,9 +349,10 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     AsMicros(Variable, Variable),
     AsSteps(Variable, Variable),
     // Memory manipulation
-    DeclareEphemeral(String, Variable),
-    DeclareGlobal(String, Variable),
-    DeclarePersistent(String, Variable),
+    DeclareGlobale(String, Variable),
+    DeclareInstance(String, Variable),
+    DeclareSequence(String, Variable),
+    DeclareStep(String, Variable),
     Mov(Variable, Variable),
     // Jumps
     Jump(usize),
@@ -345,10 +374,12 @@ The existing control instructions are given in @lst:asm, which is an extract of 
 
 These instructions are all of the form ``` Op(x, y, z)```.
 Arguments x and y are inputs and z is an output.
-It is expected that x and y are two numbers of the same type (int, float or duration).
+It is expected that x and y are two numbers of the same type (Int, Float or Dur).
 If this is not the case: 
 - if z is a float, an int or a duration, they will both be casted to the type of z,
-- else they will both be casted to the type of x.
+- else if x is a number y will be casted to the type of x,
+- else if y is a number x will be casted to the type of y,
+- else they will both be casted to Int.
 The result of the operation will be casted to the type of z (if needed).
 
 Each instruction performs a different operation, as shown in @tab:arithmetic.
@@ -364,6 +395,7 @@ table(
   ),
   [Add], [$z <- x + y$], [],
   [Div], [$z <- x \/ y$], [$z <- 0$ if $y = 0$],
+  [Mod], [$z <- x mod y$], [$z <- x$ if $y = 0$],
   [Mul], [$z <- x times y$], [],
   [Sub], [$z <- x - y$], [],
 )) <tab:arithmetic>
@@ -452,7 +484,7 @@ These instructions allow to perform conversions on durations.
 
 === Memory manipulation
 
-The three variable declaration instructions (DeclareEphemeral, DeclareGlobal, DeclarePersistent) are of the form ``` Declare(name, value)``` and will create a new (Ephemeral, Globale or Persistent respectively) variable named ``` name``` and initialize its value to ``` value```.
+The four variable declaration instructions (DeclareGlobal, DeclareInstance, DeclareSequence, DeclareStep) are of the form ``` Declare(name, value)``` and will create a new (Global, Instance, Sequence or Step) variable named ``` name``` and initialize its value to ``` value```.
 The type of the new variable is the type of ``` value```.
 
 Notice that, in any program instruction arguments, if a variable that does not exists is used, it will be created with a 0 value.
@@ -469,7 +501,7 @@ By default, after executing an instruction, the scheduler increases ``` pc```: $
 Jump instructions allow to replace this standard update of ``` pc``` by something else, potentially based on a condition.
 
 The semantics of the different jump instructions is given in @tab:jumps.
-In each case, if the condition is $#true$ then $"pc" <- "pc" + d$.
+In each case, if the condition is $#true$ then $"pc" <- d mod n$ (where $n$ is the number of instructions in the program).
 Else, $"pc" <- "pc" + 1$.
 
 #figure(
@@ -494,7 +526,7 @@ table(
 #text(red)[TODO: pas mal de trucs à rajouter dans le scheduler pour gérer ça]
 
 A jump instruction always jumps to the same position in a program.
-Hence, one cannot use them to simulate procedure calls (the return position from a procedure depends of the point in code at which the jump to the procedure happened).
+Hence, one cannot use them to simulate procedure calls (the return position from a procedure depends on the point in code at which the jump to the procedure happened).
 
 Calls are jumps that store, in a stack, the position from which they jumped.
 Returns are jumps that read in this stack to determine the position to which they jump.
@@ -526,11 +558,15 @@ In this section we give the semantics of these events.
     PlayChord(Vec<Variable>, Variable),
     // Time handling
     SetBeatDuration(Variable),
+    SetCurrentStepDuration(Variable),
     SetStepDuration(Variable, Variable),
     // Program starting
     ContinueAll,
     ContinueInstance(Variable),
     ContinueOldest(Variable),
+    ContinueSequence(Variable),
+    ContinueSequenceOldest(Variable),
+    ContinueSequenceYoungest(Variable),
     ContinueStep(Variable),
     ContinueStepOldest(Variable, Variable),
     ContinueStepYoungest(Variable, Variable),
@@ -540,6 +576,9 @@ In this section we give the semantics of these events.
     PauseAll,
     PauseInstance(Variable),
     PauseOldest(Variable),
+    PauseSequence(Variable),
+    PauseSequenceOldest(Variable, Variable),
+    PauseSequenceYoungest(Variable, Variable),
     PauseStep(Variable),
     PauseStepOldest(Variable, Variable),
     PauseStepYoungest(Variable, Variable),
@@ -547,6 +586,9 @@ In this section we give the semantics of these events.
     StopAll,
     StopInstance(Variable),
     StopOldest(Variable),
+    StopSequence(Variable),
+    StopSequenceOldest(Variable, Variable),
+    StopSequenceYoungest(Variable, Variable),
     StopStep(Variable),
     StopStepOldest(Variable, Variable),
     StopStepYoungest(Variable, Variable),
@@ -560,14 +602,14 @@ In this section we give the semantics of these events.
 
 *Nop.* Does nothing.
 
-*List(e).* Performs all the events in $e$ as fast as possible (that is, kind of simultaneously it there are not to much events in $e$), in the order in which they are given.
+*List(e).* Performs all the events in $e$ as fast as possible (that is, kind of simultaneously it there are not too much events in $e$), in the order in which they are given.
 
 === Music events
 
 Music events are the events that actually allow to play sound on a given device.
 Not all devices accept all events.
 
-*PlayChord(notes, d).* Plays all the notes given in _notes_ (casted to int used as midi values) together for $d$ (casted to a duration) milliseconds.
+*PlayChord(notes, d).* Plays all the notes given in _notes_ (casted to int used as midi values) together for $d$ (casted to a duration and set to milliseconds) milliseconds.
 
 === Time handling events
 
@@ -575,7 +617,9 @@ Time handling events allow to manage the relations between beats, step duration,
 
 *SetBeatDuration(t).* Sets the duration of one beat to $t$ (casted to a duration). This duration is set in milliseconds (absolute time) by first evaluating $t$ in milliseconds. The standard use is to give $t$ in milliseconds to setup a tempo. However, one could give $t$ in beats for relative change of tempo (if $t$ is 3 beats the tempo is divided by 3 as the duration of a beat is multiplied by 3).
 
-*SetStepDuration(n, t).* Sets the duration of step $n$ (casted to an int) to $t$ (casted to a duration). This duration is set in beats if possible or, else, it is set in milliseconds. The standard use is to give $t$ in beats, so that if beat duration changes step duration changes accordingly. However one could give $t$ in milliseconds to avoid this side effect. See @sec:envvariables for knowing how to get step numbers.
+*SetCurrentStepDuration(t).* Sets the duration of the step associated to the program instance calling this instruction to $t$ (casted to a duration). This duration is set in beats if possible or, else, it is set in milliseconds. The standard use is to give $t$ in beats, so that if beat duration changes step duration changes accordingly. However one could give $t$ in milliseconds to avoid this side effect.
+
+*SetStepDuration(n, t).* Same as SetCurrentStepDuration but for step $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
 
 === Program starting events <sec:starting>
 
@@ -588,6 +632,12 @@ How program instances can be paused is described in @sec:halting.
 
 *ContinueOldest(k).* Resumes the $k$ (casted to an int) program instances that were paused the longest time ago.
 
+*ContinueSequence(n).* Resumes all currently paused program instances corresponding to steps in sequence $n$ (casted to an int). See @sec:envvariables for knowing how to get sequence numbers.
+
+*ContinueSequenceOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to steps in sequence $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get sequence numbers.
+
+*ContinueSequenceYoungest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to steps in sequence $n$ (casted to an int) that were paused the shortest time ago. See @sec:envvariables for knowing how to get sequence numbers.
+
 *ContinueStep(n).* Resumes all currently paused program instances corresponding to step $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
 
 *ContinueStepOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to step $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get step numbers.
@@ -597,6 +647,8 @@ How program instances can be paused is described in @sec:halting.
 *ContinueYoungest(k).* Resumes the $k$ (casted to an int) program instances that were paused the shortest time ago.
 
 *Start(p, i).* Starts a new instance of program $p$. If $p$ is a function, then this function is used as a program. Else the program corresponding to step $p$ (casted to an int) is used. The number of the new instance is recorded in $i$ (after casting it to the type of $i$).
+Remark that such a program instance is not associated to any step or sequence.
+#text(blue)[TODO: est-ce que ça ne devrait pas être associé au step depuis lequel l'instruction est appelée ? ou alors pouvoir donner un step en paramètre ?]
 
 === Program halting events <sec:halting>
 
@@ -614,6 +666,12 @@ We describe here the stop events as the corresponding pause events have the same
 
 *StopOldest(k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago).
 
+*StopSequence(n).* Stops all the program instances corresponding to steps in sequence number $n$ (casted to an int). See @sec:envvariables for knowing how to get sequence numbers.
+
+*StopSequenceOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to steps in sequence number $n$ (casted to an int). See @sec:envvariables for knowing how to get sequence numbers.
+
+*StopSequenceYoungest(n, k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago) corresponding to steps in sequence number $n$ (casted to an int). See @sec:envvariables for knowing how to get sequence numbers.
+
 *StopStep(n).* Stops all the program instances corresponding to step number $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
 
 *StopStepOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to step number $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
@@ -627,31 +685,27 @@ We describe here the stop events as the corresponding pause events have the same
 
 #text(blue)[TODO: on aurait envie d'avoir des variables d'environnement qui sont des ensembles, comment faire ? Ça demande sans doute d'ajouter un type de variable ?]
 
-theTool provides the following environment variables:
+theTool provides the following environment variables, some are parameterized for simplicity:
 
-- *ProgInstanceID.* Number of this program instance.
-- *ProgStepID.* Number of the step associated to this program instance.
+- *ProgInstanceID.* ID of this program instance.
+- *ProgSequenceID.* ID of the sequence associated to this program instance.
+- *ProgStepID.* ID of the step associated to this program instance.
 - *ProgStepBeats.* Number of beats in the step associated to this program instance.
 - *ProgStepMicros.* Number of microseconds in the step associated to this program instance.
+- *ProgSequenceNumInstances.* Same as NumInstances but only for instances corresponding to the sequence containing the step associated to this program instance.
+- *ProgSequenceNumRunning.* Same as NumRunning but only for instances corresponding to the sequence containing the step associated to this program instance.
+- *ProgSequenceNumPaused.* Same as NumPaused but only for instances corresponding to the sequence containing the step associated to this program instance.
 - *ProgStepNumInstances.* Same as NumInstances but only for instances corresponding to the step associated to this program instance.
 - *ProgStepNumRunning.* Same as NumRunning but only for instances corresponding to the step associated to this program instance.
 - *ProgStepNumPaused.* Same as NumPaused but only for instances corresponding to the step associated to this program instance.
-- *CurrentStepID.* Number of the step currently executed.
-- *CurrentStepBeats.* Number of beats in the step currently executed.
-- *CurrentStepMicros.* Number of microseconds in the step currently executed.
-- *CurrentStepNumInstances.* Same as NumInstances but only for instances corresponding to the step currently executed.
-- *CurrentStepNumRunning.* Same as NumRunning but only for instances corresponding to the step currently executed.
-- *CurrentStepNumPaused.* Same as NumPaused but only for instances corresponding to the step currently executed.
-- *NumSteps.* Number of steps.
 - *NumInstances.* Number of instances currently running or paused.
-- *NumRunning.* Number of instances currently running
 - *NumPaused.* Number of instances currently paused.
-- *TotalSteps.* Number of steps since the launch of theTool.
+- *NumRunning.* Number of instances currently running.
+- *NumSequences.* Number of sequences.
+- *NumSteps(n).* Number of steps in sequence with ID $n$.
 - *TotalBeats.* Number of beats since the launch of theTool.
-- *TotalMicros.* Number of microseconds since the launch of theTool. This cannot be computed from TotalSteps or TotalBeats as the duration of a step/a beat may have changed over time.
+- *TotalMicros.* Number of microseconds since the launch of theTool. This cannot be computed from TotalBeats as the duration of a beat may have changed over time.
 - *BeatMicros.* Number of microseconds in a beat. 
-
-// temps
 
 = Guidelines for building a custom scripting language
 
