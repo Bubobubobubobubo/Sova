@@ -24,4 +24,7 @@ Cargo.lock
 
 /target
 
+# Added by hand
+*.xcf
+*.pdf
 .DS_Store
