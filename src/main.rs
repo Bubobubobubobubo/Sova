@@ -93,6 +93,24 @@ fn main() {
         )),
     ];
 
+    let crashtest_program_with_calls: Program = vec![
+        Instruction::Control(ControlASM::CallProcedure(4)),
+        Instruction::Effect(
+            Event::Chord(vec![1000], TimeSpan::Micros(1)),
+            TimeSpan::Micros(100),
+        ),
+        Instruction::Control(ControlASM::CallProcedure(4)),
+        Instruction::Effect(
+            Event::Chord(vec![2000], TimeSpan::Micros(1)),
+            TimeSpan::Micros(100),
+        ),
+        Instruction::Effect(
+            Event::Chord(vec![3000], TimeSpan::Micros(1)),
+            TimeSpan::Micros(100),
+        ),
+        Instruction::Control(ControlASM::Return),
+    ];
+
     // This is a test program obtained from a script
     let crashtest_parsed_program: Program = dummy
         .compile("N 5 2 1 C 3 7 100 4 5 A 1 3 5 8 6 3")
@@ -100,11 +118,12 @@ fn main() {
     print!("{:?}", crashtest_parsed_program);
 
     let sequence = Sequence {
-        steps: vec![1.0, 4.0],
+        steps: vec![1.0, 4.0, 3.0],
         sequence_vars:  HashMap::new(),
         scripts: vec![
             Arc::new(Script::from(crashtest_program)),
             Arc::new(Script::from(crashtest_parsed_program)),
+            Arc::new(Script::from(crashtest_program_with_calls)),
         ],
         speed_factor: 1.0,
     };
