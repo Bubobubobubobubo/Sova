@@ -15,6 +15,7 @@ pub struct ScriptExecution {
     pub script : Arc<Script>,
     pub instance_vars : VariableStore,
     pub instruction_index : usize,
+    pub return_stack : Vec<usize>,
     pub scheduled_time : SyncTime
 }
 
@@ -50,6 +51,7 @@ impl ScriptExecution {
             script,
             instance_vars: HashMap::new(),
             instruction_index: 0,
+            return_stack: Vec::new(),
             scheduled_time: date
         }
     }
@@ -115,7 +117,7 @@ impl ScriptExecution {
         if !ensure_executability(control, environment_vars, global_vars, sequence_vars, &mut step_vars, instance_vars) {
             return;
         }
-        match control.execute(environment_vars, global_vars, sequence_vars, &mut step_vars, instance_vars, clock) {
+        match control.execute(environment_vars, global_vars, sequence_vars, &mut step_vars, instance_vars, clock, &mut self.return_stack, self.instruction_index) {
             Some(index) => self.instruction_index = index,
             None => self.instruction_index += 1,
         };

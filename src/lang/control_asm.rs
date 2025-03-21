@@ -49,14 +49,14 @@ pub enum ControlASM {
     JumpIfLessOrEqual(Variable, Variable, usize),
     // Calls and returns
     // CallFunction(Variable),
-    // CallProcedure(usize),
+    CallProcedure(usize),
     Return, // Only exit at the moment
 }
 
 
 impl ControlASM {
 
-    pub fn execute(&self, environment_vars: &mut VariableStore, global_vars: &mut VariableStore, sequence_vars: &mut VariableStore, step_vars: &mut VariableStore, instance_vars: &mut VariableStore, clock: &Clock) -> Option<usize> {
+    pub fn execute(&self, environment_vars: &mut VariableStore, global_vars: &mut VariableStore, sequence_vars: &mut VariableStore, step_vars: &mut VariableStore, instance_vars: &mut VariableStore, clock: &Clock, return_stack: &mut Vec<usize>, instruction_position: usize) -> Option<usize> {
         match self {
             // Arithmetic operations
             ControlASM::Add(x, y, z) | ControlASM::Div(x, y, z) | ControlASM::Mod(x, y, z) | ControlASM::Mul(x, y, z) | ControlASM::Sub(x, y, z) => {
@@ -229,9 +229,16 @@ impl ControlASM {
                 None
             },
             // Calls and returns
+            ControlASM::CallProcedure(proc_position) => {
+                return_stack.push(instruction_position + 1);
+                Some(*proc_position)
+            },
             ControlASM::Return => {
-                Some(usize::MAX)
-            }
+                match return_stack.pop() {
+                    Some(return_position) => Some(return_position),
+                    None => Some(usize::MAX),
+                }
+            },
         }
     }
 
