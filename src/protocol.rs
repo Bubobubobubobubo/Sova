@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 
 use log::LogMessage;
 use osc::OSCMessage;
-use midi::MIDIMessage;
+use midi::{MIDIMessage, MidiIn, MidiOut};
 
 use crate::clock::SyncTime;
 
@@ -16,6 +16,23 @@ pub enum ProtocolMessage {
     OSC(OSCMessage),
     MIDI(MIDIMessage),
     LOG(LogMessage),
+}
+
+pub enum ProtocolDevice {
+    OSCInDevice,
+    OSCOutDevice,
+    MIDIInDevice(MidiIn),
+    MIDIOutDevice(MidiOut)
+}
+
+pub struct ConnectionError;
+
+impl ProtocolDevice {
+
+    pub fn connect(&mut self) -> Result<(), ConnectionError> {
+
+    }
+
 }
 
 /// ProtocolMessage salted with a time information
