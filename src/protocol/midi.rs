@@ -32,17 +32,17 @@ pub enum MIDIMessageType {
     ChannelPressure { value: u8 },
     SystemExclusive { data: Vec<u8> },
     TimeCodeQuarterFrame { value: u8 },
-    Clock {},
-    Start {},
-    Continue {},
-    Stop {},
+    Clock,
+    Start,
+    Continue,
+    Stop,
     Reset,
     Undefined(u8),
 }
 
 /// Shared behavior of all MIDI interfaces
 pub trait MidiInterface {
-    fn new(client_name: &str) -> Result<Self, Box<dyn Error>> 
+    fn new(client_name: &str) -> Result<Self, Box<dyn Error>>
     where
         Self: Sized;
     fn ports(&self) -> Vec<String>;
@@ -171,7 +171,6 @@ impl MidiInterface for MidiOut {
         Ok(())
     }
 
-
 }
 
 pub struct MidiIn {
@@ -215,7 +214,7 @@ impl MidiInterface for MidiIn {
             move |_stamp, message, _| {
                 // Spotting a control change message
                 // CC_MSG + 0..15
-                let is_cc_message = 
+                let is_cc_message =
                     CONTROL_CHANGE_MSG < message[0]
                     && message[0] < CONTROL_CHANGE_MSG + 16
                 ;
