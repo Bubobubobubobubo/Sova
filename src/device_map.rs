@@ -1,7 +1,9 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use crate::{
-    clock::{Clock, SyncTime}, io::Connection, lang::event::Event, protocol::{
+    clock::{Clock, SyncTime},
+    lang::event::{ConcreteEvent, ConcreteEventPayload},
+    protocol::{
         self, ProtocolMessage, TimedMessage
     }
 };
@@ -31,17 +33,17 @@ impl DeviceMap {
     }
 
     pub fn map_event(&self,
-        event : Event,
+        event : ConcreteEvent,
         date : SyncTime,
         clock : &Clock
     ) -> Vec<TimedMessage> {
-        match event {
-            Event::Nop => Vec::new(),
-            Event::Chord(_, _) => {
+        match event.payload {
+            ConcreteEventPayload::Nop => Vec::new(),
+            ConcreteEventPayload::Chord(_, _) => {
                 let msg = serde_json::to_string(&event).unwrap();
                 vec![ProtocolMessage::LOG(LogMessage::info(msg)).timed(date)]
             },
-            _ => todo!()
+            //_ => todo!()
         }
     }
 
