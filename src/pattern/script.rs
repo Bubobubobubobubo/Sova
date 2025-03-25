@@ -2,7 +2,7 @@ use std::{collections::HashMap, sync::{Arc, Mutex}};
 
 use serde::{Deserialize, Serialize};
 
-use crate::{clock::{Clock, SyncTime}, lang::{control_asm::ControlASM, event::{Event, ConcreteEvent}, variable::{Variable, VariableStore}, Instruction, Program}};
+use crate::{clock::{Clock, SyncTime}, lang::{event::ConcreteEvent, variable::VariableStore, Instruction, Program}};
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Script {
@@ -105,9 +105,9 @@ impl ScriptExecution {
                 self.execute_control(environment_vars, global_vars, sequence_vars, clock);
                 None
             },
-            Instruction::Effect(event, time_span) => {
+            Instruction::Effect(event, var_time_span) => {
                 self.instruction_index += 1;
-                let wait = time_span.as_micros(clock);
+                let wait = var_time_span.evaluate(environment_vars, global_vars, sequence_vars, &self.script.step_vars.lock().unwrap(), &self.instance_vars).as_dur().as_micros(clock);
                 /*
                 let mut generated = event.clone();
                 generated.map_values(environment_vars, global_vars, sequence_vars, &self.script.step_vars.lock().unwrap(), &self.instance_vars);

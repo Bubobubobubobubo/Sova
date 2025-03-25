@@ -24,8 +24,10 @@ impl MidiInMemory {
 }
 
 // Demonstrate the use of the MidiInMemory struct
+/*
 fn main() {
     let mut controller = MidiInMemory::new();
     controller.set(0, 64, 127);
     println!("{}", controller.get(0, 64));
 }
+*/

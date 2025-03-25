@@ -1,10 +1,8 @@
-use std::collections::HashMap;
-
 use serde::{Deserialize, Serialize};
 
 use crate::clock::{TimeSpan, Clock};
 
-use super::variable::{Variable, VariableStore, VariableValue};
+use super::variable::{Variable, VariableStore};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

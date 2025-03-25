@@ -15,9 +15,7 @@ use lang::{
     Instruction, Program
 };
 use pattern::{script::Script, Sequence};
-use protocol::{midi::{
-    MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut
-}, ProtocolDevice};
+use protocol::midi::{MidiInterface, MidiOut};
 use schedule::{Scheduler, SchedulerMessage};
 use world::World;
 
@@ -55,7 +53,7 @@ fn main() {
         Instruction::Control(ControlASM::Mov(1.into(), var.clone())),
         Instruction::Effect(
             Event::MidiNote(60.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(1_000_000),
+            TimeSpan::Micros(1_000_000).into(),
         ),
         Instruction::Control(ControlASM::Sub(var.clone(), 1.into(), var.clone())),
         Instruction::Control(ControlASM::JumpIfLess(
@@ -68,7 +66,7 @@ fn main() {
     let kick: Program = vec![
         Instruction::Effect(
             Event::MidiNote(0.into(), 90.into(), 0.into(), TimeSpan::Beats(0.5).into(), midi_name.clone().into()),
-            TimeSpan::Micros(1_000_000),
+            TimeSpan::Micros(1_000_000).into(),
         ),
     ];
 
@@ -76,24 +74,24 @@ fn main() {
         Instruction::Control(ControlASM::CallProcedure(6)),
         Instruction::Effect(
             Event::MidiNote(100.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(100),
+            TimeSpan::Micros(100).into(),
         ),
         Instruction::Control(ControlASM::CallProcedure(6)),
         Instruction::Effect(
             Event::MidiNote(102.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(100),
+            TimeSpan::Micros(100).into(),
         ),
         Instruction::Control(ControlASM::CallProcedure(9)),
         Instruction::Control(ControlASM::Return),
         Instruction::Effect(
             Event::MidiNote(104.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(100),
+            TimeSpan::Micros(100).into(),
         ),
         Instruction::Control(ControlASM::CallProcedure(9)),
         Instruction::Control(ControlASM::Return),
         Instruction::Effect(
             Event::MidiNote(106.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(100),
+            TimeSpan::Micros(100).into(),
         ),
         Instruction::Control(ControlASM::Return),
     ];
@@ -101,7 +99,7 @@ fn main() {
     let crashtest_func: Program = vec![
         Instruction::Effect(
             Event::MidiNote(40.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(500000),
+            TimeSpan::Micros(500000).into(),
         ),
         Instruction::Control(ControlASM::Return),
     ];
@@ -111,7 +109,7 @@ fn main() {
         Instruction::Control(ControlASM::CallFunction(var.clone())),
         Instruction::Effect(
             Event::MidiNote(501.into(), 90.into(), 0.into(), TimeSpan::Micros(500_000).into(), midi_name.clone().into()),
-            TimeSpan::Micros(100),
+            TimeSpan::Micros(100).into(),
         ),
         Instruction::Control(ControlASM::Return),
     ];
@@ -124,14 +122,14 @@ fn main() {
     //print!("{:?}", crashtest_parsed_program);
 
     let sequence = Sequence {
-        steps: vec![1.0, 1.0],
+        steps: vec![1.0, 1.0, 1.0, 1.0, 1.0],
         sequence_vars:  HashMap::new(),
         scripts: vec![
             Arc::new(Script::from(crashtest_program)),
             Arc::new(Script::from(crashtest_parsed_program)),
-            //Arc::new(Script::from(crashtest_program_with_calls)),
-            //Arc::new(Script::from(crashtest_program_with_function_calls)),
-            //Arc::new(kick.clone().into()),
+            Arc::new(Script::from(crashtest_program_with_calls)),
+            Arc::new(Script::from(crashtest_program_with_function_calls)),
+            Arc::new(kick.clone().into()),
             //Arc::new(kick.clone().into()),
             //Arc::new(kick.clone().into()),
             //Arc::new(kick.clone().into())
