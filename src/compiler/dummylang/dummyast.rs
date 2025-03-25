@@ -1,4 +1,4 @@
-use crate::lang::{Program, Instruction, event::Event, variable::{Variable, VariableValue}};
+use crate::lang::{Program, Instruction, event::Event};
 use crate::clock::TimeSpan;
 
 static TIME_FACTOR: u64 = 100000;
@@ -46,7 +46,7 @@ impl Inst {
                             90.into(), 0.into(), 
                             TimeSpan::Micros(each_duration).into(),
                             DEVICE_NAME.to_string().into()),
-                        TimeSpan::Micros(each_pause)))
+                        TimeSpan::Micros(each_pause).into()))
                 };
                 res
             }
@@ -59,7 +59,7 @@ impl Inst {
                         90.into(), 0.into(), 
                         TimeSpan::Micros(duration).into(),
                         DEVICE_NAME.to_string().into()),
-                    TimeSpan::Micros(pause)
+                    TimeSpan::Micros(pause).into()
                 )).collect()
             }
             EventPlayNote(s) => {
@@ -71,7 +71,7 @@ impl Inst {
                         90.into(), 0.into(), 
                         TimeSpan::Micros(duration).into(),
                         DEVICE_NAME.to_string().into()),
-                    TimeSpan::Micros(pause))]
+                    TimeSpan::Micros(pause).into())]
             }
         }
     }

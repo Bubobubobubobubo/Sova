@@ -1,8 +1,7 @@
 use control_asm::ControlASM;
 use event::Event;
 use serde::{Deserialize, Serialize};
-
-use crate::clock::TimeSpan;
+use variable::Variable;
 
 pub mod control_asm;
 pub mod event;
@@ -11,7 +10,7 @@ pub mod variable;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Instruction {
     Control(ControlASM),
-    Effect(Event, TimeSpan), // TODO: le TimeSpan devrait être une variable
+    Effect(Event, Variable),
 }
 
 impl Instruction {
