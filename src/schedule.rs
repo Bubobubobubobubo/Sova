@@ -10,6 +10,7 @@ use std::{
     time::Duration, usize,
 };
 
+use serde::{Deserialize, Serialize};
 use thread_priority::ThreadBuilder;
 
 use crate::{
@@ -25,7 +26,7 @@ use crate::{
 
 pub const SCHEDULED_DRIFT: SyncTime = 30_000;
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub enum SchedulerMessage {
     UploadPattern(Pattern),
     ToggleStep(usize, usize),

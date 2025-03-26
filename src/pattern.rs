@@ -1,24 +1,38 @@
 use std::{collections::HashMap, sync::Arc, usize};
 
 use script::Script;
+use serde::{Deserialize, Serialize};
 
 use crate::{clock::{Clock, SyncTime, TimeSpan}, lang::variable::VariableStore};
 
 pub mod script;
 
-#[derive(Debug, Clone, Default)]
+fn default_speed_factor() -> f64 {
+    return 1.0f64;
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Sequence {
     steps : Vec<f64>,  // Each step is defined by its length in beats
-    pub index : usize,
     pub enabled_steps : Vec<bool>,
-    pub vars : VariableStore,
     pub scripts : Vec<Arc<Script>>,
+    #[serde(default = "default_speed_factor")]
     pub speed_factor : f64,
+    #[serde(default)]
+    pub vars : VariableStore,
+    #[serde(default)]
+    pub index : usize,
+    #[serde(skip)]
     pub current_step : usize,
+    #[serde(skip)]
     pub first_iteration_index : usize,
+    #[serde(skip)]
     pub current_iteration : usize,
+    #[serde(skip)]
     pub steps_executed : usize,
+    #[serde(skip)]
     pub steps_passed : usize,
+    #[serde(skip)]
     pub start_date : SyncTime
 }
 
@@ -129,7 +143,7 @@ impl Sequence {
 
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, Serialize, Deserialize)]
 pub struct Pattern {
     sequences : Vec<Sequence>,
 }
