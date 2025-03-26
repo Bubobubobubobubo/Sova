@@ -343,12 +343,16 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     ShiftRightA(Variable, Variable, Variable),
     ShiftRightL(Variable, Variable, Variable),
     // String operations
+    Compile(Variable, String, Variable),
     Concat(Variable, Variable, Variable),
     Format(String, Vec<Variable>, Variable),
     // Time manipulation
     AsBeats(Variable, Variable),
     AsMicros(Variable, Variable),
     AsSteps(Variable, Variable),
+    BeatsToNum(Variable, Variable),
+    MicrosToNum(Variable, Variable),
+    StepsToNum(Variable, Variable),
     // Memory manipulation
     DeclareGlobale(String, Variable),
     DeclareInstance(String, Variable),
@@ -453,6 +457,11 @@ table(
 
 === String operations
 
+*Compile(p, c, z).*
+Cast $p$ to a string.
+Try to compile it as a function with compiler $c$ (if the compilation fail, the result is $bot$).
+Store this function in $z$ (after casting it to the type of $z$ if needed).
+
 *Concat(x, y, z).*
 Arguments x and y are inputs and will be casted to str (if needed).
 Argument z is an output.
@@ -475,6 +484,12 @@ These instructions allow to perform conversions on durations.
 *AsBeats(d, v).* Casts $d$ to a duration. Set this duration to beats, cast it to the type of $v$, and then store it in $v$.
 
 *AsSteps(d, v).* Casts $d$ to a duration. Set this duration to steps, cast it to the type of $v$, and then store it in $v$.
+
+*BeatsToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of beats as a float, cast it to the type of $v$, and then store it in $v$.
+
+*MicrosToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of microseconds as an int, cast it to the type of $v$, and then store it in $v$.
+
+*StepsToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of steps as a float, cast it to the type of $v$, and then store it in $v$.
 
 === Memory manipulation
 
