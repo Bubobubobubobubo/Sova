@@ -2,9 +2,9 @@
 
 [![Crates.io](https://img.shields.io/crates/v/bubocore.svg)](https://crates.io/crates/bubocore) [![Documentation](https://docs.rs/bubocore/badge.svg)](https://docs.rs/bubocore) [![Build Status](https://github.com/username/bubocore/workflows/Rust/badge.svg)](https://github.com/username/bubocore/actions)
 
-![](https://raphaelforment.fr/images/bubobubo/jpg)
+![](https://raphaelforment.fr/images/bubobubo.jpg)
 
-## Qu'est-ce que BuboCore ?
+## Qu'est-ce que BuboCore ?
 
 BuboCore est un séquenceur et un environnement de programmation musicale conçu en Rust. Il est spécialement conçu pour le [live coding](https://livecoding.fr) musical. Il permet aux musiciens et artistes de composer ou d'improviser de la musique de manière réactive, en temps réel, au travers du code. BuboCore est un logiciel libre et open-source, destiné à être utilisé aussi bien par des musiciens que des artistes, des développeurs, des chercheurs, des enseignants, etc. Il se destine à populariser une approche instrumentale, créative et musicale de la programmation informatique, à faire du code un terrain d'expression artistique.
 
@@ -25,7 +25,7 @@ BuboCore est un séquenceur et un environnement de programmation musicale conçu
 
 ## Installation
 
-### Via Cargo
+### Via Cargo
 
 [Cargo](https://doc.rust-lang.org/cargo/) est le gestionnaire de paquets utilisé par le langage Rust. Après son installation, vous pouvez installer BuboCore en exécutant la commande suivante :
 ```bash
@@ -36,7 +36,7 @@ cargo install bubocore
 
 Dirigez-vous vers la section [Releases](https://github.com/Bubobubobubobubo/BuboCore/releases) pour télécharger le paquet binaire correspondant à votre système d'exploitation. Des instructions d'installation supplémentaires seront détaillées avec chaque _release_.
 
-### Depuis les sources
+### Depuis les sources
 
 Pour profiter des fonctionnalités les plus récentes, vous pouvez cloner le dépôt et compiler le logiciel vous-même :
 
