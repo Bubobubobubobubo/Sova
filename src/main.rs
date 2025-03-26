@@ -1,11 +1,13 @@
-use std::sync::Arc;
+use std::{sync::Arc, thread};
 use crate::clock::ClockServer;
 
 use device_map::DeviceMap;
 
+use pattern::Pattern;
 use protocol::midi::{MidiInterface, MidiOut};
 use schedule::Scheduler;
 use server::{BuboCoreServer, ServerState};
+use tokio::sync::watch;
 use world::World;
 
 pub mod clock;
@@ -37,10 +39,20 @@ async fn main() {
     devices.register_output_connection(midi_name.clone(), midi_out.into());
 
     let (world_handle, world_iface) = World::create(clock_server.clone());
-    let (sched_handle, sched_iface) =
+    let (sched_handle, sched_iface, update_pattern) =
         Scheduler::create(clock_server.clone(), devices.clone(), world_iface.clone());
 
-    let server_state = ServerState { clock_server, world_iface, sched_iface };
+    let (updater, update_notifier) = watch::channel(Pattern::default());
+    thread::spawn(move || {
+        loop {
+            match update_pattern.recv() {
+                Ok(p) => { let _ = updater.send(p); },
+                Err(_) => break,
+            }
+        }
+    });
+
+    let server_state = ServerState { clock_server, world_iface, sched_iface, update_notifier};
     let server = BuboCoreServer { ip: "127.0.0.1".to_owned(), port: 8080 };
     server.start(server_state).await.expect("Server internal error");
 
