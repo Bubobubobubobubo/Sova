@@ -5,7 +5,7 @@ use device_map::DeviceMap;
 
 use protocol::midi::{MidiInterface, MidiOut};
 use schedule::Scheduler;
-use server::BuboCoreServer;
+use server::{BuboCoreServer, ServerState};
 use world::World;
 
 pub mod clock;
@@ -36,12 +36,11 @@ async fn main() {
     let (sched_handle, sched_iface) =
         Scheduler::create(clock_server.clone(), devices.clone(), world_iface.clone());
 
-    let mut server = BuboCoreServer { ip: "127.0.0.1".to_owned(), port: 8080 };
-    server.start().await.expect("Server failed");
+    let server_state = ServerState { clock_server, world_iface, sched_iface };
+    let server = BuboCoreServer { ip: "127.0.0.1".to_owned(), port: 8080 };
+    server.start(server_state).await.expect("Server failed");
 
     println!("\n[-] Stopping BuboCore...");
-    drop(sched_iface);
-    drop(world_iface);
     sched_handle.join().expect("Scheduler thread error");
     world_handle.join().expect("World thread error");
 
