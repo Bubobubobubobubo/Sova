@@ -60,7 +60,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
     }
 }
 
-fn draw_bottom_bar(frame: &mut Frame, app: &App, area: Rect) {
+fn draw_bottom_bar(frame: &mut Frame, app: &mut App, area: Rect) {
     // Affichage du nom de la vue actuelle !
     let mode_text = match app.screen_state.mode {
         Mode::Editor => "EDITOR",
@@ -68,8 +68,16 @@ fn draw_bottom_bar(frame: &mut Frame, app: &App, area: Rect) {
         Mode::Options => "OPTIONS",
         Mode::Splash => "SPLASH",
     };
+    // Get current tempo and beat information
+    let phase = app.link_client.get_phase();
+    let beat = (phase / app.link_client.quantum * 4.0).floor() + 1.0;
+    let tempo = app.link_client.session_state.tempo();
 
-    let status_text = format!("[ {} ] | {}", mode_text, app.status_message);
+    // Format the status text with tempo and beat
+    let status_text = format!(
+        "[ {} ] | {} | {:.1} BPM | Beat {:.0}/{:.0}",
+        mode_text, app.status_message, tempo, beat, app.link_client.quantum
+    );
 
     // Tronquer le message ?
     let available_width = area.width as usize;
