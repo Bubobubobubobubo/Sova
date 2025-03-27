@@ -1,6 +1,7 @@
 use rusty_link::{AblLink, SessionState};
 use std::error::Error;
 use std::time::{Duration, Instant};
+use tui_textarea::TextArea;
 
 /// The current screen that the user is on:
 /// - Editor: The user is editing a script.
@@ -10,6 +11,7 @@ pub enum Mode {
     Editor,
     Grid,
     Options,
+    Splash,
 }
 
 pub struct Flash {
@@ -28,6 +30,7 @@ pub struct EditorData {
     pub content: String,
     pub line_count: usize,
     pub cursor_position: (u16, u16),
+    pub textarea: TextArea<'static>,
 }
 
 pub struct ServerState {
@@ -48,7 +51,7 @@ impl App {
     pub fn new() -> App {
         let app = App {
             screen_state: ScreenState {
-                mode: Mode::Editor,
+                mode: Mode::Splash,
                 flash: Flash {
                     is_flashing: false,
                     flash_start: None,
@@ -60,13 +63,14 @@ impl App {
                 content: String::new(),
                 line_count: 0,
                 cursor_position: (0, 0),
+                textarea: TextArea::default(),
             },
             state: ServerState {
                 is_connected: false,
                 peers: Vec::new(),
                 devices: Vec::new(),
             },
-            status_message: String::from("Welcome!"),
+            status_message: String::from("Press ENTER to start!"),
             link_client: AblLink::new(120.),
         };
         app.link_client.enable(true);
