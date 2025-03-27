@@ -1,5 +1,4 @@
 use crate::app::App;
-use bubocorelib::server::client::BuboCoreClient;
 use clap::{Parser, arg, command};
 use color_eyre::Result;
 use ratatui::{
