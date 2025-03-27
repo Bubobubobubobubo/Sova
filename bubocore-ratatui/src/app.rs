@@ -1,3 +1,4 @@
+use crate::components::help::HelpState;
 use ratatui::{style::Style, widgets::Block};
 use rusty_link::{AblLink, SessionState};
 use std::error::Error;
@@ -9,6 +10,7 @@ pub enum Mode {
     Grid,
     Options,
     Splash,
+    Help,
 }
 
 pub struct CommandMode {
@@ -109,6 +111,7 @@ pub struct App {
     pub status_message: String,
     pub link_client: Link,
     pub command_mode: CommandMode,
+    pub help_state: Option<HelpState>,
     pub exit: bool,
 }
 
@@ -142,6 +145,7 @@ impl App {
                 quantum: 4.0,
             },
             command_mode: CommandMode::new(),
+            help_state: None,
             exit: false,
         };
         app.link_client.link.enable(true);
@@ -185,6 +189,44 @@ impl App {
         match cmd {
             "quit" | "q" | "exit" | "kill" => {
                 self.exit = true;
+                Ok(())
+            }
+            "help" | "?" => {
+                self.screen_state.mode = Mode::Help;
+                Ok(())
+            }
+            "tempo" => {
+                if let Some(tempo_str) = args.get(0) {
+                    if let Ok(tempo) = tempo_str.parse::<f64>() {
+                        if tempo >= 20.0 && tempo <= 999.0 {
+                            self.link_client
+                                .session_state
+                                .set_tempo(tempo, self.link_client.link.clock_micros());
+                            self.link_client.commit_app_state();
+                            self.set_status_message(format!("Tempo set to {:.1} BPM", tempo));
+                        } else {
+                            self.set_status_message(String::from(
+                                "Tempo must be between 20 and 999 BPM",
+                            ));
+                        }
+                    } else {
+                        self.set_status_message(String::from("Invalid tempo value"));
+                    }
+                } else {
+                    self.set_status_message(String::from("Tempo value required"));
+                }
+                Ok(())
+            }
+            "quantum" => {
+                if let Some(quantum_str) = args.get(0) {
+                    if let Ok(quantum) = quantum_str.parse::<f64>() {
+                        self.link_client.quantum = quantum;
+                    } else {
+                        self.set_status_message(String::from("Invalid quantum value"));
+                    }
+                } else {
+                    self.set_status_message(String::from("Quantum value required"));
+                }
                 Ok(())
             }
             _ => Ok(()),

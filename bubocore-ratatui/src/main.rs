@@ -103,6 +103,25 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                 let screen = &mut app.screen_state;
 
                 match screen.mode {
+                    Mode::Help => match key.code {
+                        KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                            return Ok(true);
+                        }
+                        KeyCode::Tab => {
+                            screen.mode = Mode::Editor;
+                        }
+                        KeyCode::Up => {
+                            if let Some(help_state) = &mut app.help_state {
+                                help_state.prev_topic();
+                            }
+                        }
+                        KeyCode::Down => {
+                            if let Some(help_state) = &mut app.help_state {
+                                help_state.next_topic();
+                            }
+                        }
+                        _ => {}
+                    },
                     Mode::Splash => match key.code {
                         KeyCode::Enter => {
                             app.status_message = String::from("Ctrl+P for prompt");

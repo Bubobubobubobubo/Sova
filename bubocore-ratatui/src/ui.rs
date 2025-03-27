@@ -8,7 +8,7 @@ use ratatui::{
 };
 use std::time::Instant;
 
-use crate::components::{editor, grid, options, splash};
+use crate::components::{editor, grid, help, options, splash};
 
 pub fn flash_screen(app: &mut App) {
     app.screen_state.flash.is_flashing = true;
@@ -46,6 +46,7 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
         Mode::Editor => editor::draw(frame, app, main_area),
         Mode::Grid => grid::draw(frame, app, main_area),
         Mode::Options => options::draw(frame, app, main_area),
+        Mode::Help => help::draw(frame, app, main_area),
     }
 
     draw_bottom_bar(frame, app, bottom_bar);
@@ -67,7 +68,8 @@ fn draw_bottom_bar(frame: &mut Frame, app: &mut App, area: Rect) {
             Mode::Editor => "EDITOR",
             Mode::Grid => "GRID",
             Mode::Options => "OPTIONS",
-            Mode::Splash => "SPLASH",
+            Mode::Splash => "WELCOME",
+            Mode::Help => "HELP",
         };
         // Get current tempo and beat information
         let phase = app.link_client.get_phase();
