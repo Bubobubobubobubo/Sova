@@ -1,11 +1,11 @@
 #[macro_use]
 extern crate rocket;
-use app::{App, CurrentScreen};
+use app::{App, Mode};
 use ratatui::{
     Terminal,
     backend::{Backend, CrosstermBackend},
     crossterm::{
-        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode},
+        event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyModifiers},
         execute,
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
@@ -55,50 +55,71 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                 // Skip events that are not KeyEventKind::Press
                 continue;
             }
-            // Matching depending on which screen we are viewing
-            match app.current_screen {
-                CurrentScreen::Editor => match key.code {
+
+            let screen = &mut app.screen_state;
+            match screen.mode {
+                Mode::Editor => match key.code {
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(true);
+                    }
+                    KeyCode::Char('e') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        ui::flash_screen(app);
+                        match app.send_content() {
+                            Ok(_) => {
+                                app.set_status_message(String::from("Content sent successfully!"));
+                            }
+                            Err(e) => {
+                                app.set_status_message(format!("Error sending content: {}", e));
+                            }
+                        }
+                    }
                     KeyCode::F(1) => {
-                        app.current_screen = CurrentScreen::Editor;
+                        screen.mode = Mode::Editor;
                     }
                     KeyCode::F(2) => {
-                        app.current_screen = CurrentScreen::Grid;
+                        screen.mode = Mode::Grid;
                     }
                     KeyCode::F(3) => {
-                        app.current_screen = CurrentScreen::Options;
+                        screen.mode = Mode::Options;
                     }
                     KeyCode::Tab => {
-                        app.current_screen = CurrentScreen::Grid;
+                        screen.mode = Mode::Grid;
                     }
                     _ => {}
                 },
-                CurrentScreen::Grid => match key.code {
+                Mode::Grid => match key.code {
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(true);
+                    }
                     KeyCode::F(1) => {
-                        app.current_screen = CurrentScreen::Editor;
+                        screen.mode = Mode::Editor;
                     }
                     KeyCode::F(2) => {
-                        app.current_screen = CurrentScreen::Grid;
+                        screen.mode = Mode::Grid;
                     }
                     KeyCode::F(3) => {
-                        app.current_screen = CurrentScreen::Options;
+                        screen.mode = Mode::Options;
                     }
                     KeyCode::Tab => {
-                        app.current_screen = CurrentScreen::Options;
+                        screen.mode = Mode::Options;
                     }
                     _ => {}
                 },
-                CurrentScreen::Options => match key.code {
+                Mode::Options => match key.code {
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(true);
+                    }
                     KeyCode::F(1) => {
-                        app.current_screen = CurrentScreen::Editor;
+                        screen.mode = Mode::Editor;
                     }
                     KeyCode::F(2) => {
-                        app.current_screen = CurrentScreen::Grid;
+                        screen.mode = Mode::Grid;
                     }
                     KeyCode::F(3) => {
-                        app.current_screen = CurrentScreen::Options;
+                        screen.mode = Mode::Options;
                     }
                     KeyCode::Tab => {
-                        app.current_screen = CurrentScreen::Editor;
+                        screen.mode = Mode::Editor;
                     }
                     _ => {}
                 },
