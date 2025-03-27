@@ -49,6 +49,7 @@ pub enum ServerMessage {
 async fn on_message(msg: ClientMessage, state: ServerState) -> ServerMessage {
     match msg {
         ClientMessage::SchedulerControl(sched_msg) => {
+            println!("[📅] Sending scheduler message");
             if state.sched_iface.send(sched_msg).is_ok() {
                 ServerMessage::Success
             } else {
@@ -56,12 +57,13 @@ async fn on_message(msg: ClientMessage, state: ServerState) -> ServerMessage {
             }
         }
         ClientMessage::SetTempo(tempo) => {
-            let mut clock = Clock::from(state.clock_server);
             println!("[🕒] Setting tempo to {}", tempo);
+            let mut clock = Clock::from(state.clock_server);
             clock.set_tempo(tempo);
             ServerMessage::Success
         }
         ClientMessage::GetClock => {
+            println!("[🕒] Sending clock state");
             let clock = Clock::from(state.clock_server);
             ServerMessage::ClockState(clock.tempo(), clock.beat(), clock.micros(), clock.quantum())
         }
