@@ -7,7 +7,12 @@ use ratatui::{
     widgets::{Block, Clear, Paragraph},
 };
 
-use crate::components::{editor, grid, help, options, splash};
+use crate::components::Component;
+use crate::components::editor::EditorComponent;
+use crate::components::grid::GridComponent;
+use crate::components::help::HelpComponent;
+use crate::components::options::OptionsComponent;
+use crate::components::splash::SplashComponent;
 
 pub fn ui(frame: &mut Frame, app: &mut App) {
     check_flash_status(app);
@@ -26,12 +31,13 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
 
     draw_top_bar(frame, app, top_bar);
 
+    // Draw the appropriate component based on mode
     match app.screen_state.mode {
-        Mode::Splash => splash::draw(frame, app, main_area),
-        Mode::Editor => editor::draw(frame, app, main_area),
-        Mode::Grid => grid::draw(frame, app, main_area),
-        Mode::Options => options::draw(frame, app, main_area),
-        Mode::Help => help::draw(frame, app, main_area),
+        Mode::Splash => SplashComponent::new().draw(app, frame, main_area),
+        Mode::Editor => EditorComponent::new().draw(app, frame, main_area),
+        Mode::Grid => GridComponent::new().draw(app, frame, main_area),
+        Mode::Options => OptionsComponent::new().draw(app, frame, main_area),
+        Mode::Help => HelpComponent::new().draw(app, frame, main_area),
     }
 
     draw_bottom_bar(frame, app, bottom_bar);

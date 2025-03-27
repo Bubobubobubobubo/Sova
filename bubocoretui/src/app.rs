@@ -1,8 +1,12 @@
 use crate::components::help::HelpState;
+use crate::components::{
+    Component, editor::EditorComponent, grid::GridComponent, help::HelpComponent,
+    options::OptionsComponent, splash::SplashComponent,
+};
 use crate::event::{AppEvent, Event, EventHandler};
 use crate::network::NetworkManager;
 use bubocorelib::server::{ServerMessage, client::ClientMessage};
-use color_eyre::Result;
+use color_eyre::Result as EyreResult;
 use ratatui::{
     Terminal,
     backend::Backend,
@@ -157,7 +161,7 @@ impl App {
         app
     }
 
-    pub async fn run<B: Backend>(&mut self, mut terminal: Terminal<B>) -> Result<()> {
+    pub async fn run<B: Backend>(&mut self, mut terminal: Terminal<B>) -> EyreResult<()> {
         while self.running {
             while let Some(message) = self.network.try_receive() {
                 self.handle_server_message(message);
@@ -219,7 +223,7 @@ impl App {
 
     fn tick(&mut self) {}
 
-    fn handle_app_event(&mut self, event: AppEvent) -> Result<()> {
+    fn handle_app_event(&mut self, event: AppEvent) -> EyreResult<()> {
         match event {
             AppEvent::SwitchToEditor => self.screen_state.mode = Mode::Editor,
             AppEvent::SwitchToGrid => self.screen_state.mode = Mode::Grid,
@@ -293,16 +297,22 @@ impl App {
         Ok(())
     }
 
-    fn handle_key_events(&mut self, key_event: KeyEvent) -> Result<()> {
-        match key_event.code {
-            KeyCode::Char('p') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                if self.command_mode.active {
-                    self.events.send(AppEvent::ExitCommandMode);
-                } else {
-                    self.events.send(AppEvent::EnterCommandMode);
-                }
+    fn handle_key_events(&mut self, key_event: KeyEvent) -> EyreResult<()> {
+        // Handle global command mode toggle first
+        if key_event.code == KeyCode::Char('p')
+            && key_event.modifiers.contains(KeyModifiers::CONTROL)
+        {
+            if self.command_mode.active {
+                self.events.send(AppEvent::ExitCommandMode);
+            } else {
+                self.events.send(AppEvent::EnterCommandMode);
             }
-            _ if self.command_mode.active => match key_event.code {
+            return Ok(());
+        }
+
+        // Handle command mode input
+        if self.command_mode.active {
+            match key_event.code {
                 KeyCode::Esc | KeyCode::Char('c')
                     if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
                 {
@@ -315,99 +325,33 @@ impl App {
                 _ => {
                     self.command_mode.text_area.input(key_event);
                 }
-            },
-            _ => match self.screen_state.mode {
-                Mode::Help => match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::Quit);
-                    }
-                    KeyCode::Tab => {
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    KeyCode::Up => {
-                        if let Some(help_state) = &mut self.help_state {
-                            help_state.prev_topic();
-                        }
-                    }
-                    KeyCode::Down => {
-                        if let Some(help_state) = &mut self.help_state {
-                            help_state.next_topic();
-                        }
-                    }
-                    _ => {}
-                },
-                Mode::Splash => match key_event.code {
-                    KeyCode::Enter => {
-                        self.status_message = String::from("Ctrl+P for prompt");
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::Quit);
-                    }
-                    _ => {}
-                },
-                Mode::Editor => match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::Quit);
-                    }
-                    KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::ExecuteContent);
-                    }
-                    KeyCode::F(1) => {
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    KeyCode::F(2) => {
-                        self.events.send(AppEvent::SwitchToGrid);
-                    }
-                    KeyCode::F(3) => {
-                        self.events.send(AppEvent::SwitchToOptions);
-                    }
-                    KeyCode::Tab => {
-                        self.events.send(AppEvent::SwitchToGrid);
-                    }
-                    _ => {
-                        self.editor_data.textarea.input(key_event);
-                        self.set_content(self.editor_data.textarea.lines().join("\n"));
-                    }
-                },
-                Mode::Grid => match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::Quit);
-                    }
-                    KeyCode::F(1) => {
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    KeyCode::F(2) => {
-                        self.events.send(AppEvent::SwitchToGrid);
-                    }
-                    KeyCode::F(3) => {
-                        self.events.send(AppEvent::SwitchToOptions);
-                    }
-                    KeyCode::Tab => {
-                        self.events.send(AppEvent::SwitchToOptions);
-                    }
-                    _ => {}
-                },
-                Mode::Options => match key_event.code {
-                    KeyCode::Char('c') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
-                        self.events.send(AppEvent::Quit);
-                    }
-                    KeyCode::F(1) => {
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    KeyCode::F(2) => {
-                        self.events.send(AppEvent::SwitchToGrid);
-                    }
-                    KeyCode::F(3) => {
-                        self.events.send(AppEvent::SwitchToOptions);
-                    }
-                    KeyCode::Tab => {
-                        self.events.send(AppEvent::SwitchToEditor);
-                    }
-                    _ => {}
-                },
-            },
+            }
+            return Ok(());
         }
+
+        // Delegate key handling to the current component based on mode
+        let handled = match self.screen_state.mode {
+            Mode::Splash => SplashComponent::new()
+                .handle_key_event(self, key_event)
+                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
+            Mode::Editor => EditorComponent::new()
+                .handle_key_event(self, key_event)
+                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
+            Mode::Grid => GridComponent::new()
+                .handle_key_event(self, key_event)
+                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
+            Mode::Options => OptionsComponent::new()
+                .handle_key_event(self, key_event)
+                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
+            Mode::Help => HelpComponent::new()
+                .handle_key_event(self, key_event)
+                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
+        };
+
+        if !handled {
+            // Handle any unhandled keys here if needed
+        }
+
         Ok(())
     }
 
@@ -437,12 +381,12 @@ impl App {
         self.screen_state.flash.flash_duration = Duration::from_micros(microseconds);
     }
 
-    pub fn send_content(&self) -> Result<()> {
+    pub fn send_content(&self) -> EyreResult<()> {
         // TODO: Implement content sending logic
         Ok(())
     }
 
-    pub fn execute_command(&mut self, command: &str) -> Result<()> {
+    pub fn execute_command(&mut self, command: &str) -> EyreResult<()> {
         if command.is_empty() {
             return Ok(());
         }

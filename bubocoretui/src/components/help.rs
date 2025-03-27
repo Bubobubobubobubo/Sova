@@ -1,5 +1,8 @@
 use crate::App;
-use crate::components::inner_area;
+use crate::components::{Component, handle_common_keys, inner_area};
+use crate::event::AppEvent;
+use color_eyre::Result;
+use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     prelude::{Constraint, Direction, Layout, Rect},
@@ -7,6 +10,7 @@ use ratatui::{
     text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
 };
+use std::error::Error;
 
 pub struct HelpState {
     pub topics: Vec<String>,
@@ -75,82 +79,124 @@ impl HelpState {
     }
 }
 
-pub fn draw(frame: &mut Frame, app: &mut App, area: Rect) {
-    if app.help_state.is_none() {
-        app.help_state = Some(HelpState::new());
+pub struct HelpComponent;
+
+impl HelpComponent {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
+
+impl Component for HelpComponent {
+    fn handle_key_event(
+        &mut self,
+        app: &mut App,
+        key_event: KeyEvent,
+    ) -> Result<bool, Box<dyn Error + 'static>> {
+        // First try common key handlers
+        if handle_common_keys(app, key_event)? {
+            return Ok(true);
+        }
+
+        // Help-specific key handling
+        match key_event.code {
+            KeyCode::Tab => {
+                app.events.send(AppEvent::SwitchToEditor);
+                Ok(true)
+            }
+            KeyCode::Up => {
+                if let Some(help_state) = &mut app.help_state {
+                    help_state.prev_topic();
+                }
+                Ok(true)
+            }
+            KeyCode::Down => {
+                if let Some(help_state) = &mut app.help_state {
+                    help_state.next_topic();
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
+        }
     }
 
-    let help_state = app.help_state.as_mut().unwrap();
+    fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
+        if app.help_state.is_none() {
+            return; // Should not happen, but just in case
+        }
 
-    // Création du layout
-    let chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
-        .split(area);
+        let help_state = app.help_state.as_ref().unwrap();
 
-    // Sidebar (20%)
-    let sidebar_area = chunks[0];
-    let sidebar_block = Block::default()
-        .title("Topics")
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
+        // Création du layout
+        let chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
+            .split(area);
 
-    frame.render_widget(sidebar_block, sidebar_area);
+        // Sidebar (20%)
+        let sidebar_area = chunks[0];
+        let sidebar_block = Block::default()
+            .title("Topics")
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Black));
 
-    // Liste à partir des sujets
-    let items: Vec<ListItem> = help_state
-        .topics
-        .iter()
-        .map(|topic| {
-            ListItem::new(Line::from(vec![Span::styled(
-                topic,
-                Style::default().fg(Color::White),
-            )]))
-        })
-        .collect();
+        frame.render_widget(sidebar_block, sidebar_area);
 
-    let mut list_state = ListState::default();
-    list_state.select(Some(help_state.selected_index));
+        // Liste à partir des sujets
+        let items: Vec<ListItem> = help_state
+            .topics
+            .iter()
+            .map(|topic| {
+                ListItem::new(Line::from(vec![Span::styled(
+                    topic,
+                    Style::default().fg(Color::White),
+                )]))
+            })
+            .collect();
 
-    let list = List::new(items)
-        .block(Block::default())
-        .highlight_style(
-            Style::default()
-                .bg(Color::Blue)
-                .fg(Color::White)
-                .add_modifier(Modifier::BOLD),
-        )
-        .highlight_symbol("> ");
+        let mut list_state = ListState::default();
+        list_state.select(Some(help_state.selected_index));
 
-    let inner_sidebar = inner_area(sidebar_area);
-    frame.render_stateful_widget(list, inner_sidebar, &mut list_state);
+        let list = List::new(items)
+            .block(Block::default())
+            .highlight_style(
+                Style::default()
+                    .bg(Color::Blue)
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            )
+            .highlight_symbol("> ");
 
-    // Contenu (droite - 80%)
-    let content_area = chunks[1];
-    let title = help_state
-        .topics
-        .get(help_state.selected_index)
-        .unwrap_or(&"Help".to_string())
-        .clone();
-    let content_block = Block::default()
-        .title(title)
-        .borders(Borders::ALL)
-        .style(Style::default().bg(Color::Black));
+        let inner_sidebar = inner_area(sidebar_area);
+        frame.render_stateful_widget(list, inner_sidebar, &mut list_state);
 
-    frame.render_widget(content_block, content_area);
+        // Contenu (droite - 80%)
+        let content_area = chunks[1];
+        let title = help_state
+            .topics
+            .get(help_state.selected_index)
+            .unwrap_or(&"Help".to_string())
+            .clone();
+        let content_block = Block::default()
+            .title(title)
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::Black));
 
-    // Contenu sélectionné
-    let content = help_state
-        .contents
-        .get(help_state.selected_index)
-        .unwrap_or(&"No content available.".to_string())
-        .clone();
+        frame.render_widget(content_block, content_area);
 
-    // Rendu du contenu
-    let content_paragraph = Paragraph::new(Text::from(content))
-        .style(Style::default().fg(Color::White))
-        .block(Block::default());
+        // Contenu sélectionné
+        let content = help_state
+            .contents
+            .get(help_state.selected_index)
+            .unwrap_or(&"No content available.".to_string())
+            .clone();
 
-    let inner_content = inner_area(content_area);
-    frame.render_widget(content_paragraph, inner_content);
+        // Rendu du contenu
+        let content_paragraph = Paragraph::new(Text::from(content))
+            .style(Style::default().fg(Color::White))
+            .block(Block::default());
+
+        let inner_content = inner_area(content_area);
+        frame.render_widget(content_paragraph, inner_content);
+    }
 }
