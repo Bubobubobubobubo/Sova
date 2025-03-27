@@ -15,6 +15,7 @@ use std::{error::Error, io};
 use ui::ui;
 
 mod app;
+mod components;
 mod ui;
 
 #[get("/")]
@@ -58,6 +59,15 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
 
             let screen = &mut app.screen_state;
             match screen.mode {
+                Mode::Splash => match key.code {
+                    KeyCode::Enter => {
+                        screen.mode = Mode::Editor;
+                    }
+                    KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
+                        return Ok(true);
+                    }
+                    _ => {}
+                },
                 Mode::Editor => match key.code {
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
                         return Ok(true);
@@ -85,7 +95,11 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
                     KeyCode::Tab => {
                         screen.mode = Mode::Grid;
                     }
-                    _ => {}
+                    _ => {
+                        app.editor_data.textarea.input(key);
+                        // Update content string if needed
+                        app.set_content(app.editor_data.textarea.lines().join("\n"));
+                    }
                 },
                 Mode::Grid => match key.code {
                     KeyCode::Char('c') if key.modifiers.contains(KeyModifiers::CONTROL) => {
