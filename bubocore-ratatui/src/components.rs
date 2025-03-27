@@ -2,6 +2,7 @@ use ratatui::prelude::Rect;
 
 pub mod editor;
 pub mod grid;
+pub mod help;
 pub mod options;
 pub mod splash;
 
