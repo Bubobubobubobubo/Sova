@@ -9,13 +9,13 @@ use ratatui::{
 };
 
 pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
-    // Create a horizontal layout with 60%/40% split
+    // Layout horizontal avec split 60%/40%
     let main_chunks = Layout::default()
         .direction(Direction::Horizontal)
         .constraints([Constraint::Percentage(60), Constraint::Percentage(40)])
         .split(area);
 
-    // Left side - Log box (60% width)
+    // Boîte de logs (60% width)
     let log_area = main_chunks[0];
     let log_block = Block::default()
         .title("Log")
@@ -24,7 +24,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(log_block, log_area);
 
-    // Example log content
+    // Contenu à la con
     let log_content = Paragraph::new(Text::from("System log entries will appear here..."))
         .style(Style::default())
         .block(Block::default());
@@ -32,7 +32,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let log_text_area = inner_area(log_area);
     frame.render_widget(log_content, log_text_area);
 
-    // Right side - Three equal boxes (Devices, Peers, Options)
+    // Trois boites de taille égale (Devices, Peers, Options)
     let right_side = main_chunks[1];
     let right_chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -43,7 +43,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
         ])
         .split(right_side);
 
-    // Devices box (top)
+    // Devices
     let devices_block = Block::default()
         .title("Devices")
         .borders(Borders::ALL)
@@ -51,7 +51,6 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(devices_block, right_chunks[0]);
 
-    // Show connected devices
     let devices_content = if app.state.devices.is_empty() {
         String::from("No devices connected")
     } else {
@@ -65,7 +64,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let devices_text_area = inner_area(right_chunks[0]);
     frame.render_widget(devices_text, devices_text_area);
 
-    // Peers box (middle)
+    // Peers
     let peers_block = Block::default()
         .title("Peers")
         .borders(Borders::ALL)
@@ -73,7 +72,6 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(peers_block, right_chunks[1]);
 
-    // Show connected peers
     let peers_content = if app.state.peers.is_empty() {
         String::from("No peers connected")
     } else {
@@ -87,7 +85,7 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
     let peers_text_area = inner_area(right_chunks[1]);
     frame.render_widget(peers_text, peers_text_area);
 
-    // Options box (bottom)
+    // Options
     let options_block = Block::default()
         .title("Options")
         .borders(Borders::ALL)
@@ -95,7 +93,6 @@ pub fn draw(frame: &mut Frame, app: &App, area: Rect) {
 
     frame.render_widget(options_block, right_chunks[2]);
 
-    // Example options content
     let options_content = Paragraph::new(Text::from("IDK what to do :))))"))
         .style(Style::default())
         .block(Block::default());

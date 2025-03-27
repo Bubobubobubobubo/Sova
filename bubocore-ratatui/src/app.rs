@@ -3,10 +3,6 @@ use std::error::Error;
 use std::time::{Duration, Instant};
 use tui_textarea::TextArea;
 
-/// The current screen that the user is on:
-/// - Editor: The user is editing a script.
-/// - Grid: The user is browsing the grid of scripts.
-/// - Options: The user is viewing the options menu.
 pub enum Mode {
     Editor,
     Grid,
@@ -39,12 +35,46 @@ pub struct ServerState {
     pub devices: Vec<String>,
 }
 
+pub struct Link {
+    pub link: AblLink,
+    pub session_state: SessionState,
+    pub quantum: f64,
+}
+
+impl Link {
+    /// Capturer l'état de l'horloge
+    pub fn capture_app_state(&mut self) {
+        self.link.capture_app_session_state(&mut self.session_state);
+    }
+
+    /// Pousser un nouvel état
+    pub fn commit_app_state(&self) {
+        self.link.commit_app_session_state(&self.session_state);
+    }
+
+    /// Pousser la synchronisation
+    pub fn set_start_stop_sync(&self) {
+        let state = self.link.is_start_stop_sync_enabled();
+        self.link.enable_start_stop_sync(!state);
+        self.commit_app_state();
+    }
+
+    // Récupérer la phase actuelle
+    pub fn get_phase(&mut self) -> f64 {
+        self.capture_app_state();
+        let beat = self
+            .session_state
+            .beat_at_time(self.link.clock_micros(), self.quantum as f64);
+        beat % self.quantum as f64
+    }
+}
+
 pub struct App {
     pub screen_state: ScreenState,
     pub editor_data: EditorData,
     pub state: ServerState,
     pub status_message: String,
-    pub link_client: AblLink,
+    pub link_client: Link,
 }
 
 impl App {
@@ -71,9 +101,13 @@ impl App {
                 devices: Vec::new(),
             },
             status_message: String::from("Press ENTER to start!"),
-            link_client: AblLink::new(120.),
+            link_client: Link {
+                link: AblLink::new(120.0),
+                session_state: SessionState::new(),
+                quantum: 4.0,
+            },
         };
-        app.link_client.enable(true);
+        app.link_client.link.enable(true);
         app
     }
 
