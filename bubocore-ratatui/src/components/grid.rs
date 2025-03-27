@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 pub fn draw(frame: &mut Frame, _app: &App, area: Rect) {
-    // Create a centered block
+    // Création d'un bloc central
     let block = Block::default()
         .title("Grid")
         .borders(Borders::ALL)
@@ -16,7 +16,7 @@ pub fn draw(frame: &mut Frame, _app: &App, area: Rect) {
 
     frame.render_widget(block, area);
 
-    // Example grid content
+    // On affiche n'importe quoi
     let grid_content = Paragraph::new(Text::from("Idk what to do :)))) "))
         .style(Style::default())
         .block(Block::default());
