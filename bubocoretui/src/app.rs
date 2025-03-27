@@ -1,5 +1,6 @@
 use crate::components::help::HelpState;
 use crate::event::{AppEvent, Event, EventHandler};
+use bubocorelib::server::client::BuboCoreClient;
 use color_eyre::Result;
 use ratatui::{
     Terminal,
@@ -114,11 +115,13 @@ pub struct App {
     pub command_mode: CommandMode,
     pub help_state: Option<HelpState>,
     pub events: EventHandler,
+    pub client: BuboCoreClient,
 }
 
 impl App {
-    pub fn new() -> Self {
+    pub fn new(client: BuboCoreClient) -> Self {
         let app = Self {
+            client,
             running: true,
             screen_state: ScreenState {
                 mode: Mode::Splash,

@@ -1,11 +1,14 @@
 use std::net::SocketAddrV4;
 
 use serde::{Deserialize, Serialize};
-use tokio::{io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader}, net::{TcpSocket, TcpStream}};
+use tokio::{
+    io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader},
+    net::{TcpSocket, TcpStream},
+};
 
 use crate::schedule::SchedulerMessage;
 
-use super::{ServerMessage, ENDING_BYTE};
+use super::{ENDING_BYTE, ServerMessage};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum ClientMessage {
@@ -16,16 +19,20 @@ pub enum ClientMessage {
 }
 
 pub struct BuboCoreClient {
-    pub ip : String,
-    pub port : u16,
-    pub stream : Option<TcpStream>,
-    pub connected : bool,
+    pub ip: String,
+    pub port: u16,
+    pub stream: Option<TcpStream>,
+    pub connected: bool,
 }
 
 impl BuboCoreClient {
-
-    pub fn new(ip : String, port : u16) -> Self {
-        BuboCoreClient { ip, port, stream: None, connected: false }
+    pub fn new(ip: String, port: u16) -> Self {
+        BuboCoreClient {
+            ip,
+            port,
+            stream: None,
+            connected: false,
+        }
     }
 
     pub async fn connect(&mut self) -> io::Result<()> {
@@ -37,7 +44,7 @@ impl BuboCoreClient {
         Ok(())
     }
 
-    pub async fn send(&mut self, message : ClientMessage) -> io::Result<()> {
+    pub async fn send(&mut self, message: ClientMessage) -> io::Result<()> {
         let mut msg = serde_json::to_vec(&message).unwrap();
         msg.push(ENDING_BYTE);
         let socket = self.mut_socket()?;
@@ -62,10 +69,10 @@ impl BuboCoreClient {
         }
     }
 
-    /// Waits until some data is available, or the socket has been disconnected. 
+    /// Waits until some data is available, or the socket has been disconnected.
     /// Returns true if some data is available, false if the socket is disconnected.
     pub async fn ready(&mut self) -> bool {
-        let mut buf = [ 0 ];
+        let mut buf = [0];
         let Ok(socket) = self.socket() else {
             return false;
         };
@@ -95,5 +102,5 @@ impl BuboCoreClient {
             Err(io::ErrorKind::InvalidData.into())
         }
     }
-
 }
+

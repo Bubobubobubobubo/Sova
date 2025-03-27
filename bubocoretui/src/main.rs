@@ -1,4 +1,6 @@
 use crate::app::App;
+use bubocorelib::server::client::BuboCoreClient;
+use clap::{Parser, arg, command};
 use color_eyre::Result;
 use ratatui::{
     Terminal,
@@ -16,12 +18,22 @@ mod components;
 mod event;
 mod ui;
 
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long, default_value = "127.0.0.1")]
+    ip: String,
+    #[arg(short, long, default_value_t = 8080)]
+    port: u16,
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Panic handler utilisé par démos Ratatui
     color_eyre::install()?;
+    let args = Args::parse();
     let terminal = init_terminal()?;
-    let mut app = App::new();
+    let client = BuboCoreClient::new(args.ip, args.port);
+    let mut app = App::new(client);
     let result = app.run(terminal).await;
     restore_terminal()?;
     result?;
