@@ -16,9 +16,9 @@ use ratatui::{
     backend::Backend,
     crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
 };
-use rusty_link::{AblLink, SessionState};
 use std::time::{Duration, Instant};
 use tui_textarea::TextArea;
+use crate::link::Link;
 
 pub enum Mode {
     Editor,
@@ -98,36 +98,6 @@ pub struct ComponentState {
     pub bottom_message: String,
 }
 
-pub struct Link {
-    pub link: AblLink,
-    pub session_state: SessionState,
-    pub quantum: f64,
-}
-
-impl Link {
-    pub fn capture_app_state(&mut self) {
-        self.link.capture_app_session_state(&mut self.session_state);
-    }
-
-    pub fn commit_app_state(&self) {
-        self.link.commit_app_session_state(&self.session_state);
-    }
-
-    pub fn toggle_start_stop_sync(&mut self) {
-        let state = self.link.is_start_stop_sync_enabled();
-        self.link.enable_start_stop_sync(!state);
-        self.commit_app_state();
-    }
-
-    pub fn get_phase(&mut self) -> f64 {
-        self.capture_app_state();
-        let beat = self
-            .session_state
-            .beat_at_time(self.link.clock_micros(), self.quantum as f64);
-        beat % self.quantum as f64
-    }
-}
-
 pub struct App {
     pub running: bool,
     pub screen: ScreenState,
@@ -163,11 +133,7 @@ impl App {
                 peers: Vec::new(),
                 devices: Vec::new(),
                 network: NetworkManager::new(ip, port),
-                link: Link {
-                    link: AblLink::new(120.0),
-                    session_state: SessionState::new(),
-                    quantum: 4.0,
-                }
+                link: Link::new()
             },
             components: ComponentState {
                 connection_state: None,
@@ -399,10 +365,6 @@ impl App {
 
     pub fn set_status_message(&mut self, message: String) {
         self.components.bottom_message = message;
-    }
-
-    pub fn set_flash_duration(&mut self, microseconds: u64) {
-        self.screen.flash.flash_duration = Duration::from_micros(microseconds);
     }
 
     pub fn send_content(&self) -> EyreResult<()> {
