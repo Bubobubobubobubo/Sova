@@ -19,15 +19,21 @@ use bubocoreserver::world::World;
 fn main() {
     let bali = BaliCompiler;
     let bali_program: Program = bali.compile("
-    (d test (+ 3 (+ 5 6)))
-    (d bob 5)
-    (@ (// 2 5) (d bob 6) (> (// 3 5) (n 4 5 12 94 out)))
-    (@ (// 12 4) (n 5 5 12 34 out1) (<< (d test 120)))
-    (> (// 3 9) (n 5 5 5 5 out))
-    (n 1 2 3 4 out)
-    (< (// 4 3) (d plop 3))
+    (d note 20)
+    (> (// 1 4) (n note 90 1 0 nimp))
+    (> (// 1 2) (d note (+ note 13)))
+    (@ (// 3 4) 
+        (<< (n note 90 1 0 nimp))
+        (d note (+ note 13))
+        (>> (n note 90 1 0 nimp))
+        (> (// 1 4) (n 100 90 1 0 nimp))
+    )
+    (@ (// 5 4)
+        (< (// 1 8) (n 101 90 1 0 nimp))
+        (> (// 1 8) (n 102 90 1 0 nimp))
+    )
     ").unwrap();
-    print!("PROGRAM\n{:?}\nENDPROGRAM\n", bali_program);
+    //print!("PROGRAM\n{:?}\nENDPROGRAM\n", bali_program);
 
     let clock_server = Arc::new(ClockServer::new(60.0, 4.0));
     clock_server.link.enable(true);
