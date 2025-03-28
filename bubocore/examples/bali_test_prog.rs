@@ -1,7 +1,6 @@
-use std::{sync::Arc, vec, thread, time::Duration};
+use std::{sync::Arc, vec, thread};
 
 use bubocorelib::clock::ClockServer;
-use bubocorelib::pattern::Pattern;
 use bubocorelib::compiler::{
     bali::BaliCompiler,
     Compiler,
@@ -16,12 +15,12 @@ use bubocorelib::server::{
     BuboCoreServer, ServerState,
     client::{BuboCoreClient, ClientMessage},
 };
-use tokio::{sync::watch, time};
+use tokio::{sync::watch};
 
 
 
 pub const DEFAULT_MIDI_OUTPUT: &str = "BuboCoreOut";
-pub const DEFAULT_TEMPO: f64 = 80.0;
+pub const DEFAULT_TEMPO: f64 = 30.0;
 pub const DEFAULT_QUANTUM: f64 = 4.0;
 
 /*
@@ -77,29 +76,24 @@ pub const DEFAULT_QUANTUM: f64 = 4.0;
     }
     
     async fn client() -> tokio::io::Result<()> {
-        time::sleep(Duration::from_secs(5)).await;
+        //time::sleep(Duration::from_secs(5)).await;
     
         let mut client = BuboCoreClient::new("127.0.0.1".to_owned(), 8080);
         client.connect().await?;
 
         let bali = BaliCompiler;
         let bali_program: Program = bali.compile("
-        (d note 20)
-        (> (// 1 4) (n note 90 1 0 nimp))
-        (> (// 1 2) (d note (+ note 13)))
-        (@ (// 3 4) 
-            (<< (n note 90 1 0 nimp))
-            (d note (+ note 13))
-            (>> (n note 90 1 0 nimp))
-            (> (// 1 4) (n 100 90 1 0 nimp))
-        )
-        (@ (// 5 4)
-            (< (// 1 8) (n 101 90 1 0 nimp))
-            (> (// 1 8) (n 102 90 1 0 nimp))
-        )
+        (d do 50)
+        (d re 52)
+        (d mi 54)
+        (> 4 (n do 5))
+        (> 2 (n do 5))
+        (> (// 3 4) (n do 5))
+        (> 1 (n re 5))
+        (@ 1 (> 4 (n mi 5)))
         ").unwrap();
     
-        let mut sequence = Sequence::new(vec![1.0]);
+        let mut sequence = Sequence::new(vec![4.0]);
         sequence.set_script(0, bali_program.clone().into());
     
         let msg = SchedulerMessage::AddSequence(sequence);
