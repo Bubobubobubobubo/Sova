@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use super::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Instruction, Program};
 
 use crate::pattern::script::ReturnInfo;
+use crate::clock::TimeSpan;
 
 #[cfg(test)]
 mod tests;
@@ -31,6 +32,8 @@ pub enum ControlASM {
     // String operations
     //Concat(Variable, Variable, Variable),
     // Time manipulation
+    FloatAsBeats(Variable, Variable),
+    FloatAsSteps(Variable, Variable),
     // AsBeats(Variable, Variable),
     // AsMicros(Variable, Variable),
     // AsSteps(Variable, Variable),
@@ -39,7 +42,10 @@ pub enum ControlASM {
     //DeclareInstance(String, Variable),
     //DeclareSequence(String, Variable),
     //DeclareStep(String, Variable),
-    Mov(Variable, Variable),
+    Mov(Variable, Variable),    
+    // Stack operations
+    Push(Variable),
+    Pop(Variable),
     // Jumps
     Jump(usize),
     JumpIf(Variable, usize),
@@ -47,9 +53,6 @@ pub enum ControlASM {
     JumpIfEqual(Variable, Variable, usize),
     JumpIfLess(Variable, Variable, usize),
     JumpIfLessOrEqual(Variable, Variable, usize),
-    // Stack operations
-    Push(Variable),
-    Pop(Variable),
     // Calls and returns
     CallFunction(Variable),
     CallProcedure(usize),
@@ -172,10 +175,35 @@ impl ControlASM {
 
                 ReturnInfo::None
             },
+            // Time manipulation
+            ControlASM::FloatAsBeats(x, z) => {
+                let x_value = ctx.evaluate(x);
+                let x_value = x_value.cast_as_float(ctx.clock);
+                let res_value = VariableValue::Dur(TimeSpan::Beats(x_value.as_float(ctx.clock)));
+                ctx.set_var(z, res_value);
+                ReturnInfo::None
+            }
+            ControlASM::FloatAsSteps(x, z) => {
+                let x_value = ctx.evaluate(x);
+                let x_value = x_value.cast_as_float(ctx.clock);
+                let res_value = VariableValue::Dur(TimeSpan::Steps(x_value.as_float(ctx.clock)));
+                ctx.set_var(z, res_value);
+                ReturnInfo::None
+            }
             // Memory manipulation
             ControlASM::Mov(x, z) => {
                 let x_value = ctx.evaluate(x);
                 ctx.set_var(z, x_value);
+                ReturnInfo::None
+            },
+            ControlASM::Push(x) => {
+                let value = ctx.evaluate(x);
+                ctx.stack.push(value);
+                ReturnInfo::None
+            },
+            ControlASM::Pop(x) => {
+                let value = ctx.stack.pop().unwrap_or(false.into());
+                ctx.set_var(x, value);
                 ReturnInfo::None
             },
             // Jumps
@@ -229,16 +257,6 @@ impl ControlASM {
                     _ => unreachable!(),
                 }
 
-                ReturnInfo::None
-            },
-            ControlASM::Push(x) => {
-                let value = ctx.evaluate(x);
-                ctx.stack.push(value);
-                ReturnInfo::None
-            },
-            ControlASM::Pop(x) => {
-                let value = ctx.stack.pop().unwrap_or(false.into());
-                ctx.set_var(x, value);
                 ReturnInfo::None
             },
             // Calls and returns
