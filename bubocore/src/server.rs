@@ -155,6 +155,8 @@ async fn process_client(mut socket: TcpStream, mut state: ServerState) -> io::Re
                 if let Ok(msg) = serde_json::from_slice::<ClientMessage>(&buff) {
                     let res = on_message(msg, state.clone()).await;
                     send_msg(&mut socket, res).await?;
+                } else {
+                    send_msg(&mut socket, ServerMessage::InternalError).await?;
                 }
                 buff.clear();
             }
