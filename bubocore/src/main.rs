@@ -1,13 +1,8 @@
 use crate::clock::ClockServer;
 use std::{sync::Arc, thread, collections::HashMap};
-
-// Import clap parser
 use clap::Parser;
-// Import ErrorKind for specific error handling
 use std::io::ErrorKind;
-
 use device_map::DeviceMap;
-
 use pattern::{Pattern, Sequence};
 use protocol::midi::{MidiInterface, MidiOut};
 use schedule::{Scheduler, SchedulerNotification};
@@ -18,6 +13,7 @@ use transcoder::Transcoder;
 use tokio::sync::{watch, Mutex};
 use world::World;
 
+// Déclaration des modules
 pub mod transcoder;
 pub mod clock;
 pub mod compiler;
@@ -28,12 +24,23 @@ pub mod pattern;
 pub mod protocol;
 pub mod schedule;
 pub mod world;
-
 pub mod server;
 
 pub const DEFAULT_MIDI_OUTPUT: &str = "BuboCoreOut";
 pub const DEFAULT_TEMPO: f64 = 80.0;
 pub const DEFAULT_QUANTUM: f64 = 4.0;
+pub const GREETER_LOGO: &str = "
+▗▄▄▖ █  ▐▌▗▖    ▄▄▄   ▗▄▄▖▄▄▄   ▄▄▄ ▗▞▀▚▖
+▐▌ ▐▌▀▄▄▞▘▐▌   █   █ ▐▌  █   █ █    ▐▛▀▀▘
+▐▛▀▚▖     ▐▛▀▚▖▀▄▄▄▀ ▐▌  ▀▄▄▄▀ █    ▝▚▄▄▖
+▐▙▄▞▘     ▐▙▄▞▘      ▝▚▄▄▖               
+                                         
+";
+
+fn greeter() {
+    print!("{}", GREETER_LOGO);
+    println!("Version: {}\n", env!("CARGO_PKG_VERSION"));
+}
 
 // Define the CLI arguments struct
 #[derive(Parser, Debug)]
@@ -59,6 +66,7 @@ struct Cli {
 
 #[tokio::main]
 async fn main() {
+    greeter();
     // Parse CLI arguments
     let cli = Cli::parse();
 
