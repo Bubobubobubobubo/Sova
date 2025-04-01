@@ -7,6 +7,24 @@ bookToC: false
 
 # BuboCore : un séquenceur musical pour le _live coding_
 
+## À propos du projet
+
+{{% columns ratio="1:2" %}}
+
+{{< center >}}
+![](athenor_logo.jpg)
+{{< /center >}}
+
+<--->
+
+_BuboCore_ est un logiciel de création musicale conçu dans le cadre d'un
+projet de recherche soutenu par l'[Athénor CNCM](https://www.athenor.com/) de Saint-Nazaire et par le [laboratoire LS2N](https://www.ls2n.fr/) de l'université de Nantes.
+Ce logiciel est disponible en libre accès et sous licence _open source_. Il est développé par une petite équipe de développeurs et de contributeurs volontaires.
+
+![](ls2n_logo.jpg)
+
+{{% /columns %}}
+
 ## Qu'est-ce que BuboCore ?
 
 {{% columns ratio="4:1" %}}
@@ -98,25 +116,9 @@ Pouvoir construire différents langages et choisir lequel employer en fonction d
 
 ## Quel rôle joue BuboCore dans un environnement de création musicale ?
 
-BuboCore est un outil _middleware_ : il n'émet aucun son. Le logiciel occupe une position d'intermédiaire et de médiateur dans un environnement de création musicale. Il est pensé pour être utilisé en conjonction d'autres logiciels de création musicale, synthétiseurs, boîtes à rythmes, outils de traitement du signal, etc. L'outil est entièrement tourné vers la communication inter-logicielle et la synchronisation, et l'encourage. BuboCore peut émettre ou recevoir des messages MIDI et OSC. Il peut être synchronisé au travers du protocole Ableton Link mais aussi, au besoin, d'une horloge MIDI. Le logiciel peut aussi servir de contrôleur central et de métronome pour d'autres logiciels ou machines.
+BuboCore est un outil _middleware_ : il n'émet aucun son. Le logiciel occupe une position d'intermédiaire et de médiateur dans un environnement de création musicale. Il est pensé pour être utilisé en conjonction d'autres logiciels de création musicale, synthétiseurs, boîtes à rythmes, outils de traitement du signal, etc. L'outil est entièrement tourné vers la communication inter-logicielle et la synchronisation. BuboCore peut émettre ou recevoir des messages MIDI et OSC. Il peut être synchronisé au travers du protocole Ableton Link mais aussi, au besoin, d'une horloge MIDI. Le logiciel peut aussi servir de contrôleur central et de métronome pour d'autres logiciels ou machines.
 
 {{< video src="first_sequence.mp4">}}
 
-{{% columns ratio="1:2" %}}
-
-## À propos du projet
-
-![](athenor_logo.jpg)
-
-<--->
-
-##
-
-_BuboCore_ est un logiciel de création musicale conçu dans le cadre d'un
-projet de recherche soutenu par l'[Athénor CNCM](https://www.athenor.com/) de Saint-Nazaire et par le [laboratoire LS2N](https://www.ls2n.fr/) de l'université de Nantes.
-Ce logiciel est disponible en libre accès et sous licence _open source_.
-
-![](ls2n_logo.jpg)
 
 
-{{% /columns %}}
