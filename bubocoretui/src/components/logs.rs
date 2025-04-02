@@ -49,7 +49,6 @@ impl Component for LogsComponent {
         app: &mut App,
         key_event: KeyEvent,
     ) -> EyreResult<bool> {
-        // Logs-specific key handling
         match key_event.code {
             KeyCode::Up => {
                 if app.logs.len() > 0 {

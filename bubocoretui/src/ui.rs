@@ -6,7 +6,7 @@ use ratatui::{
     layout::{Constraint, Direction, Layout, Rect},
     style::{Color, Style},
     text::Text,
-    widgets::{Block, Clear, Paragraph, Borders},
+    widgets::{Block, Clear, Paragraph},
 };
 use crate::components::editor::EditorComponent;
 use crate::components::grid::GridComponent;
@@ -24,16 +24,6 @@ pub struct Flash {
     pub flash_duration: Duration,
 }
 
-
-/// Fonction principale de l'interface utilisateur qui gère le rendu de l'application
-/// 
-/// Cette fonction :
-/// - Vérifie l'état du flash
-/// - Configure la mise en page principale
-/// - Dessine la barre supérieure
-/// - Affiche le composant approprié selon le mode
-/// - Dessine la barre inférieure
-/// - Gère l'effet de flash si nécessaire
 pub fn ui(frame: &mut Frame, app: &mut App) {
     check_flash_status(app);
     let main_layout = Layout::default()
@@ -113,7 +103,7 @@ pub fn draw_bottom_bar(frame: &mut Frame, app: &mut App, area: Rect) -> EyreResu
             Mode::Devices => "DEVICES",
             Mode::Logs => "LOGS",
             Mode::Files => "FILES",
-            Mode::Navigation => "NAVIGATION",
+            Mode::Navigation => "MENU",
         };
 
         // Récupère les informations de tempo et de beat

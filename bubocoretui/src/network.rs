@@ -186,7 +186,7 @@ async fn run_network_task(
     port: u16,
     initial_username: String,
     mut command_rx: mpsc::UnboundedReceiver<NetworkCommand>,
-    server_tx: mpsc::UnboundedSender<ServerMessage>,
+    _server_tx: mpsc::UnboundedSender<ServerMessage>,
     sender: mpsc::UnboundedSender<Event>,
 ) {
     let mut current_username = initial_username.clone();

@@ -36,7 +36,6 @@ impl Component for DevicesComponent {
         app: &mut App,
         key_event: KeyEvent,
     ) -> EyreResult<bool> {
-        // Devices-specific key handling
         match key_event.code {
             KeyCode::Up => {
                 if !app.server.devices.is_empty() {
@@ -62,30 +61,27 @@ impl Component for DevicesComponent {
     }
 
     fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
-        // Create the main block for the entire component area
         let block = Block::default()
             .title(" Available Devices ")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .style(Style::default().fg(Color::Cyan));
         
-        // Calculate the inner area *after* drawing the block
         let inner_area = block.inner(area);
-        frame.render_widget(block, area); // Render the block first
+        frame.render_widget(block, area);
 
-        // Split the inner area for list and help text
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0), // List takes available space
-                Constraint::Length(1), // Help text takes 1 line
+                Constraint::Min(0),
+                Constraint::Length(1),
             ])
-            .split(inner_area); // Split the inner area, not the original area
+            .split(inner_area);
 
         let list_area = chunks[0];
         let help_area = chunks[1];
 
-        // Create the list of devices
+        // Création de la liste des périphériques
         let devices: Vec<ListItem> = app.server.devices
             .iter()
             .enumerate()
@@ -101,12 +97,10 @@ impl Component for DevicesComponent {
 
         let list = List::new(devices)
             .highlight_style(Style::default().bg(Color::Blue).fg(Color::White))
-            .block(Block::default()); // Add a default block for potential padding/styling if needed, though maybe not necessary
+            .block(Block::default());
 
-        // Render the list inside the calculated list_area
         frame.render_widget(list, list_area);
 
-        // Render help text in the help_area
         let help_text = "↑↓: Navigate | Enter: Select";
         let help = Paragraph::new(Text::from(help_text))
             .style(Style::default().fg(Color::Gray))

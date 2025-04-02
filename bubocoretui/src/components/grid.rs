@@ -10,12 +10,11 @@ use ratatui::{
     widgets::{Block, Borders, BorderType, Paragraph, Table, Row, Cell, Clear},
 };
 use bubocorelib::server::client::ClientMessage;
+use crate::event::{AppEvent, Event};
 use std::cmp::min;
 use tui_textarea::{TextArea, Input};
 
-/// Represents the UI component responsible for displaying and interacting with the sequence grid.
-///
-/// This component manages the visual representation of the musical sequences as a grid,
+/// Représentation graphique du pattern en cours d'exécution sous la forme d'une grille
 pub struct GridComponent {
     /// Stores the state required for the step length editing popup.
     ///
@@ -117,19 +116,15 @@ impl Component for GridComponent {
         }
 
         // --- Normal Mode Handling (Popup Inactive) ---
-
-        // Get immutable reference to pattern data if available
         let pattern_data = if let Some(p) = &app.editor.pattern { Some((p, p.sequences.len())) } else { None };
         let (pattern, num_cols) = match pattern_data {
             Some((p, nc)) if nc > 0 => (p, nc),
-            _ => {
-                // No pattern or no sequences, ignore keys
-                return Ok(false);
-            }
+            _ => { return Ok(false); } // No pattern or no sequences, ignore keys
         };
 
         let mut current_cursor = app.interface.components.grid_cursor;
         let mut handled = true; // Assume handled unless explicitly set otherwise
+        let mut switch_to_editor = false; 
 
         match key_event.code {
             // Edit step length
@@ -185,6 +180,49 @@ impl Component for GridComponent {
                 if let Some(status) = status_update { app.set_status_message(status); }
                 if let Some(new_row) = new_cursor_row { current_cursor.0 = new_row; }
             }
+            // Edit Script (New)
+            KeyCode::Char('e') => {
+                let (row_idx, col_idx) = current_cursor;
+                let mut status_update: Option<String> = None;
+
+                if let Some(pattern) = &app.editor.pattern {
+                    if let Some(sequence) = pattern.sequences.get(col_idx) {
+                        if row_idx < sequence.steps.len() { 
+                            let script_content = format!("// Script for Sequence {}, Step {}\n// (Replace this with actual content)", col_idx, row_idx);
+
+                            app.editor.textarea.select_all();
+                            app.editor.textarea.delete_line_by_head(); 
+                            for line in script_content.lines() {
+                                app.editor.textarea.insert_str(line);
+                                app.editor.textarea.insert_newline();
+                            }
+                            app.editor.textarea.move_cursor(tui_textarea::CursorMove::Top);
+                            
+                            app.editor.active_sequence.pattern = 0;
+                            app.editor.active_sequence.script = col_idx;
+
+                            switch_to_editor = true;
+                            status_update = Some(format!("Loaded script for Seq {}, Step {} into editor", col_idx, row_idx));
+                            
+                        } else {
+                            status_update = Some("Cannot edit script for an empty slot".to_string());
+                            handled = false;
+                        }
+                    } else {
+                         status_update = Some("Invalid sequence index".to_string());
+                         handled = false;
+                    }
+                } else {
+                    status_update = Some("Pattern not loaded".to_string());
+                    handled = false;
+                }
+                
+                if let Some(status) = status_update { app.set_status_message(status); }
+                
+                if switch_to_editor {
+                    app.events.sender.send(Event::App(AppEvent::SwitchToEditor))?
+                }
+            }
             // Navigation Arrows
             KeyCode::Down => {
                 if let Some(seq) = pattern.sequences.get(current_cursor.1) {
@@ -238,7 +276,7 @@ impl Component for GridComponent {
             _ => { handled = false; } // Ignore other keys
         }
 
-        if handled {
+        if handled && !switch_to_editor {
             app.interface.components.grid_cursor = current_cursor;
         }
         Ok(handled)
@@ -287,6 +325,7 @@ impl Component for GridComponent {
             Span::styled("Space", key_style), Span::raw(":Toggle | "),
             Span::styled("+", key_style), Span::raw("/"), Span::styled("-", key_style), Span::raw(":Add/Rem | "),
             Span::styled("l", key_style), Span::raw(":Edit Len | "),
+            Span::styled("E", key_style), Span::raw(":Edit Script | "),
         ];
         // Append editing help if popup is active
         if self.editing_state.is_some() {

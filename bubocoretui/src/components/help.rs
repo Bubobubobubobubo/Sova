@@ -149,22 +149,22 @@ impl Component for HelpComponent {
 
         let help_state = app.interface.components.help_state.as_ref().unwrap();
 
-        // Create the horizontal layout directly on the input `area`
+        // Disposition horizontale (liste des sujets à gauche 20%, contenu à droite 80%)
         let inner_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(20), Constraint::Percentage(80)])
-            .split(area); // Split area directly
+            .split(area);
 
-        // --- Sidebar (Left - 20%) --- 
+        // Navigation
         let sidebar_area = inner_chunks[0];
         let sidebar_block = Block::default()
             .title(" Internal Help ")
             .borders(Borders::ALL)
             .style(Style::default().fg(Color::Cyan)); 
-        frame.render_widget(sidebar_block.clone(), sidebar_area); // Draw block first
-        let inner_sidebar = sidebar_block.inner(sidebar_area); // Use block.inner()
+        frame.render_widget(sidebar_block.clone(), sidebar_area);
+        let inner_sidebar = sidebar_block.inner(sidebar_area);
 
-        // Render list inside the inner sidebar area (no change needed here)
+        // Liste des sujets
         let items: Vec<ListItem> = help_state
             .topics
             .iter()
@@ -188,7 +188,7 @@ impl Component for HelpComponent {
             .highlight_symbol("> ");
         frame.render_stateful_widget(list, inner_sidebar, &mut list_state);
 
-        // --- Content Area (Right - 80%) --- 
+        // Contenu (80% de la largeur)
         let content_area = inner_chunks[1];
         let title = help_state
             .topics
@@ -199,23 +199,21 @@ impl Component for HelpComponent {
             .title(title)
             .borders(Borders::ALL)
             .style(Style::default().fg(Color::Cyan)); 
-        frame.render_widget(content_block.clone(), content_area); // Draw block first
-        // Get inner area of the content block
+        frame.render_widget(content_block.clone(), content_area);
         let inner_content_area = content_block.inner(content_area); 
 
-        // Split the inner content area for the text and the help line
         let content_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(0), // Main text area
-                Constraint::Length(1), // Help text line
+                Constraint::Min(0), // Texte
+                Constraint::Length(1), // Aide
             ])
             .split(inner_content_area);
 
         let main_content_text_area = content_chunks[0];
         let content_help_area = content_chunks[1];
 
-        // Render selected content text
+        // Rendu du texte
         let content = help_state
             .contents
             .get(help_state.selected_index)
@@ -223,17 +221,14 @@ impl Component for HelpComponent {
             .clone();
         let content_paragraph = Paragraph::new(Text::from(content))
             .style(Style::default().fg(Color::White))
-            .wrap(ratatui::widgets::Wrap { trim: true }); // Added wrap for long text
-            // Removed .block(Block::default())
-        frame.render_widget(content_paragraph, main_content_text_area); // Render in top part
+            .wrap(ratatui::widgets::Wrap { trim: true }); // On wrap
+        frame.render_widget(content_paragraph, main_content_text_area);
 
-        // Render help text inside the content block
+        // Indication des touches
         let help_text = "↑↓: Navigate Topics"; 
         let help = Paragraph::new(Text::from(help_text))
             .style(Style::default().fg(Color::Gray))
             .alignment(ratatui::layout::Alignment::Center);
-        frame.render_widget(help, content_help_area); // Render in bottom part
-
-        // REMOVED incorrect help text rendering at the very bottom
+        frame.render_widget(help, content_help_area); 
     }
 }
