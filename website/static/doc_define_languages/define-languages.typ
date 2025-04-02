@@ -320,9 +320,14 @@ To alter the control-flow, a few instructions allow to arbitrarily change this p
 The existing control instructions are given in @lst:asm, which is an extract of the file ``` src/lang/control_asm.rs```.
 
 
-#figure([
-  #set align(left)
-  #raw("pub enum ControlASM {
+#figure(
+    grid(
+        columns: 3,
+        gutter: 2mm,
+        [
+          #set text(9pt)
+          #set align(left)
+          #raw("pub enum ControlASM {
     // Arithmetic operations
     Add(Variable, Variable, Variable),
     Div(Variable, Variable, Variable),
@@ -334,6 +339,13 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     Not(Variable, Variable),
     Or(Variable, Variable, Variable),
     Xor(Variable, Variable, Variable),
+    // Comparisons
+    LowerThan(Variable, Variable, Variable),
+    LowerOrEqual(Variable, Variable, Variable),
+    GreaterThan(Variable, Variable, Variable),
+    GreaterOrEqual(Variable, Variable, Variable),
+    Equal(Variable, Variable, Variable),
+    Different(Variable, Variable, Variable),
     // Bitwise operations
     BitAnd(Variable, Variable, Variable),
     BitNot(Variable, Variable),
@@ -345,23 +357,34 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     // String operations
     Compile(Variable, String, Variable),
     Concat(Variable, Variable, Variable),
-    Format(String, Vec<Variable>, Variable),
-    // Time manipulation
+    Format(String, Vec<Variable>, Variable),")],
+        grid.vline(stroke: 0.5pt),
+        [],
+        [
+          #set text(9pt)
+          #set align(left)
+          #raw("    // Time manipulation
     AsBeats(Variable, Variable),
     AsMicros(Variable, Variable),
     AsSteps(Variable, Variable),
     BeatsToNum(Variable, Variable),
     MicrosToNum(Variable, Variable),
     StepsToNum(Variable, Variable),
+    FloatAsBeats(Variable, Variable),
+    FloatAsSteps(Variable, Variable),
     // Memory manipulation
     DeclareGlobale(String, Variable),
     DeclareInstance(String, Variable),
     DeclareSequence(String, Variable),
     DeclareStep(String, Variable),
     Mov(Variable, Variable),
+    // Stack operations
+    Push(Variable),
+    Pop(Variable),
     // Jumps
     Jump(usize),
     JumpIf(Variable, usize),
+    JumpIfNot(Variable, usize),
     JumpIfDifferent(Variable, Variable, usize),
     JumpIfEqual(Variable, Variable, usize),
     JumpIfLess(Variable, Variable, usize),
@@ -370,9 +393,9 @@ The existing control instructions are given in @lst:asm, which is an extract of 
     CallFunction(Variable),
     CallProcedure(usize),
     Return,
-  }")
-  ],
-  caption: "Control instructions"
+  }")],
+    ),
+    caption: "Control instructions"
 ) <lst:asm>
 
 === Arithmetic operations
@@ -428,6 +451,36 @@ table(
   [Xor], [$z <- x xor y$], [],
 )) <tab:boolean>
 
+=== Comparisons
+
+These instructions are all of the form ``` Op(x, y, z)```.
+Arguments x and y are inputs and z is an output.
+It is expected that x and y are two numbers of the same type (Int, Float or Dur).
+If this is not the case: 
+- if x is a number y will be casted to the type of x,
+- else if y is a number x will be casted to the type of y,
+- else they will both be casted to Int.
+The result of the comparison is a boolean and will be casted to the type of z if needed (i.e. if z is not a boolean).
+
+Each instruction performs a different comparison, as shown in @tab:comparison.
+
+#figure(
+  caption: "Comparisons semantics",
+table(
+  columns: 3,
+  inset: 10pt,
+  align: horizon,
+  table.header(
+    [*Op*], [*True if*], [*Remark*],
+  ),
+  [LowerThan], [$x < y$], [],
+  [LowerOrEqual], [$x <= y$], [],
+  [GreaterThan], [$x > y$], [],
+  [GreaterOrEqual], [$x >= y$], [],
+  [Equal], [$x = y$], [],
+  [Different], [$x != y$], [],
+)) <tab:comparison>
+
 === Bitwise operations
 
 These instructions are all of the form ``` Op(x, y, z)``` or ``` Op(x, z)```.
@@ -479,9 +532,9 @@ Possible placeholders are: ``` %d``` (Integer), ``` %f``` (Float), ``` %b``` (Bo
 
 These instructions allow to perform conversions on durations.
 
-*AsMicros(d, v).* Casts $d$ to a duration. Set this duration to microseconds, cast it to the type of $v$, and then store it in $v$.
-
 *AsBeats(d, v).* Casts $d$ to a duration. Set this duration to beats, cast it to the type of $v$, and then store it in $v$.
+
+*AsMicros(d, v).* Casts $d$ to a duration. Set this duration to microseconds, cast it to the type of $v$, and then store it in $v$.
 
 *AsSteps(d, v).* Casts $d$ to a duration. Set this duration to steps, cast it to the type of $v$, and then store it in $v$.
 
@@ -490,6 +543,10 @@ These instructions allow to perform conversions on durations.
 *MicrosToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of microseconds as an int, cast it to the type of $v$, and then store it in $v$.
 
 *StepsToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of steps as a float, cast it to the type of $v$, and then store it in $v$.
+
+*FloatAsBeats(f, v).* Casts $f$ to a float, then consider this float as a number of beats. Cast this number of beats to the type of $v$, and then store it in $v$.
+
+*FloatAsSteps(f, v).* Casts $f$ to a float, then consider this float as a number of steps. Cast this number of steps to the type of $v$, and then store it in $v$.
 
 === Memory manipulation
 
@@ -501,6 +558,14 @@ If a variable that does not exist is written, the variable will be created. (exc
 
 The ``` mov(x, z)``` instruction semantics is $z <- x$.
 If needed, the value of ``` x``` will be casted to the type of ``` z```.
+
+=== Stack operations
+
+The theLanguage execution model provides a stack that can be used to store and retrieve variable values.
+
+*Push(v).* The value of $v$ is added on top of the stack. No type casting is performed so this value retains its type.
+
+*Pop(v).* The value on top of the stack is removed from the stack and stored in $v$. The value is casted to the type of $v$.
 
 === Jumps
 
@@ -525,6 +590,7 @@ table(
   ),
   [Jump(d)], [$#true$], [],
   [JumpIf(x, d)], [$x$], [$x$ casted to Bool],
+  [JumpIfNot(x, d)], [$not x$], [$x$ casted to Bool],
   [JumpIfDifferent(x, y, d)], [$x != y$], [$y$ casted to the type of $x$],
   [JumpIfEqual(x, y, d)], [$x = y$], [$y$ casted to the type of $x$],
   [JumpIfLess(x, y, d)], [$x < y$], [$y$ casted to the type of $x$],
