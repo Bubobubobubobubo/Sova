@@ -204,7 +204,7 @@ impl Component for SplashComponent {
                                 Ok(port) => {
                                     let ip = connection_state.get_ip();
                                     let username = connection_state.get_username();
-                                    app.server.network.update_connection_info(
+                                    let _ = app.server.network.update_connection_info(
                                         ip, 
                                         port,
                                         username

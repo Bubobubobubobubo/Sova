@@ -52,8 +52,6 @@ pub enum AppEvent {
     SwitchToFiles,
     /// Move the navigation cursor by (dy, dx).
     MoveNavigationCursor((i32, i32)),
-    /// Passer à l'écran suivant (gestionnaire d'écrans).
-    NextScreen,
     /// Exit navigation mode
     ExitNavigation,
 

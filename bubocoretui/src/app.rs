@@ -22,13 +22,11 @@ use ratatui::{
     Terminal,
     backend::Backend,
     crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
-    Frame, layout::{Rect, Layout, Constraint, Direction},
 };
 use std::time::{Duration, Instant};
 use chrono::{DateTime, Local};
 use std::collections::VecDeque;
 use tui_textarea::TextArea;
-use crate::ui; // Make sure ui module is correctly imported if draw_bottom_bar is there
 
 /// Taille maximale de la liste des logs
 const MAX_LOGS: usize = 100;
@@ -182,7 +180,7 @@ impl App {
                     flash: Flash {
                         is_flashing: false,
                         flash_start: None,
-                        flash_duration: Duration::from_micros(200_000),
+                        flash_duration: Duration::from_micros(20_000),
                     },
                     previous_mode: None,
                 },
@@ -228,7 +226,7 @@ impl App {
         while self.running {
             terminal.draw(|frame| crate::ui::ui(frame, self))?;
             match self.events.next().await? {
-                // 60FPS  
+                // Fonction périodique (vitesse du rafraîchissement)
                 Event::Tick => self.tick(),
                 // Gestion des événements clavier ou terminal
                 Event::Crossterm(event) => match event {
@@ -236,10 +234,9 @@ impl App {
                         if key_event.kind == KeyEventKind::Release {
                             continue;
                         }
-                        // Call handle_key_events and ignore the boolean result
                         let _ = self.handle_key_events(key_event)?;
                     }
-                    _ => {} // Handle other CrosstermEvents if needed
+                    _ => {}
                 },
                 // Gestion des événements liés à l'application
                 Event::App(app_event) => self.handle_app_event(app_event)?,
@@ -274,7 +271,7 @@ impl App {
             ServerMessage::Chat(msg) => {
                 self.add_log(LogLevel::Info, format!("Received: {}", msg.to_string()));
             }
-            // Mises à jour de la liste des pairs connectés
+            // Mise à jour de la liste des pairs connectés
             ServerMessage::PeersUpdated(peers) => {
                 self.server.peers = peers;
                 self.add_log(LogLevel::Info, format!("Peers updated: {}", self.server.peers.join(", ")));
@@ -302,19 +299,16 @@ impl App {
             }
             ServerMessage::PatternValue(new_pattern) => {
                 self.set_status_message(String::from("Received pattern update"));
-                // Add log to confirm reception
-                self.add_log(LogLevel::Debug, "Received and processing PatternValue update.".to_string());
+                self.add_log(LogLevel::Debug, "Received PatternValue update.".to_string());
                 self.editor.pattern = Some(new_pattern);
             }
             ServerMessage::StepPosition(positions) => {
-                // Optional: Log reception for debugging
-                // self.add_log(LogLevel::Debug, format!("Received step positions: {:?}", positions));
                 self.server.current_step_positions = Some(positions);
             }
             ServerMessage::PatternLayout(_layout) => {
             }
             // Message de succès (le serveur a réussi à traiter la requête souhaitée)
-            ServerMessage::Success => {} // This is likely received after sending a command, but doesn't update state.
+            ServerMessage::Success => {}
             // Message d'erreur interne (le serveur a rencontré une erreur interne et la signale)
             ServerMessage::InternalError(message) => {
                 self.add_log(LogLevel::Error, message);
@@ -323,34 +317,11 @@ impl App {
             ServerMessage::LogMessage(message) => {
                 self.add_log(LogLevel::Info, message.to_string());
             }
-            ServerMessage::StepEnabled(a, b) => {},
-            ServerMessage::StepDisabled(a, b) => {},
-            /* // Commenting out as server doesn't send these; updates come via PatternValue
-            ServerMessage::StepEnabled(sequence_index, step_index) => {
-                if let Some(pattern) = self.editor.pattern.as_mut() {
-                   if let Some(sequence) = pattern.sequences.get_mut(sequence_index) {
-                       sequence.enable_step(step_index);
-                       self.set_status_message(format!("Server confirmed: Step enabled [Seq: {}, Step: {}]", sequence_index, step_index));
-                   } else {
-                        self.add_log(LogLevel::Warn, format!("Received StepEnabled for invalid sequence index: {}", sequence_index));
-                   }
-                } else {
-                    self.add_log(LogLevel::Warn, "Received StepEnabled but no pattern is loaded locally.".to_string());
-                }
-            }
-            ServerMessage::StepDisabled(sequence_index, step_index) => {
-                 if let Some(pattern) = self.editor.pattern.as_mut() {
-                   if let Some(sequence) = pattern.sequences.get_mut(sequence_index) {
-                       sequence.disable_step(step_index);
-                       self.set_status_message(format!("Server confirmed: Step disabled [Seq: {}, Step: {}]", sequence_index, step_index));
-                   } else {
-                       self.add_log(LogLevel::Warn, format!("Received StepDisabled for invalid sequence index: {}", sequence_index));
-                   }
-                 } else {
-                     self.add_log(LogLevel::Warn, "Received StepDisabled but no pattern is loaded locally.".to_string());
-                 }
-             }
-             */
+            ServerMessage::StepEnabled(_a, _b) => {
+            },
+            ServerMessage::StepDisabled(_a, _b) => {
+
+            },
         }
     }
 
@@ -454,20 +425,6 @@ impl App {
                 let new_col = (current_cursor.1 as i32 + dx).clamp(0, max_col as i32) as usize;
                 self.interface.components.navigation_cursor = (new_row, new_col);
             },
-            AppEvent::NextScreen => {
-                let current_mode = &self.interface.screen.mode;
-                self.interface.screen.mode = match current_mode {
-                    Mode::Editor => Mode::Grid,
-                    Mode::Grid => Mode::Options,
-                    Mode::Options => Mode::Help,
-                    Mode::Help => Mode::Devices,
-                    Mode::Devices => Mode::Logs,
-                    Mode::Logs => Mode::Files,
-                    Mode::Files => Mode::Editor,
-                    Mode::Splash => Mode::Editor,
-                    Mode::Navigation => Mode::Editor,
-                };
-            },
             AppEvent::ExitNavigation => {
                  if let Some(prev_mode) = self.interface.screen.previous_mode.take() {
                     self.interface.screen.mode = prev_mode;
@@ -505,13 +462,13 @@ impl App {
     /// 1. Quitter (Ctrl+C)
     /// 2. Mode Commande (Ctrl+P pour ouvrir, ESC pour fermer, Enter pour exec)
     /// 3. Raccourcis F1-F7
-    /// 4. Overlay Navigation (ESC pour ouvrir/fermer, puis touches spécifiques si actif)
+    /// 4. Navigation (ESC pour ouvrir/fermer, puis touches spécifiques si actif)
     /// 5. Délégation au composant de la vue active
     fn handle_key_events(&mut self, key_event: KeyEvent) -> EyreResult<bool> {
         let key_code = key_event.code;
         let key_modifiers = key_event.modifiers;
 
-        // 1. Command Mode Input (if active)
+        // 1. Mode commande (Ctrl+P)
         if self.interface.components.command_mode.active {
             match key_code {
                 KeyCode::Esc => {
@@ -534,27 +491,25 @@ impl App {
                 }
             }
         }
-
-        // 2. Global Quit (Ctrl+C) - unchanged
-        if key_modifiers == KeyModifiers::CONTROL && key_code == KeyCode::Char('c') {
-            self.events.sender.send(Event::App(AppEvent::Quit))?;
-            return Ok(true);
-        }
-        
-        // 3. Toggle Command Mode (Ctrl+P)
         if key_modifiers == KeyModifiers::CONTROL && key_code == KeyCode::Char('p') {
              // We already handled the case where it was active above, so here it must be inactive
              self.interface.components.command_mode.enter();
              return Ok(true); // Consume Ctrl+P
         }
 
-        // 4. Other Global Actions (F-keys, etc.)
+
+        // 2. Quitter l'application (Ctrl+C)
+        if key_modifiers == KeyModifiers::CONTROL && key_code == KeyCode::Char('c') {
+            self.events.sender.send(Event::App(AppEvent::Quit))?;
+            return Ok(true);
+        }
+ 
+        // 4. Autres actions globales (Touches de fonction, etc.)
         match key_code {
-            // F-keys send events, mapping the error
             KeyCode::F(1) => {
                 self.events.sender.send(Event::App(AppEvent::SwitchToEditor))
                     .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
-                return Ok(true); // Consume F key
+                return Ok(true);
             }
             KeyCode::F(2) => {
                 self.events.sender.send(Event::App(AppEvent::SwitchToGrid))
@@ -586,29 +541,24 @@ impl App {
                     .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
                  return Ok(true);
             }
-            KeyCode::Esc => {
+            KeyCode::Tab => {
                 if self.interface.screen.mode == Mode::Navigation {
                     self.events.sender.send(Event::App(AppEvent::ExitNavigation))
                         .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
                     return Ok(true); 
                 } 
             }
-            KeyCode::Tab => {
-                self.events.sender.send(Event::App(AppEvent::NextScreen))
-                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
-                return Ok(true);
-            }
-            _ => {} // Other keys fall through
+            _ => {}
         }
 
-        // 5. Handle Escape key to enter Navigation mode (if not already in Nav) - unchanged
-        if key_code == KeyCode::Esc && self.interface.screen.mode != Mode::Navigation {
+        // 5. Touche Tab pour quitter le mode de navigation
+        if key_code == KeyCode::Tab && self.interface.screen.mode != Mode::Navigation {
             self.interface.screen.previous_mode = Some(self.interface.screen.mode);
             self.interface.screen.mode = Mode::Navigation;
             return Ok(true);
         }
 
-        // 6. Déléguer au composant actif - unchanged
+        // 6. Déléguer au composant actif
         let handled = match self.interface.screen.mode {
             Mode::Navigation => NavigationComponent::new().handle_key_event(self, key_event)?,
             Mode::Editor => EditorComponent::new().handle_key_event(self, key_event)?,
@@ -641,94 +591,14 @@ impl App {
         self.running = false;
     }
 
-    /// Active l'effet de flash sur l'écran.
-    /// 
-    /// Cette fonction active l'effet de flash sur l'écran de l'application.
-    /// 
-    /// # Returns
-    /// 
-    /// Un `Result` contenant :
-    /// * `Ok(())` si l'effet de flash a été activé avec succès
-    /// * `Err` si une erreur s'est produite pendant l'activation de l'effet de flash
-    /// 
     pub fn flash_screen(&mut self) {
         self.interface.screen.flash.is_flashing = true;
         self.interface.screen.flash.flash_start = Some(Instant::now());
     }
 
-    pub fn set_content(&mut self, content: String) {
-        self.editor.content = content;
-        self.editor.line_count = self.editor.content.lines().count().max(1);
-    }
-
     /// Définit un message à afficher dans la barre inférieure.
-    /// 
-    /// 
     pub fn set_status_message(&mut self, message: String) {
         self.interface.components.bottom_message = message;
         self.interface.components.bottom_message_timestamp = Some(Instant::now());
-    }
-
-    fn draw(&mut self, frame: &mut Frame) -> EyreResult<()> {
-        let full_area = frame.area();
-        let command_active = self.interface.components.command_mode.active;
-
-        // Calculate main content area and command area based on command mode state
-        let (main_content_area, maybe_command_area) = if command_active {
-            // If active, reserve the second to last line for command input
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(0), // Main area takes remaining space
-                    Constraint::Length(1), // Command input line
-                    Constraint::Length(1), // Bottom status bar line
-                ].as_ref())
-                .split(full_area);
-            (chunks[0], Some(chunks[1])) // Main area, Command area
-        } else {
-            // If inactive, reserve only the last line for the status bar
-            let chunks = Layout::default()
-                .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Min(0), // Main area takes remaining space
-                    Constraint::Length(1), // Bottom status bar line
-                ].as_ref())
-                .split(full_area);
-             (chunks[0], None) // Main area, No command area
-        };
-
-        // Draw the active component in the main_content_area
-        match self.interface.screen.mode {
-            Mode::Navigation => NavigationComponent::new().draw(self, frame, main_content_area),
-            Mode::Editor => EditorComponent::new().draw(self, frame, main_content_area),
-            Mode::Grid => GridComponent::new().draw(self, frame, main_content_area),
-            Mode::Options => OptionsComponent::new().draw(self, frame, main_content_area),
-            Mode::Splash => SplashComponent::new().draw(self, frame, main_content_area),
-            Mode::Help => HelpComponent::new().draw(self, frame, main_content_area),
-            Mode::Devices => { 
-                let comp = DevicesComponent::new(); 
-                comp.draw(self, frame, main_content_area);
-            },
-            Mode::Logs => LogsComponent::new().draw(self, frame, main_content_area),
-            Mode::Files => FilesComponent::new().draw(self, frame, main_content_area),
-        }
-
-        // Draw the command text area if it's active
-        if let Some(command_area) = maybe_command_area {
-            // Add a block or style to the command area if desired
-            // For now, just render the text_area widget directly
-            frame.render_widget(self.interface.components.command_mode.text_area.widget(), command_area);
-        }
-
-        // Calculate bottom status bar area (always the last line)
-        let bottom_bar_area = Rect::new(
-            full_area.x,
-            full_area.height.saturating_sub(1),
-            full_area.width,
-            1
-        );
-        ui::draw_bottom_bar(frame, self, bottom_bar_area)?;
-
-        Ok(())
     }
 }

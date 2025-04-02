@@ -86,13 +86,13 @@ impl NavigationComponent {
 
     fn get_grid() -> [[NavigationTile; 5]; 5] {
         let mut grid = [[NavigationTile::Empty; 5]; 5];
-        grid[0][0] = NavigationTile::Devices;
-        grid[0][1] = NavigationTile::Options;
+        grid[0][0] = NavigationTile::Editor;
+        grid[0][1] = NavigationTile::Devices;
         grid[0][2] = NavigationTile::Logs;
-        grid[1][2] = NavigationTile::Grid;
-        grid[2][0] = NavigationTile::Editor;
+        grid[1][0] = NavigationTile::Options;
+        grid[1][1] = NavigationTile::Grid;
         grid[2][2] = NavigationTile::Files;
-        grid[2][4] = NavigationTile::Help;
+        grid[2][0] = NavigationTile::Help;
         grid
     }
 
@@ -168,7 +168,7 @@ impl Component for NavigationComponent {
                             .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
                     }
                 }
-                Ok(true) // Consume char input
+                Ok(true)
             }
             _ => Ok(false),
         }
@@ -178,33 +178,30 @@ impl Component for NavigationComponent {
         let cursor = app.interface.components.navigation_cursor;
         let grid = Self::get_grid();
 
-        // 1. Create the main outer block for the entire navigation view
+        // Fenêtre principale
         let navigation_block = Block::default()
             .title(" Navigation (ESC to exit) ")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded)
             .style(Style::default().fg(Color::Cyan));
-        // Get the area inside the main block's borders
         let inner_area = navigation_block.inner(area);
-        // Render the main block first, covering the whole area
         frame.render_widget(navigation_block, area);
 
-        // 2. Split the INNER area horizontally
+        // Découpage de la fenêtre principale 
         let main_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(40), Constraint::Percentage(60)].as_ref())
-            // Use the inner_area for the split
             .split(inner_area);
         
         let left_area = main_chunks[0];
         let right_area = main_chunks[1];
 
-        // 3. Create and render the Map block in the left area
+        // Rendu de la carte partie gauche
         let map_block = Block::default()
             .title(" Map ")
             .borders(Borders::ALL)
             .border_type(BorderType::Rounded);
-        let inner_map_area = map_block.inner(left_area); // Area inside the map block
+        let inner_map_area = map_block.inner(left_area);
         frame.render_widget(map_block, left_area);
 
         // 4. Render the Grid Table inside the Map block's inner area
@@ -233,14 +230,12 @@ impl Component for NavigationComponent {
         }
         let table = Table::new(grid_rows, &grid_constraints)
             .column_spacing(1);
-        // Render the table in the inner_map_area
         frame.render_widget(table, inner_map_area);
 
-        // 5. Split the RIGHT part of the inner area vertically
+        // Partie droite découpée en deux (aide et messages divers)
         let right_chunks = Layout::default()
             .direction(Direction::Vertical)
-            .constraints([Constraint::Percentage(50), Constraint::Percentage(50)].as_ref())
-            // Use the right_area for the split
+            .constraints([Constraint::Percentage(20), Constraint::Percentage(80)].as_ref())
             .split(right_area);
         
         let description_area = right_chunks[0];
@@ -267,7 +262,7 @@ impl Component for NavigationComponent {
             .border_type(BorderType::Rounded)
             .style(Style::default().fg(Color::Magenta));
         let info_content = Paragraph::new(Text::from("General info, stats, or tips could go here."))
-            .alignment(Alignment::Center)
+            .alignment(Alignment::Left)
             .block(info_block);
         frame.render_widget(info_content, info_area);
     }
