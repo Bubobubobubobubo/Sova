@@ -4,8 +4,11 @@ use crate::components::{
     grid::GridComponent,
     help::{HelpComponent, HelpState},
     options::OptionsComponent,
-    splash::ConnectionState,
-    splash::SplashComponent,
+    splash::{ConnectionState, SplashComponent},
+    navigation::NavigationComponent,
+    devices::{DevicesComponent, DevicesState},
+    logs::{LogsComponent, LogsState},
+    files::{FilesComponent, FilesState},
 };
 use crate::event::{AppEvent, Event, EventHandler};
 use crate::link::Link;
@@ -29,19 +32,26 @@ use tui_textarea::TextArea;
 const MAX_LOGS: usize = 100;
 
 /// Enumération représentant les différentes vues disponibles dans l'application.
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
 pub enum Mode {
     Editor,
     Grid,
     Options,
     Splash,
     Help,
-}
+    Devices,
+    Logs,
+    Files,
+    Navigation,
+} 
 
 pub struct ScreenState {
     /// Vue active de l'application
     pub mode: Mode,
     /// Effet de flash
     pub flash: Flash,
+    /// Stocke le mode précédent lorsque l'overlay de navigation est ouvert
+    pub previous_mode: Option<Mode>,
 }
 
 pub struct UserPosition {
@@ -91,6 +101,10 @@ pub struct ComponentState {
     pub bottom_message: String,
     pub bottom_message_timestamp: Option<Instant>,
     pub grid_cursor: (usize, usize),
+    pub devices_state: DevicesState,
+    pub logs_state: LogsState,
+    pub files_state: FilesState,
+    pub navigation_cursor: (usize, usize),
 }
 
 /// Enumération représentant les différents niveaux de logging possibles
@@ -166,8 +180,9 @@ impl App {
                     flash: Flash {
                         is_flashing: false,
                         flash_start: None,
-                        flash_duration: Duration::from_micros(200_000),
+                        flash_duration: Duration::from_micros(20_000),
                     },
+                    previous_mode: None,
                 },
                 components: ComponentState {
                     command_mode: CommandMode::new(),
@@ -175,6 +190,10 @@ impl App {
                     bottom_message: String::from("Press ENTER to start!"),
                     bottom_message_timestamp: None,
                     grid_cursor: (0, 0),
+                    devices_state: DevicesState::new(),
+                    logs_state: LogsState::new(),
+                    files_state: FilesState::new(),
+                    navigation_cursor: (0, 0),
                 },
             },
             events,
@@ -207,7 +226,7 @@ impl App {
         while self.running {
             terminal.draw(|frame| crate::ui::ui(frame, self))?;
             match self.events.next().await? {
-                // 60FPS  
+                // Fonction périodique (vitesse du rafraîchissement)
                 Event::Tick => self.tick(),
                 // Gestion des événements clavier ou terminal
                 Event::Crossterm(event) => match event {
@@ -215,7 +234,7 @@ impl App {
                         if key_event.kind == KeyEventKind::Release {
                             continue;
                         }
-                        self.handle_key_events(key_event)?
+                        let _ = self.handle_key_events(key_event)?;
                     }
                     _ => {}
                 },
@@ -252,7 +271,7 @@ impl App {
             ServerMessage::Chat(msg) => {
                 self.add_log(LogLevel::Info, format!("Received: {}", msg.to_string()));
             }
-            // Mises à jour de la liste des pairs connectés
+            // Mise à jour de la liste des pairs connectés
             ServerMessage::PeersUpdated(peers) => {
                 self.server.peers = peers;
                 self.add_log(LogLevel::Info, format!("Peers updated: {}", self.server.peers.join(", ")));
@@ -280,19 +299,16 @@ impl App {
             }
             ServerMessage::PatternValue(new_pattern) => {
                 self.set_status_message(String::from("Received pattern update"));
-                // Add log to confirm reception
-                self.add_log(LogLevel::Debug, "Received and processing PatternValue update.".to_string());
+                self.add_log(LogLevel::Debug, "Received PatternValue update.".to_string());
                 self.editor.pattern = Some(new_pattern);
             }
             ServerMessage::StepPosition(positions) => {
-                // Optional: Log reception for debugging
-                // self.add_log(LogLevel::Debug, format!("Received step positions: {:?}", positions));
                 self.server.current_step_positions = Some(positions);
             }
             ServerMessage::PatternLayout(_layout) => {
             }
             // Message de succès (le serveur a réussi à traiter la requête souhaitée)
-            ServerMessage::Success => {} // This is likely received after sending a command, but doesn't update state.
+            ServerMessage::Success => {}
             // Message d'erreur interne (le serveur a rencontré une erreur interne et la signale)
             ServerMessage::InternalError(message) => {
                 self.add_log(LogLevel::Error, message);
@@ -301,34 +317,11 @@ impl App {
             ServerMessage::LogMessage(message) => {
                 self.add_log(LogLevel::Info, message.to_string());
             }
-            ServerMessage::StepEnabled(a, b) => {},
-            ServerMessage::StepDisabled(a, b) => {},
-            /* // Commenting out as server doesn't send these; updates come via PatternValue
-            ServerMessage::StepEnabled(sequence_index, step_index) => {
-                if let Some(pattern) = self.editor.pattern.as_mut() {
-                   if let Some(sequence) = pattern.sequences.get_mut(sequence_index) {
-                       sequence.enable_step(step_index);
-                       self.set_status_message(format!("Server confirmed: Step enabled [Seq: {}, Step: {}]", sequence_index, step_index));
-                   } else {
-                        self.add_log(LogLevel::Warn, format!("Received StepEnabled for invalid sequence index: {}", sequence_index));
-                   }
-                } else {
-                    self.add_log(LogLevel::Warn, "Received StepEnabled but no pattern is loaded locally.".to_string());
-                }
-            }
-            ServerMessage::StepDisabled(sequence_index, step_index) => {
-                 if let Some(pattern) = self.editor.pattern.as_mut() {
-                   if let Some(sequence) = pattern.sequences.get_mut(sequence_index) {
-                       sequence.disable_step(step_index);
-                       self.set_status_message(format!("Server confirmed: Step disabled [Seq: {}, Step: {}]", sequence_index, step_index));
-                   } else {
-                       self.add_log(LogLevel::Warn, format!("Received StepDisabled for invalid sequence index: {}", sequence_index));
-                   }
-                 } else {
-                     self.add_log(LogLevel::Warn, "Received StepDisabled but no pattern is loaded locally.".to_string());
-                 }
-             }
-             */
+            ServerMessage::StepEnabled(_a, _b) => {
+            },
+            ServerMessage::StepDisabled(_a, _b) => {
+
+            },
         }
     }
 
@@ -414,76 +407,49 @@ impl App {
     fn handle_app_event(&mut self, event: AppEvent) -> EyreResult<()> {
         match event {
             AppEvent::SwitchToEditor => self.interface.screen.mode = Mode::Editor,
-            AppEvent::SwitchToGrid => {
-                self.interface.screen.mode = Mode::Grid;
-            },
+            AppEvent::SwitchToGrid => self.interface.screen.mode = Mode::Grid,
             AppEvent::SwitchToOptions => self.interface.screen.mode = Mode::Options,
-            // Bascule vers la vue d'aide
             AppEvent::SwitchToHelp => {
                 self.interface.screen.mode = Mode::Help;
-                // Une initialisation est nécessaire pour la première utilisation
                 if self.interface.components.help_state.is_none() {
                     self.interface.components.help_state = Some(HelpState::new());
                 }
-            }
-            // Bascule vers la vue suivante suivant le mode actif
-            AppEvent::NextScreen => {
-                self.interface.screen.mode = match self.interface.screen.mode {
-                    Mode::Editor => Mode::Grid,
-                    Mode::Grid => Mode::Options,
-                    Mode::Options => Mode::Editor,
-                    Mode::Help => Mode::Editor,
-                    Mode::Splash => Mode::Editor,
-                };
-            }
-            // Active le mode permettant l'affichage du command prompt
-            AppEvent::EnterCommandMode => {
-                self.interface.components.command_mode.enter();
-            }
-            // Désactive le mode permettant l'affichage du command prompt
-            AppEvent::ExitCommandMode => {
-                self.interface.components.command_mode.exit();
-            }
-            // Exécution d'une commande interne via le command prompt
+            },
+            AppEvent::SwitchToDevices => self.interface.screen.mode = Mode::Devices,
+            AppEvent::SwitchToLogs => self.interface.screen.mode = Mode::Logs,
+            AppEvent::SwitchToFiles => self.interface.screen.mode = Mode::Files,
+            AppEvent::MoveNavigationCursor((dy, dx)) => {
+                let (max_row, max_col) = (5, 1);
+                let current_cursor = self.interface.components.navigation_cursor;
+                let new_row = (current_cursor.0 as i32 + dy).clamp(0, max_row as i32) as usize;
+                let new_col = (current_cursor.1 as i32 + dx).clamp(0, max_col as i32) as usize;
+                self.interface.components.navigation_cursor = (new_row, new_col);
+            },
+            AppEvent::ExitNavigation => {
+                 if let Some(prev_mode) = self.interface.screen.previous_mode.take() {
+                    self.interface.screen.mode = prev_mode;
+                 }
+            },
             AppEvent::ExecuteCommand(cmd) => {
-                match self.execute_command(&cmd) {
-                    Ok(_) => {}
-                    Err(e) => {
-                        self.set_status_message(format!("Error: {}", e));
-                    }
-                }
                 self.interface.components.command_mode.exit();
-            }
-            AppEvent::SendScript(_script) => {
-
-            }
-            AppEvent::GetScript(_pattern_id, _step_id) => {
-
-            }
-            // Mise à jour du temp de l'horloge Ableton Link
+                self.execute_command(&cmd)?;
+            },
+            AppEvent::SendScript(_script) => {},
+            AppEvent::GetScript(_pattern_id, _step_id) => {},
             AppEvent::UpdateTempo(tempo) => {
-                self.server
-                    .link
-                    .session_state
-                    .set_tempo(tempo, self.server.link.link.clock_micros());
+                self.server.link.session_state.set_tempo(tempo, self.server.link.link.clock_micros());
                 self.server.link.commit_app_state();
-            }
-            // Mise à jour du quantum de l'horloge Ableton Link
+            },
             AppEvent::UpdateQuantum(quantum) => {
                 self.server.link.quantum = quantum;
                 self.server.link.capture_app_state();
                 self.server.link.commit_app_state();
-            }
-            // Activation/désactivation de la synchronisation start/stop (Ableton Link)
+            },
             AppEvent::ToggleStartStopSync => {
                 self.server.link.toggle_start_stop_sync();
                 let state = self.server.link.link.is_start_stop_sync_enabled();
-                self.set_status_message(format!(
-                    "Start/Stop sync {}",
-                    if state { "enabled" } else { "disabled" }
-                ));
-            }
-            // Arrêt de l'application
+                self.set_status_message(format!("Start/Stop sync {}", if state { "enabled" } else { "disabled" }));
+            },
             AppEvent::Quit => {
                 self.quit();
             }
@@ -492,78 +458,123 @@ impl App {
     }
 
     /// Gère les événements clavier.
-    /// 
-    /// Cette fonction gère les différents types d'événements clavier que l'application peut recevoir :
-    /// 
-    /// # Arguments
-    /// 
-    /// * `key_event` - L'événement clavier à traiter
-    /// 
-    /// # Returns
-    /// 
-    /// Un `Result` contenant :
-    /// * `Ok(())` si l'événement a été traité avec succès
-    /// * `Err` si une erreur s'est produite pendant le traitement
-    fn handle_key_events(&mut self, key_event: KeyEvent) -> EyreResult<()> {
-        // Ouverture/fermeture du command prompt
-        if key_event.code == KeyCode::Char('p')
-            && key_event.modifiers.contains(KeyModifiers::CONTROL)
-        {
-            if self.interface.components.command_mode.active {
-                self.events.send(AppEvent::ExitCommandMode);
-            } else {
-                self.events.send(AppEvent::EnterCommandMode);
-            }
-            return Ok(());
-        }
-        // Traitement des événements liés au command prompt
+    /// Priorité de gestion :
+    /// 1. Quitter (Ctrl+C)
+    /// 2. Mode Commande (Ctrl+P pour ouvrir, ESC pour fermer, Enter pour exec)
+    /// 3. Raccourcis F1-F7
+    /// 4. Navigation (ESC pour ouvrir/fermer, puis touches spécifiques si actif)
+    /// 5. Délégation au composant de la vue active
+    fn handle_key_events(&mut self, key_event: KeyEvent) -> EyreResult<bool> {
+        let key_code = key_event.code;
+        let key_modifiers = key_event.modifiers;
+
+        // 1. Mode commande (Ctrl+P)
         if self.interface.components.command_mode.active {
-            match key_event.code {
-                // Fermeture du command prompt avant envoi de la commande
-                KeyCode::Esc | KeyCode::Char('c')
-                    if key_event.modifiers.contains(KeyModifiers::CONTROL) =>
-                {
-                    self.events.send(AppEvent::ExitCommandMode);
+            match key_code {
+                KeyCode::Esc => {
+                    self.interface.components.command_mode.exit(); 
+                    return Ok(true);
                 }
-                // Exécution de la commande saisie
                 KeyCode::Enter => {
-                    let cmd = self.interface.components.command_mode.get_command();
-                    self.events.send(AppEvent::ExecuteCommand(cmd));
+                    let command = self.interface.components.command_mode.get_command();
+                    self.events.sender.send(Event::App(AppEvent::ExecuteCommand(command)))?;
+                    return Ok(true);
                 }
-                // Toute autre touche est traitée comme une entrée de caractère
-                _ => {
-                    self.interface
-                        .components
-                        .command_mode
-                        .text_area
-                        .input(key_event);
+                 // Ctrl+P also exits if already active
+                KeyCode::Char('p') if key_modifiers == KeyModifiers::CONTROL => {
+                    self.interface.components.command_mode.exit();
+                    return Ok(true); // Consume Ctrl+P
+                }
+                 _ => { 
+                    let handled_by_textarea = self.interface.components.command_mode.text_area.input(key_event);
+                    return Ok(handled_by_textarea);
                 }
             }
-            return Ok(());
+        }
+        if key_modifiers == KeyModifiers::CONTROL && key_code == KeyCode::Char('p') {
+             // We already handled the case where it was active above, so here it must be inactive
+             self.interface.components.command_mode.enter();
+             return Ok(true); // Consume Ctrl+P
         }
 
-        // Traitement des événements en lien avec chacun des modes actifs
-        // FIX: est-il nécessaire de reconstruire les composants à chaque fois ?
-        let handled = match self.interface.screen.mode {
-            Mode::Splash => SplashComponent::new()
-                .handle_key_event(self, key_event)
-                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
-            Mode::Editor => EditorComponent::new()
-                .handle_key_event(self, key_event)
-                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
-            Mode::Grid => GridComponent::new()
-                .handle_key_event(self, key_event)
-                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
-            Mode::Options => OptionsComponent::new()
-                .handle_key_event(self, key_event)
-                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
-            Mode::Help => HelpComponent::new()
-                .handle_key_event(self, key_event)
-                .map_err(|e| color_eyre::eyre::eyre!("{}", e))?,
-        };
-        if !handled { }
 
-        Ok(())
+        // 2. Quitter l'application (Ctrl+C)
+        if key_modifiers == KeyModifiers::CONTROL && key_code == KeyCode::Char('c') {
+            self.events.sender.send(Event::App(AppEvent::Quit))?;
+            return Ok(true);
+        }
+ 
+        // 4. Autres actions globales (Touches de fonction, etc.)
+        match key_code {
+            KeyCode::F(1) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToEditor))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                return Ok(true);
+            }
+            KeyCode::F(2) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToGrid))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                return Ok(true); 
+            }
+            KeyCode::F(3) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToOptions))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                return Ok(true); 
+            }
+            KeyCode::F(4) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToHelp))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                 return Ok(true);
+            }
+            KeyCode::F(5) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToDevices))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                 return Ok(true);
+            }
+            KeyCode::F(6) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToLogs))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                 return Ok(true);
+            }
+            KeyCode::F(7) => {
+                self.events.sender.send(Event::App(AppEvent::SwitchToFiles))
+                    .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                 return Ok(true);
+            }
+            KeyCode::Tab => {
+                if self.interface.screen.mode == Mode::Navigation {
+                    self.events.sender.send(Event::App(AppEvent::ExitNavigation))
+                        .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
+                    return Ok(true); 
+                } 
+            }
+            _ => {}
+        }
+
+        // 5. Touche Tab pour quitter le mode de navigation
+        if key_code == KeyCode::Tab && self.interface.screen.mode != Mode::Navigation {
+            self.interface.screen.previous_mode = Some(self.interface.screen.mode);
+            self.interface.screen.mode = Mode::Navigation;
+            return Ok(true);
+        }
+
+        // 6. Déléguer au composant actif
+        let handled = match self.interface.screen.mode {
+            Mode::Navigation => NavigationComponent::new().handle_key_event(self, key_event)?,
+            Mode::Editor => EditorComponent::new().handle_key_event(self, key_event)?,
+            Mode::Grid => GridComponent::new().handle_key_event(self, key_event)?,
+            Mode::Options => OptionsComponent::new().handle_key_event(self, key_event)?,
+            Mode::Splash => SplashComponent::new().handle_key_event(self, key_event)?,
+            Mode::Help => HelpComponent::new().handle_key_event(self, key_event)?,
+            Mode::Devices => {
+                let mut comp = DevicesComponent::new();
+                comp.handle_key_event(self, key_event)?
+            }
+            Mode::Logs => LogsComponent::new().handle_key_event(self, key_event)?,
+            Mode::Files => FilesComponent::new().handle_key_event(self, key_event)?,
+        };
+        
+        Ok(handled)
     }
 
     /// Fonction de fermeture de l'application.
@@ -580,29 +591,12 @@ impl App {
         self.running = false;
     }
 
-    /// Active l'effet de flash sur l'écran.
-    /// 
-    /// Cette fonction active l'effet de flash sur l'écran de l'application.
-    /// 
-    /// # Returns
-    /// 
-    /// Un `Result` contenant :
-    /// * `Ok(())` si l'effet de flash a été activé avec succès
-    /// * `Err` si une erreur s'est produite pendant l'activation de l'effet de flash
-    /// 
     pub fn flash_screen(&mut self) {
         self.interface.screen.flash.is_flashing = true;
         self.interface.screen.flash.flash_start = Some(Instant::now());
     }
 
-    pub fn set_content(&mut self, content: String) {
-        self.editor.content = content;
-        self.editor.line_count = self.editor.content.lines().count().max(1);
-    }
-
     /// Définit un message à afficher dans la barre inférieure.
-    /// 
-    /// 
     pub fn set_status_message(&mut self, message: String) {
         self.interface.components.bottom_message = message;
         self.interface.components.bottom_message_timestamp = Some(Instant::now());
