@@ -44,8 +44,16 @@ pub enum AppEvent {
     SwitchToOptions,
     /// Passer à la vue Aide.
     SwitchToHelp,
-    /// Passer à l'écran suivant (gestionnaire d'écrans).
-    NextScreen,
+    /// Passer à la vue Devices.
+    SwitchToDevices,
+    /// Passer à la vue Logs.
+    SwitchToLogs,
+    /// Passer à la vue Files.
+    SwitchToFiles,
+    /// Move the navigation cursor by (dy, dx).
+    MoveNavigationCursor((i32, i32)),
+    /// Exit navigation mode
+    ExitNavigation,
 
     // --- Mode Éditeur --- 
     /// Envoie le contenu du script courant au serveur
@@ -54,10 +62,6 @@ pub enum AppEvent {
     GetScript(u64, u64),
     
     // --- Mode Commande --- 
-    /// Entrer en mode commande.
-    EnterCommandMode,
-    /// Quitter le mode commande.
-    ExitCommandMode,
     /// Exécuter une commande entrée par l'utilisateur.
     ExecuteCommand(String),
 

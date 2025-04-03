@@ -1,8 +1,7 @@
 use crate::App;
-use crate::components::{Component, handle_common_keys, inner_area};
-use crate::event::AppEvent;
+use crate::components::Component;
+use color_eyre::Result as EyreResult;
 use bubocorelib::server::client::ClientMessage;
-use color_eyre::Result;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
     Frame,
@@ -11,7 +10,6 @@ use ratatui::{
     text::Text,
     widgets::{Block, Borders, Paragraph},
 };
-use std::error::Error;
 
 pub struct EditorComponent;
 
@@ -26,64 +24,70 @@ impl Component for EditorComponent {
         &mut self,
         app: &mut App,
         key_event: KeyEvent,
-    ) -> Result<bool, Box<dyn Error + 'static>> {
-        if handle_common_keys(app, key_event)? {
-            return Ok(true);
-        }
-
+    ) -> EyreResult<bool> {
         match key_event.code {
-            // Envoie le contenu du script édité au serveur et flashe l'écran
+            // Envoi du script lorsque la touche Ctrl+E est pressée
             KeyCode::Char('e') if key_event.modifiers.contains(KeyModifiers::CONTROL) => {
                 app.send_client_message(ClientMessage::SetScript(
                     app.editor.active_sequence.pattern as usize, 
                     app.editor.active_sequence.script as usize, 
                     app.editor.textarea.lines().join("\n"))
                 );
-                Ok(true)
-            }
-            KeyCode::Tab => {
-                app.events.send(AppEvent::SwitchToGrid);
+                app.set_status_message("Sent script content.".to_string());
+                app.flash_screen();
                 Ok(true)
             }
             _ => {
-                // Handle text input
                 app.editor.textarea.input(key_event);
-                app.set_content(app.editor.textarea.lines().join("\n"));
                 Ok(true)
             }
         }
     }
 
     fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
-        // Create the main horizontal layout with 80%/20% split
-        let chunks = Layout::default()
+        let inner_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(80), Constraint::Percentage(20)])
             .split(area);
 
-        // Editor area (left side - 80%)
-        let editor_area = chunks[0];
-        let editor = Block::default()
-            .title("Editor")
+        let editor_area = inner_chunks[0];
+        let info_area = inner_chunks[1];
+
+        let editor_block = Block::default()
+            .title(" Editor ")
             .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Black));
+            .style(Style::default().fg(Color::Cyan));
+        frame.render_widget(editor_block.clone(), editor_area);
+        let inner_editor_area = editor_block.inner(editor_area);
 
-        frame.render_widget(editor.clone(), editor_area);
+        let editor_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0), // Contenu
+                Constraint::Length(1), // Aide
+            ])
+            .split(inner_editor_area);
+        
+        let editor_text_area = editor_chunks[0];
+        let editor_help_area = editor_chunks[1];
 
-        let editor_text_area = inner_area(editor_area);
-        // TODO: should we really clone here?
         let mut text_area = app.editor.textarea.clone();
         text_area.set_line_number_style(Style::default().fg(Color::DarkGray));
         frame.render_widget(&text_area, editor_text_area);
 
-        // Info panel (right side - 20%)
-        let info_area = chunks[1];
-        let info_panel = Block::default()
-            .title("Info")
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::Black));
+        // Indication des touches
+        let help_text = "Ctrl+E: Send Script | Standard Text Input";
+        let help = Paragraph::new(Text::from(help_text))
+            .style(Style::default().fg(Color::Gray))
+            .alignment(ratatui::layout::Alignment::Center);
+        frame.render_widget(help, editor_help_area);
 
-        frame.render_widget(info_panel.clone(), info_area);
+        let info_block = Block::default()
+            .title(" Info ")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::Cyan));
+        frame.render_widget(info_block.clone(), info_area);
+        let info_text_area = info_block.inner(info_area);
 
         let (pattern, script) = (
             app.editor.active_sequence.pattern,
@@ -94,9 +98,8 @@ impl Component for EditorComponent {
             "Pattern: {} \nScript: {}",
             pattern, script
         )))
-        .style(Style::default());
+        .style(Style::default().fg(Color::White));
 
-        let info_text_area = inner_area(info_area);
         frame.render_widget(info_content, info_text_area);
     }
 }
