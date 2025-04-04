@@ -1,5 +1,6 @@
-use crate::app::{App, LogLevel};
+use crate::app::App;
 use crate::event::AppEvent;
+use crate::components::logs::LogLevel;
 use bubocorelib::server::client::ClientMessage;
 use color_eyre::Result as EyreResult;
 use tui_textarea::TextArea;

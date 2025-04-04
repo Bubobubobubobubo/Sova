@@ -1,5 +1,8 @@
 use crate::App;
-use crate::components::Component;
+use crate::{
+    components::Component,
+    components::logs::LogLevel,
+};
 use color_eyre::Result as EyreResult;
 use bubocorelib::server::client::ClientMessage;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
@@ -23,10 +26,6 @@ impl EditorComponent {
 
 impl Component for EditorComponent {
 
-    fn before_draw(&mut self, _app: &mut App) -> EyreResult<()> {
-        Ok(())
-    }
-
     fn handle_key_event(
         &mut self,
         app: &mut App,
@@ -37,7 +36,7 @@ impl Component for EditorComponent {
             match key_event.code {
                 // Send script with Ctrl+S
                 KeyCode::Char('s') => {
-                    app.add_log(crate::app::LogLevel::Debug, "Ctrl+S detected, attempting to send script...".to_string());
+                    app.add_log(LogLevel::Debug, "Ctrl+S detected, attempting to send script...".to_string());
                     app.send_client_message(ClientMessage::SetScript(
                         app.editor.active_sequence.sequence_index,
                         app.editor.active_sequence.step_index,

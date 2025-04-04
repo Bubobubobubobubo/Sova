@@ -23,10 +23,6 @@ impl OptionsComponent {
 
 impl Component for OptionsComponent {
 
-    fn before_draw(&mut self, _app: &mut App) -> EyreResult<()> {
-        Ok(())
-    }
-
     fn handle_key_event(
         &mut self,
         app: &mut App,

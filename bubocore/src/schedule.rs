@@ -122,7 +122,6 @@ impl Scheduler {
     fn step_index(clock : &Clock, sequence : &Sequence, date: SyncTime) -> (usize, usize, SyncTime, SyncTime) {
         // Use the effective range defined by start_step and end_step
         let effective_start_step = sequence.get_effective_start_step();
-        let effective_end_step = sequence.get_effective_end_step(); // Inclusive
         let effective_num_steps = sequence.get_effective_num_steps();
 
         if effective_num_steps == 0 {

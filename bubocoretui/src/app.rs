@@ -67,8 +67,6 @@ pub struct UserPosition {
 pub struct EditorData {
     /// The sequence and step currently being edited or viewed.
     pub active_sequence: UserPosition,
-    /// The content of the script currently loaded in the editor.
-    pub content: String,
     /// The `tui_textarea` widget state for the editor.
     pub textarea: TextArea<'static>,
     /// The currently loaded pattern data.
@@ -209,7 +207,6 @@ impl App {
         let mut app = Self {
             running: true,
             editor: EditorData {
-                content: String::new(),
                 active_sequence: UserPosition {
                     sequence_index: 0,
                     step_index: 0,
@@ -556,8 +553,6 @@ impl App {
                 self.interface.components.command_mode.exit();
                 self.execute_command(&cmd)?;
             },
-            AppEvent::SendScript(_script) => {},
-            AppEvent::GetScript(_pattern_id, _step_id) => {},
             AppEvent::UpdateTempo(tempo) => {
                 self.server.link.session_state.set_tempo(tempo, self.server.link.link.clock_micros());
                 self.server.link.commit_app_state();
@@ -567,11 +562,11 @@ impl App {
                 self.server.link.capture_app_state();
                 self.server.link.commit_app_state();
             },
-            AppEvent::ToggleStartStopSync => {
-                self.server.link.toggle_start_stop_sync();
-                let state = self.server.link.link.is_start_stop_sync_enabled();
-                self.set_status_message(format!("Start/Stop sync {}", if state { "enabled" } else { "disabled" }));
-            },
+            // AppEvent::ToggleStartStopSync => {
+            //     self.server.link.toggle_start_stop_sync();
+            //     let state = self.server.link.link.is_start_stop_sync_enabled();
+            //     self.set_status_message(format!("Start/Stop sync {}", if state { "enabled" } else { "disabled" }));
+            // },
             AppEvent::Quit => {
                 self.quit();
             },
