@@ -153,14 +153,31 @@ pub enum ServerMessage {
     /// (Currently unused in favor of sending the whole `PatternValue`).
     StepDisabled(usize, usize),
     /// Sends the requested script content to the client.
-    ScriptContent { 
+    ScriptContent {
         /// The index of the sequence the script belongs to.
-        sequence_idx: usize, 
+        sequence_idx: usize,
         /// The index of the step within the sequence.
-        step_idx: usize, 
+        step_idx: usize,
         /// The script content as a string.
-        content: String 
+        content: String
     },
+    /// A complete snapshot of the current server state.
+    Snapshot(Snapshot),
+}
+
+/// Represents a complete snapshot of the server's current state.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Snapshot {
+    /// The current pattern state, including sequences and scripts.
+    pub pattern: Pattern,
+    /// Tempo in beats per minute (BPM).
+    pub tempo: f64,
+    /// Current beat time within the Ableton Link session.
+    pub beat: f64,
+    /// Current microsecond time within the Ableton Link session.
+    pub micros: SyncTime,
+    /// The musical quantum (e.g., 4.0 for 4/4 time).
+    pub quantum: f64,
 }
 
 /// Generates the `ServerMessage::Hello` message for a newly connected client.
@@ -210,18 +227,16 @@ async fn on_message(
     println!("{}", log_string);
     
     match msg {
-        ClientMessage::EnableStep(sequence_id, step_id) => {
-            // Forward to scheduler
-            if state.sched_iface.send(SchedulerMessage::EnableStep(sequence_id, step_id)).is_err() {
-                eprintln!("[!] Failed to send EnableStep to scheduler.");
-                // Optionally return InternalError, but Success might be acceptable if scheduler handles it
+        ClientMessage::EnableSteps(sequence_id, steps) => {
+            if state.sched_iface.send(SchedulerMessage::EnableSteps(sequence_id, steps)).is_err() {
+                eprintln!("[!] Failed to send EnableSteps to scheduler.");
             }
             ServerMessage::Success
         },
-        ClientMessage::DisableStep(sequence_id, step_id) => {
-            // Forward to scheduler
-            if state.sched_iface.send(SchedulerMessage::DisableStep(sequence_id, step_id)).is_err() {
-                 eprintln!("[!] Failed to send DisableStep to scheduler.");
+        ClientMessage::DisableSteps(sequence_id, steps) => {
+            // Forward to scheduler with the vector of steps
+            if state.sched_iface.send(SchedulerMessage::DisableSteps(sequence_id, steps)).is_err() {
+                 eprintln!("[!] Failed to send DisableSteps to scheduler.");
             }
             ServerMessage::Success
         },
@@ -345,6 +360,15 @@ async fn on_message(
               // Return current client list directly
               ServerMessage::PeersUpdated(state.clients.lock().await.clone())
          },
+        ClientMessage::SetPattern(pattern) => {
+            // Forward the entire pattern to the scheduler
+            if state.sched_iface.send(SchedulerMessage::SetPattern(pattern)).is_ok() {
+                ServerMessage::Success
+            } else {
+                eprintln!("[!] Failed to send SetPattern to scheduler.");
+                ServerMessage::InternalError("Failed to apply pattern update to scheduler.".to_string())
+            }
+        },
         ClientMessage::UpdateSequenceSteps(sequence_id, steps) => {
              // Forward to scheduler
               if state.sched_iface.send(SchedulerMessage::UpdateSequenceSteps(sequence_id, steps)).is_ok() {
@@ -354,6 +378,37 @@ async fn on_message(
                  ServerMessage::InternalError("Failed to send sequence update to scheduler.".to_string())
              }
          },
+        ClientMessage::SetSequenceStartStep(sequence_id, start_step) => {
+             // Forward to scheduler
+              if state.sched_iface.send(SchedulerMessage::SetSequenceStartStep(sequence_id, start_step)).is_ok() {
+                 ServerMessage::Success
+             } else {
+                 eprintln!("[!] Failed to send SetSequenceStartStep to scheduler.");
+                 ServerMessage::InternalError("Failed to send sequence start step update to scheduler.".to_string())
+             }
+        },
+        ClientMessage::SetSequenceEndStep(sequence_id, end_step) => {
+             // Forward to scheduler
+              if state.sched_iface.send(SchedulerMessage::SetSequenceEndStep(sequence_id, end_step)).is_ok() {
+                 ServerMessage::Success
+             } else {
+                 eprintln!("[!] Failed to send SetSequenceEndStep to scheduler.");
+                 ServerMessage::InternalError("Failed to send sequence end step update to scheduler.".to_string())
+             }
+        },
+        ClientMessage::GetSnapshot => {
+            // Get pattern and clock state to build the snapshot
+            let pattern = state.pattern_image.lock().await.clone();
+            let clock = Clock::from(&state.clock_server);
+            let snapshot = Snapshot {
+                pattern,
+                tempo: clock.tempo(),
+                beat: clock.beat(),
+                micros: clock.micros(),
+                quantum: clock.quantum(),
+            };
+            ServerMessage::Snapshot(snapshot)
+        }
     }
 }
 
@@ -472,16 +527,13 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                         println!("[🔌] Connection closed by {}", client_name); // Logged later during cleanup
                         break;
                     },
-                    Ok(bytes_read) => {
+                    Ok(_) => {
                         // Process received message(s)
-                        read_buf.pop(); // Remove delimiter
-                        let raw_data_str = String::from_utf8_lossy(&read_buf);
+                        read_buf.pop();
                         if !read_buf.is_empty() {
                             match serde_json::from_slice::<ClientMessage>(&read_buf) {
                                 Ok(msg) => {
-                                    // Handle the message and get a direct response
                                     let response = on_message(msg, &state, &mut client_name).await;
-                                    // Send the direct response back to this client
                                     if send_msg(&mut writer, response).await.is_err() {
                                         eprintln!("[!] Failed write direct response to {}", client_name);
                                         break; // Assume connection broken
@@ -517,20 +569,15 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
 
             // Listen for broadcast notifications from the server
             update_result = update_receiver.changed() => {
-                println!("[*] server.rs: update_receiver.changed() result: {:?}", update_result);
                 if update_result.is_err() {
-                    println!("[!] server.rs: Update receiver channel closed for client {}", client_name);
                     break;
                 }
-
                 let notification = update_receiver.borrow().clone();
-                println!("[*] server.rs: Received notification via watch channel: {:?}", notification);
- 
-                let notification_clone_for_else_log = notification.clone(); // Keep clone for potential error log
- 
-                // Map the notification to an optional ServerMessage to broadcast
+                let is_pattern_update = matches!(notification, SchedulerNotification::UpdatedPattern(_)); // Simpler way to check
                 let broadcast_msg_opt: Option<ServerMessage> = match notification {
                     SchedulerNotification::UpdatedPattern(p) => {
+                        // Remove log
+                        // println!("[SRV {}] Received UpdatedPattern notification, mapped to PatternValue ({} sequences).", client_name, p.sequences.len());
                         Some(ServerMessage::PatternValue(p))
                     },
                     SchedulerNotification::Log(log_msg) => {
@@ -551,29 +598,36 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                         }
                     }
                     SchedulerNotification::StepPositionChanged(positions) => {
-                        Some(ServerMessage::StepPosition(positions)) // This case should now be hit
+                        Some(ServerMessage::StepPosition(positions))
                     }
-                    SchedulerNotification::Nothing |
-                    SchedulerNotification::UpdatedSequence(_, _) |
-                    SchedulerNotification::EnableStep(_, _) |      
-                    SchedulerNotification::DisableStep(_, _) |     
+                    SchedulerNotification::Nothing | 
+                    SchedulerNotification::UpdatedSequence(_, _) | 
+                    SchedulerNotification::EnableSteps(_, _) | 
+                    SchedulerNotification::DisableSteps(_, _) | 
                     SchedulerNotification::UploadedScript(_, _, _) |
-                    SchedulerNotification::UpdatedSequenceSteps(_, _) |
-                    SchedulerNotification::AddedSequence(_) |      
-                    SchedulerNotification::RemovedSequence(_) => { None }
+                    SchedulerNotification::UpdatedSequenceSteps(_, _) | 
+                    SchedulerNotification::AddedSequence(_) | 
+                    SchedulerNotification::RemovedSequence(_) => { None } 
                 };
 
-                // Send the broadcast message if one was generated
                 if let Some(broadcast_msg) = broadcast_msg_opt {
+                    // Remove delay
+                    // if is_pattern_update {
+                    //    println!("[SRV {}] Delaying PatternValue broadcast slightly...", client_name);
+                    //    tokio::time::sleep(Duration::from_millis(50)).await;
+                    // }
+                    
+                    // Remove logs
+                    // println!("[SRV {}] Attempting to send broadcast: {:?}", client_name, broadcast_msg.clone()); 
                     let send_res = send_msg(&mut writer, broadcast_msg).await;
-                     println!("[*] server.rs: Sent broadcast message to client {}. Result: {:?}", client_name, send_res); // Log message was sent
-                     if send_res.is_err() {
+                    if send_res.is_err() {
+                         // Remove successful send log
+                         // println!("[SRV {}] Successfully sent broadcast.", client_name);
+                    //} else {
                          eprintln!("[!] Failed broadcast update to {}", client_name);
                          break; // Assume connection broken
                     }
-                 } else {
-                     println!("[*] server.rs: Received notification {:?} but generated no broadcast message.", notification_clone_for_else_log); 
-                 }
+                 } 
             }
         }
     }

@@ -1,5 +1,6 @@
-use crate::app::{App, LogLevel};
+use crate::app::App;
 use crate::event::AppEvent;
+use crate::components::logs::LogLevel;
 use bubocorelib::server::client::ClientMessage;
 use color_eyre::Result as EyreResult;
 use tui_textarea::TextArea;
@@ -73,12 +74,12 @@ impl App {
 
             // Change le nom du client et le propage aux autres clients
             "setname" => {
-                if !args.is_empty() {
-                    let name = args.join(" ");
-                    self.send_client_message(ClientMessage::SetName(name.clone()));
-                } else {
+                if args.is_empty() {
                     self.set_status_message(String::from("Name required"));
+                    return Ok(());
                 }
+                let name = args.join(" ");
+                self.send_client_message(ClientMessage::SetName(name));
             }
 
             // Affiche la vue de l'éditeur
@@ -113,7 +114,7 @@ impl App {
 
             // Affiche la vue de la liste des fichiers
             "files" => {
-                self.events.send(AppEvent::SwitchToFiles);
+                self.events.send(AppEvent::SwitchToSaveLoad);
             }
 
             // Communication rudimentaire entre clients
