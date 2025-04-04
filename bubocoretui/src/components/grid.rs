@@ -542,39 +542,65 @@ impl Component for GridComponent {
                         let bar_span = Span::styled(bar_char, if should_draw_bar { start_end_marker_style } else { Style::default() });
                         let play_marker_span = Span::raw(play_marker);
                         let value_span = Span::raw(format!("{:.2}", step_val));
-                        let line_spans = vec![bar_span, play_marker_span, Span::raw(" "), value_span];
                         let ((top, left), (bottom, right)) = app.interface.components.grid_selection.bounds();
                         let is_selected_locally = step_idx >= top && step_idx <= bottom && col_idx >= left && col_idx <= right;
                         let is_local_cursor = (step_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
 
-                        // Check if any peer's cursor is on this cell
-                        let is_peer_cursor = app.server.peer_sessions.values()
-                            .filter_map(|peer_state| peer_state.grid_selection)
-                            .any(|peer_selection| (step_idx, col_idx) == peer_selection.cursor_pos());
+                        // Find if a peer's cursor is on this cell
+                        let peer_on_cell: Option<(String, GridSelection)> = app.server.peer_sessions.iter()
+                            .filter_map(|(name, peer_state)| peer_state.grid_selection.map(|sel| (name.clone(), sel)))
+                            .find(|(_, peer_selection)| (step_idx, col_idx) == peer_selection.cursor_pos());
 
-                        let mut final_style = base_style;
-                        if is_peer_cursor {
-                            final_style = peer_cursor_style; // Peer cursor takes precedence for now
-                        }
-                        if is_selected_locally {
-                             // If locally selected, override peer cursor style with local selection style
-                             // (cursor_style implies selection, handle single cell cursor specifically)
-                             final_style = cursor_style;
-                        }
-                        // Ensure the actual local cursor position always uses cursor_style
-                        if is_local_cursor {
+                        let final_style;
+                        let cell_content;
+                        let content_span; // Span for either value or peer name
+
+                        if is_local_cursor || is_selected_locally {
+                            // Local selection/cursor takes precedence
                             final_style = cursor_style;
+                            content_span = value_span; // Use the step value span
+                        } else if let Some((peer_name, _)) = peer_on_cell {
+                            // Peer cursor is here, and it's not the local selection/cursor
+                            final_style = peer_cursor_style;
+                            let name_fragment = peer_name.chars().take(4).collect::<String>(); // Show first 4 chars
+                            content_span = Span::raw(format!("{:>4}", name_fragment)); // Use the peer name span
+                        } else {
+                            // Regular cell (not local selection, not peer cursor)
+                            final_style = base_style;
+                            content_span = value_span; // Use the step value span
                         }
 
-                        Cell::from(Line::from(line_spans).alignment(ratatui::layout::Alignment::Center)).style(final_style)
+                        // Construct the Line *after* determining style and content_span
+                        let line_spans = vec![bar_span, play_marker_span, Span::raw(" "), content_span];
+                        cell_content = Line::from(line_spans).alignment(ratatui::layout::Alignment::Center);
+
+                        Cell::from(cell_content).style(final_style)
                     } else {
-                        // Also check for peer cursors in empty cells
-                        let is_peer_cursor = app.server.peer_sessions.values()
-                            .filter_map(|peer_state| peer_state.grid_selection)
-                            .any(|peer_selection| (step_idx, col_idx) == peer_selection.cursor_pos());
-                        
-                        let final_style = if is_peer_cursor { peer_cursor_style } else { empty_cell_style };
-                        Cell::from("").style(final_style)
+                        // Find peer cursor in empty cells
+                         let peer_on_cell: Option<(String, GridSelection)> = app.server.peer_sessions.iter()
+                            .filter_map(|(name, peer_state)| peer_state.grid_selection.map(|sel| (name.clone(), sel)))
+                            .find(|(_, peer_selection)| (step_idx, col_idx) == peer_selection.cursor_pos());
+
+                         let final_style;
+                         let cell_content;
+
+                         // Also check local cursor in empty cell - local always wins display
+                         let is_local_cursor = (step_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
+
+                         if is_local_cursor {
+                             final_style = cursor_style;
+                             cell_content = Line::from(""); // Empty content but yellow background
+                         } else if let Some((peer_name, _)) = peer_on_cell {
+                             final_style = peer_cursor_style;
+                             let name_fragment = peer_name.chars().take(4).collect::<String>();
+                             let peer_name_span = Span::raw(format!("{:>4}", name_fragment));
+                             // Need to add padding spans if bar/play marker were desired in empty cells, currently not
+                             cell_content = Line::from(peer_name_span).alignment(ratatui::layout::Alignment::Center);
+                         } else {
+                             final_style = empty_cell_style;
+                             cell_content = Line::from("");
+                         }
+                        Cell::from(cell_content).style(final_style)
                     }
                  });
                  Row::new(cells).height(1)
