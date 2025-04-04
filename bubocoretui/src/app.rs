@@ -740,21 +740,22 @@ impl App {
                     .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
                  return Ok(true);
             }
-            KeyCode::Tab => {
+            // Gestion de la touche Tab pour ouvrir/fermer la navigation
+            KeyCode::Tab => { 
                 if self.interface.screen.mode == Mode::Navigation {
+                    // Si on est déjà en navigation, Tab la ferme
                     self.events.sender.send(Event::App(AppEvent::ExitNavigation))
                         .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e))?;
-                    return Ok(true); 
-                } 
+                    return Ok(true);
+                } else if self.interface.screen.mode != Mode::Splash { 
+                    // Si on n'est PAS en navigation ET PAS sur Splash, Tab ouvre la navigation
+                    self.interface.screen.previous_mode = Some(self.interface.screen.mode);
+                    self.interface.screen.mode = Mode::Navigation;
+                    return Ok(true);
+                }
+                // Si on est en Mode::Splash, Tab ne fait rien ici (géré par SplashComponent si besoin)
             }
             _ => {}
-        }
-
-        // 5. Touche Tab pour quitter le mode de navigation
-        if key_code == KeyCode::Tab && self.interface.screen.mode != Mode::Navigation {
-            self.interface.screen.previous_mode = Some(self.interface.screen.mode);
-            self.interface.screen.mode = Mode::Navigation;
-            return Ok(true);
         }
 
         // 6. Déléguer au composant actif
