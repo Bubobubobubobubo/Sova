@@ -366,7 +366,6 @@ impl App {
             }
             ServerMessage::PatternValue(new_pattern) => {
                 self.set_status_message(String::from("Received pattern update"));
-                self.add_log(LogLevel::Debug, "Received PatternValue update.".to_string());
                 self.editor.pattern = Some(new_pattern);
             }
             // Received the current step positions from the server.
