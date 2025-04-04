@@ -5,8 +5,8 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Style},
-    text::Text,
+    style::{Color, Style, Modifier},
+    text::{Line, Span, Text},
     widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 
@@ -31,6 +31,7 @@ impl DevicesComponent {
 }
 
 impl Component for DevicesComponent {
+
     fn handle_key_event(
         &mut self,
         app: &mut App,
@@ -100,9 +101,13 @@ impl Component for DevicesComponent {
 
         frame.render_widget(list, list_area);
 
-        let help_text = "↑↓: Navigate | Enter: Select";
-        let help = Paragraph::new(Text::from(help_text))
-            .style(Style::default().fg(Color::Gray))
+        let help_style = Style::default().fg(Color::DarkGray);
+        let key_style = Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD);
+        let help_spans = vec![
+            Span::styled("↑↓", key_style), Span::styled(": Navigate | ", help_style),
+            Span::styled("Enter", key_style), Span::styled(": Select", help_style),
+        ];
+        let help = Paragraph::new(Line::from(help_spans))
             .alignment(Alignment::Center);
         frame.render_widget(help, help_area);
     }
