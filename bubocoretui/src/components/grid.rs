@@ -25,10 +25,6 @@ impl GridComponent {
 
 impl Component for GridComponent {
 
-    fn before_draw(&mut self, _app: &mut App) -> EyreResult<()> {
-        Ok(())
-    }
-
 
     /// Handles key events directed to the grid component.
     ///

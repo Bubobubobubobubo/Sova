@@ -15,7 +15,7 @@ use crate::components::navigation::NavigationComponent;
 use crate::components::options::OptionsComponent;
 use crate::components::splash::SplashComponent;
 use crate::components::devices::DevicesComponent;
-use crate::components::logs::LogsComponent;
+use crate::components::logs::{LogsComponent, LogLevel};
 use crate::components::saveload::SaveLoadComponent;
 use std::time::{Duration, Instant};
 
@@ -76,14 +76,14 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
 
     // Draw the bottom bar
     if let Err(e) = draw_bottom_bar(frame, app, bottom_bar) {
-        app.add_log(crate::app::LogLevel::Error, format!("Error drawing bottom bar: {}", e));
+        app.add_log(LogLevel::Error, format!("Error drawing bottom bar: {}", e));
     }
 
     // Flash effect (when needed)
     if app.interface.screen.flash.is_flashing {
         frame.render_widget(Clear, frame.area());
         frame.render_widget(
-            Block::default().style(Style::default().bg(Color::White)),
+            Block::default().style(Style::default().bg(app.interface.screen.flash.flash_color)),
             frame.area(),
         );
     }

@@ -53,6 +53,7 @@ impl SaveLoadComponent {
     pub fn new() -> Self {
         Self {}
     }
+
 }
 
 impl Component for SaveLoadComponent {
@@ -187,21 +188,6 @@ impl Component for SaveLoadComponent {
         }
     }
 
-    fn before_draw(&mut self, app: &mut App) -> EyreResult<()> {
-        let state = &mut app.interface.components.save_load_state;
-        if state.is_refresh_pending {
-            state.is_refresh_pending = false;
-            state.status_message = "Refreshing project list...".to_string();
-
-            let event_sender = app.events.sender.clone();
-            tokio::spawn(async move {
-                let result = disk::list_projects().await; 
-                let event_result = result.map_err(|e| e.to_string());
-                let _ = event_sender.send(Event::App(AppEvent::ProjectListLoaded(event_result)));
-            });
-        }
-        Ok(())
-    }
 
     fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
         let state = &app.interface.components.save_load_state;

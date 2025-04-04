@@ -1,10 +1,10 @@
-use directories::{ProjectDirs, UserDirs};
+use directories::UserDirs;
 use std::path::PathBuf;
 use bubocorelib::server::Snapshot;
 use std::{fmt, io, error::Error};
 use tokio::fs;
 use serde::{Serialize, Deserialize};
-use chrono::{DateTime, Utc, Local};
+use chrono::{DateTime, Utc};
 use serde_json;
 
 /// Custom error types for disk operations using only std library.
@@ -89,12 +89,6 @@ struct ProjectMetadata {
 
 /// Alias for Result using our custom DiskError.
 type Result<T> = std::result::Result<T, DiskError>;
-
-/// Returns the project-specific directories based on OS conventions.
-fn get_project_dirs() -> Option<ProjectDirs> {
-    // We use dummy qualifiers/orgs here, adjust if you have real ones
-    ProjectDirs::from("com", "Bubo", "BuboCore")
-}
 
 /// Returns the path to the base configuration/data directory for BuboCore.
 /// Creates the directory if it doesn't exist.

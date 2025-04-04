@@ -56,14 +56,6 @@ pub enum AppEvent {
     /// Exit navigation mode
     ExitNavigation,
 
-
-
-    // --- Mode Éditeur --- 
-    /// Envoie le contenu du script courant au serveur
-    SendScript(String),
-    /// Requête le serveur pour le script sélectionné
-    GetScript(u64, u64),
-    
     // --- Mode Commande --- 
     /// Exécuter une commande entrée par l'utilisateur.
     ExecuteCommand(String),
@@ -73,8 +65,6 @@ pub enum AppEvent {
     UpdateTempo(f64),
     /// Mettre à jour le quantum.
     UpdateQuantum(f64),
-    /// Activer/Désactiver la synchronisation start/stop.
-    ToggleStartStopSync,
 
     // --- Gestion des fichiers --- 
 
