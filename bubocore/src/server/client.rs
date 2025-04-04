@@ -44,6 +44,8 @@ pub enum ClientMessage {
     SetSequenceEndStep(usize, Option<usize>),
     /// Request a complete snapshot of the current server state (Pattern, Clock, etc.).
     GetSnapshot,
+    /// Informs the server about the client's current grid selection/cursor.
+    UpdateGridSelection(crate::shared_types::GridSelection),
 }
 
 /// Represents a client connection to a BuboCore server.
