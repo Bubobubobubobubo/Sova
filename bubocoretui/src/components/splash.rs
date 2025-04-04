@@ -6,7 +6,7 @@ use ratatui::{
     Frame,
     prelude::{Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
-    widgets::{Block, Borders, Paragraph},
+    widgets::{Block, Borders, Paragraph, BorderType},
 };
 use tui_big_text::{BigText, PixelSize};
 use tui_textarea::TextArea;
@@ -28,27 +28,34 @@ pub enum ConnectionField {
 impl ConnectionState {
     pub fn new(initial_ip: &str, initial_port: u16, initial_username: &str) -> Self {
         let mut ip_input = TextArea::new(vec![initial_ip.to_string()]);
+
+        // IP address input
         ip_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("IP Address")
-                .style(Style::default().fg(Color::Blue)),
+                .border_type(BorderType::Thick)
+                .style(Style::default().fg(Color::Green).fg(Color::White)),
         );
 
+        // Port input
         let mut port_input = TextArea::new(vec![initial_port.to_string()]);
         port_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Port")
-                .style(Style::default().fg(Color::Blue)),
+                .border_type(BorderType::Thick)
+                .style(Style::default().fg(Color::Green).fg(Color::White)),
         );
 
+        // Username selection
         let mut username_input = TextArea::new(vec![initial_username.to_string()]);
         username_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Username")
-                .style(Style::default().fg(Color::Blue)),
+                .border_type(BorderType::Thick)
+                .style(Style::default().fg(Color::Green).fg(Color::White)),
         );
 
         Self {
@@ -58,6 +65,12 @@ impl ConnectionState {
             focus: ConnectionField::Username,
         }
     }
+
+    /// Validate the IP address
+    /// 
+    /// # Returns
+    /// 
+    /// * `Result<(), String>`: The result of the validation
     pub fn validate_ip(&self) -> Result<(), String> {
         let ip = self.get_ip();
         let parts: Vec<&str> = ip.split('.').collect();
@@ -73,6 +86,11 @@ impl ConnectionState {
         Ok(())
     }
 
+    /// Validate the port
+    /// 
+    /// # Returns
+    /// 
+    /// * `Result<u16, String>`: The result of the validation
     pub fn validate_port(&self) -> Result<u16, String> {
         let port_str = self.port_input.lines().join("");
         match port_str.parse::<u16>() {
@@ -87,6 +105,11 @@ impl ConnectionState {
         }
     }
 
+    /// Validate the username
+    /// 
+    /// # Returns
+    /// 
+    /// * `Result<(), String>`: The result of the validation
     pub fn validate_username(&self) -> Result<(), String> {
         let username = self.get_username();
         if username.is_empty() {
@@ -98,6 +121,7 @@ impl ConnectionState {
         Ok(())
     }
 
+    /// Switch to the next field
     pub fn next_field(&mut self) {
         self.focus = match self.focus {
             ConnectionField::Username => ConnectionField::IpAddress,
@@ -107,27 +131,28 @@ impl ConnectionState {
         self.update_focus_style();
     }
 
+    /// Update the focus style
     pub fn update_focus_style(&mut self) {
         // Reset styles
         self.ip_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("IP Address")
-                .style(Style::default().fg(Color::Blue)),
+                .style(Style::default().fg(Color::White)),
         );
 
         self.port_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Port")
-                .style(Style::default().fg(Color::Blue)),
+                .style(Style::default().fg(Color::White)),
         );
 
         self.username_input.set_block(
             Block::default()
                 .borders(Borders::ALL)
                 .title("Username")
-                .style(Style::default().fg(Color::Blue)),
+                .style(Style::default().fg(Color::White)),
         );
 
         // Set focused style
@@ -202,6 +227,7 @@ impl Component for SplashComponent {
 
         if let Some(connection_state) = &mut app.server.connection_state {
             match key_event.code {
+                // Connect to the server
                 KeyCode::Enter => {
                     match connection_state.validate_username() {
                         Ok(_) => match connection_state.validate_ip() {
@@ -234,6 +260,7 @@ impl Component for SplashComponent {
                         }
                     }
                 }
+                // Switch to the next field
                 KeyCode::Tab => {
                     connection_state.next_field();
                     Ok(true)
@@ -258,12 +285,23 @@ impl Component for SplashComponent {
         }
     }
 
+    /// Draw the splash component
+    /// 
+    /// # Arguments
+    /// 
+    /// * `app`: The application state
+    /// * `frame`: The frame to draw on
+    /// * `area`: The area to draw on
+    /// 
+    /// # Returns
+    /// 
+    /// * `()`
     fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
         let vertical_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Length(2),
-                Constraint::Length(8),
+                Constraint::Length(9),
                 Constraint::Length(3),
                 Constraint::Length(3),
                 Constraint::Length(3),
@@ -275,8 +313,8 @@ impl Component for SplashComponent {
 
         let big_text = BigText::builder()
             .centered()
-            .pixel_size(PixelSize::Sextant)
-            .style(Style::default().fg(Color::Cyan))
+            .pixel_size(PixelSize::Full)
+            .style(Style::default().fg(Color::White))
             .lines(vec!["BuboCore".into()])
             .build();
 
