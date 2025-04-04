@@ -10,8 +10,9 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, Table, Row, Cell, BorderType},
 };
 use bubocorelib::server::client::ClientMessage;
+use bubocorelib::shared_types::GridSelection;
 use std::cmp::min;
-use crate::app::GridSelection;
+use crate::components::logs::LogLevel;
 
 /// Component representing the pattern grid, what is currently being played/edited
 pub struct GridComponent;
@@ -396,7 +397,25 @@ impl Component for GridComponent {
         }
 
         if handled {
-            app.interface.components.grid_selection = current_selection;
+            // If the selection changed and we handled the event, send update to server.
+            if app.interface.components.grid_selection != current_selection {
+                 app.interface.components.grid_selection = current_selection;
+                 app.send_client_message(ClientMessage::UpdateGridSelection(current_selection));
+                 app.add_log(LogLevel::Debug, format!("Sent grid selection update: {:?}", current_selection)); // Use Debug
+            } else {
+                 // Even if selection is same (e.g. pressing enter on same cell), update state
+                 // No need to send network message if selection didn't change
+                app.interface.components.grid_selection = current_selection;
+            }
+        } else {
+            // If not handled, still need to potentially update the selection if it was changed internally
+            // (e.g. clicking + or - resets selection to cursor pos)
+            if app.interface.components.grid_selection != current_selection {
+                app.interface.components.grid_selection = current_selection;
+                 // Send update even if key wasn't primarily for movement, if selection changed
+                 app.send_client_message(ClientMessage::UpdateGridSelection(current_selection));
+                 app.add_log(LogLevel::Debug, format!("Sent grid selection update (internal change): {:?}", current_selection)); // Use Debug
+            }
         }
         Ok(handled)
     }
@@ -476,6 +495,7 @@ impl Component for GridComponent {
             let enabled_style = Style::default().fg(Color::White).bg(Color::Green);
             let disabled_style = Style::default().fg(Color::White).bg(Color::Red);
             let cursor_style = Style::default().fg(Color::White).bg(Color::Yellow).bold();
+            let peer_cursor_style = Style::default().bg(Color::Magenta); // Style for other peers' cursors
             let empty_cell_style = Style::default().bg(Color::DarkGray);
             let start_end_marker_style = Style::default().fg(Color::White).add_modifier(Modifier::BOLD);
 
@@ -524,11 +544,37 @@ impl Component for GridComponent {
                         let value_span = Span::raw(format!("{:.2}", step_val));
                         let line_spans = vec![bar_span, play_marker_span, Span::raw(" "), value_span];
                         let ((top, left), (bottom, right)) = app.interface.components.grid_selection.bounds();
-                        let is_selected = step_idx >= top && step_idx <= bottom && col_idx >= left && col_idx <= right;
-                        let final_style = if is_selected { cursor_style } else { base_style };
+                        let is_selected_locally = step_idx >= top && step_idx <= bottom && col_idx >= left && col_idx <= right;
+                        let is_local_cursor = (step_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
+
+                        // Check if any peer's cursor is on this cell
+                        let is_peer_cursor = app.server.peer_sessions.values()
+                            .filter_map(|peer_state| peer_state.grid_selection)
+                            .any(|peer_selection| (step_idx, col_idx) == peer_selection.cursor_pos());
+
+                        let mut final_style = base_style;
+                        if is_peer_cursor {
+                            final_style = peer_cursor_style; // Peer cursor takes precedence for now
+                        }
+                        if is_selected_locally {
+                             // If locally selected, override peer cursor style with local selection style
+                             // (cursor_style implies selection, handle single cell cursor specifically)
+                             final_style = cursor_style;
+                        }
+                        // Ensure the actual local cursor position always uses cursor_style
+                        if is_local_cursor {
+                            final_style = cursor_style;
+                        }
+
                         Cell::from(Line::from(line_spans).alignment(ratatui::layout::Alignment::Center)).style(final_style)
                     } else {
-                        Cell::from("").style(empty_cell_style)
+                        // Also check for peer cursors in empty cells
+                        let is_peer_cursor = app.server.peer_sessions.values()
+                            .filter_map(|peer_state| peer_state.grid_selection)
+                            .any(|peer_selection| (step_idx, col_idx) == peer_selection.cursor_pos());
+                        
+                        let final_style = if is_peer_cursor { peer_cursor_style } else { empty_cell_style };
+                        Cell::from("").style(final_style)
                     }
                  });
                  Row::new(cells).height(1)
