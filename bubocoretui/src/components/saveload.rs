@@ -137,6 +137,7 @@ impl Component for SaveLoadComponent {
                 } else {
                     state.status_message = "No project selected to load.".to_string();
                 }
+                let _ = app.events.sender.send(Event::App(AppEvent::SwitchToGrid));
                 Ok(true)
             }
             // Save a project

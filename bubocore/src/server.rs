@@ -573,9 +573,11 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     break;
                 }
                 let notification = update_receiver.borrow().clone();
-                // Map the notification to an optional ServerMessage to broadcast
+                let is_pattern_update = matches!(notification, SchedulerNotification::UpdatedPattern(_)); // Simpler way to check
                 let broadcast_msg_opt: Option<ServerMessage> = match notification {
                     SchedulerNotification::UpdatedPattern(p) => {
+                        // Remove log
+                        // println!("[SRV {}] Received UpdatedPattern notification, mapped to PatternValue ({} sequences).", client_name, p.sequences.len());
                         Some(ServerMessage::PatternValue(p))
                     },
                     SchedulerNotification::Log(log_msg) => {
@@ -596,22 +598,32 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                         }
                     }
                     SchedulerNotification::StepPositionChanged(positions) => {
-                        Some(ServerMessage::StepPosition(positions)) // This case should now be hit
+                        Some(ServerMessage::StepPosition(positions))
                     }
-                    SchedulerNotification::Nothing |
-                    SchedulerNotification::UpdatedSequence(_, _) |
-                    SchedulerNotification::EnableSteps(_, _) |      
-                    SchedulerNotification::DisableSteps(_, _) |     
+                    SchedulerNotification::Nothing | 
+                    SchedulerNotification::UpdatedSequence(_, _) | 
+                    SchedulerNotification::EnableSteps(_, _) | 
+                    SchedulerNotification::DisableSteps(_, _) | 
                     SchedulerNotification::UploadedScript(_, _, _) |
-                    SchedulerNotification::UpdatedSequenceSteps(_, _) |
-                    SchedulerNotification::AddedSequence(_) |      
-                    SchedulerNotification::RemovedSequence(_) => { None }
+                    SchedulerNotification::UpdatedSequenceSteps(_, _) | 
+                    SchedulerNotification::AddedSequence(_) | 
+                    SchedulerNotification::RemovedSequence(_) => { None } 
                 };
 
-                // Send the broadcast message if one was generated
                 if let Some(broadcast_msg) = broadcast_msg_opt {
+                    // Remove delay
+                    // if is_pattern_update {
+                    //    println!("[SRV {}] Delaying PatternValue broadcast slightly...", client_name);
+                    //    tokio::time::sleep(Duration::from_millis(50)).await;
+                    // }
+                    
+                    // Remove logs
+                    // println!("[SRV {}] Attempting to send broadcast: {:?}", client_name, broadcast_msg.clone()); 
                     let send_res = send_msg(&mut writer, broadcast_msg).await;
-                     if send_res.is_err() {
+                    if send_res.is_err() {
+                         // Remove successful send log
+                         // println!("[SRV {}] Successfully sent broadcast.", client_name);
+                    //} else {
                          eprintln!("[!] Failed broadcast update to {}", client_name);
                          break; // Assume connection broken
                     }
