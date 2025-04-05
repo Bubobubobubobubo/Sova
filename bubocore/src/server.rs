@@ -278,7 +278,7 @@ async fn on_message(
                             ServerMessage::ScriptContent {
                                 sequence_idx,
                                 step_idx,
-                                content: script_arc.content.clone(), // Access content via the Arc
+                                content: script_arc.content.clone(),
                             }
                         }
                         None => {
@@ -687,21 +687,9 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                 };
 
                 if let Some(broadcast_msg) = broadcast_msg_opt {
-                    // Remove delay
-                    // if is_pattern_update {
-                    //    println!("[SRV {}] Delaying PatternValue broadcast slightly...", client_name);
-                    //    tokio::time::sleep(Duration::from_millis(50)).await;
-                    // }
-                    
-                    // Remove logs
-                    // println!("[SRV {}] Attempting to send broadcast: {:?}", client_name, broadcast_msg.clone()); 
                     let send_res = send_msg(&mut writer, broadcast_msg).await;
                     if send_res.is_err() {
-                         // Remove successful send log
-                         // println!("[SRV {}] Successfully sent broadcast.", client_name);
-                    //} else {
-                         eprintln!("[!] Failed broadcast update to {}", client_name);
-                         break; // Assume connection broken
+                         break;
                     }
                  } 
             }
