@@ -8,7 +8,9 @@ pub Program: BaliProgram = {
 
 pub StatementSet: Vec<Statement> = {
     <mut s: StatementSet> <t: Statement> => { s.push(t); s },
+    <mut s: StatementSet> Comment => s,
     <t: Statement> => vec![t],
+    Comment => Vec::new(),
 }
 
 pub Statement: Statement = {
@@ -94,3 +96,5 @@ Number: i64 = <s:r"[0-9]+"> => {
 };
 
 Name: Value = <s:r"[a-zA-Z][-a-zA-Z0-9#]*"> => Value::Variable(s.to_string());
+
+Comment = r";.*";
