@@ -68,7 +68,7 @@ impl Component for GridComponent {
         if key_event.code == KeyCode::Char('a') {
              // Send the request to add a sequence; the server will create the default one.
             app.send_client_message(ClientMessage::SchedulerControl(
-                bubocorelib::schedule::SchedulerMessage::AddSequence
+                bubocorelib::schedule::SchedulerMessage::AddLine
             ));
             app.set_status_message("Requested adding sequence".to_string());
             return Ok(true);
@@ -403,7 +403,7 @@ impl Component for GridComponent {
                 if handled {
                      if let Some(last_sequence_index) = last_sequence_index_opt {
                         app.send_client_message(ClientMessage::SchedulerControl(
-                            bubocorelib::schedule::SchedulerMessage::RemoveSequence(last_sequence_index)
+                            bubocorelib::schedule::SchedulerMessage::RemoveLine(last_sequence_index)
                         ));
                         app.set_status_message(format!("Requested removing sequence {}", last_sequence_index));
                     }

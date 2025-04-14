@@ -16,7 +16,7 @@ use crate::network::NetworkManager;
 use crate::commands::CommandMode;
 use crate::ui::Flash;
 use crate::disk;
-use bubocorelib::pattern::Scene;
+use bubocorelib::scene::Scene;
 use bubocorelib::server::{ServerMessage, client::ClientMessage};
 use bubocorelib::GridSelection;
 use color_eyre::Result as EyreResult;

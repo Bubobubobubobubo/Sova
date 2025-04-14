@@ -145,12 +145,12 @@ impl ScriptExecution {
                     step_vars: &mut self.script.step_vars.lock().unwrap(),
                     instance_vars: &mut self.instance_vars,
                     stack: &mut self.stack,
-                    sequences,
-                    current_sequence : self.sequence_index,
+                    lines: sequences,
+                    current_scene : self.sequence_index,
                     script: &self.script,
                     clock,
                 };
-                let wait = ctx.evaluate(var_time_span).as_dur().as_micros(clock, ctx.step_len());
+                let wait = ctx.evaluate(var_time_span).as_dur().as_micros(clock, ctx.frame_len());
                 let c_event = event.make_concrete(&mut ctx);
                 let res = (c_event, self.scheduled_time);
                 self.scheduled_time += wait;
@@ -168,8 +168,8 @@ impl ScriptExecution {
             step_vars: &mut self.script.step_vars.lock().unwrap(),
             instance_vars: &mut self.instance_vars,
             stack: &mut self.stack,
-            sequences,
-            current_sequence: self.sequence_index,
+            lines: sequences,
+            current_scene: self.sequence_index,
             script: &self.script,
             clock,
         };

@@ -3,7 +3,7 @@ use std::{
 };
 use client::ClientMessage;
 use tokio::time::Duration;
-use crate::pattern::script::Script;
+use crate::scene::script::Script;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{self, AsyncBufReadExt, AsyncWriteExt, BufReader, BufWriter},
@@ -13,7 +13,7 @@ use tokio::{
 };
 
 use crate::{
-    clock::{Clock, ClockServer, SyncTime}, device_map::DeviceMap, pattern::Scene, protocol::TimedMessage, schedule::{SchedulerMessage, SchedulerNotification}, transcoder::Transcoder,
+    clock::{Clock, ClockServer, SyncTime}, device_map::DeviceMap, scene::Scene, protocol::TimedMessage, schedule::{SchedulerMessage, SchedulerNotification}, transcoder::Transcoder,
     shared_types::GridSelection,
 };
 
@@ -234,14 +234,14 @@ async fn on_message(
     
     match msg {
         ClientMessage::EnableSteps(sequence_id, steps) => {
-            if state.sched_iface.send(SchedulerMessage::EnableSteps(sequence_id, steps)).is_err() {
+            if state.sched_iface.send(SchedulerMessage::EnableFrames(sequence_id, steps)).is_err() {
                 eprintln!("[!] Failed to send EnableSteps to scheduler.");
             }
             ServerMessage::Success
         },
         ClientMessage::DisableSteps(sequence_id, steps) => {
             // Forward to scheduler with the vector of steps
-            if state.sched_iface.send(SchedulerMessage::DisableSteps(sequence_id, steps)).is_err() {
+            if state.sched_iface.send(SchedulerMessage::DisableFrames(sequence_id, steps)).is_err() {
                  eprintln!("[!] Failed to send DisableSteps to scheduler.");
             }
             ServerMessage::Success
@@ -368,7 +368,7 @@ async fn on_message(
          },
         ClientMessage::SetPattern(pattern) => {
             // Forward the entire pattern to the scheduler
-            if state.sched_iface.send(SchedulerMessage::SetPattern(pattern)).is_ok() {
+            if state.sched_iface.send(SchedulerMessage::SetScene(pattern)).is_ok() {
                 ServerMessage::Success
             } else {
                 eprintln!("[!] Failed to send SetPattern to scheduler.");
@@ -377,7 +377,7 @@ async fn on_message(
         },
         ClientMessage::UpdateSequenceSteps(sequence_id, steps) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::UpdateSequenceSteps(sequence_id, steps)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::UpdateLineFrames(sequence_id, steps)).is_ok() {
                  ServerMessage::Success
              } else {
                  eprintln!("[!] Failed to send UpdateSequenceSteps to scheduler.");
@@ -387,7 +387,7 @@ async fn on_message(
         ClientMessage::InsertStep(sequence_id, position) => {
              // Forward to scheduler with a default value (e.g., 1.0)
              let default_step_value = 1.0;
-             if state.sched_iface.send(SchedulerMessage::InsertStep(sequence_id, position, default_step_value)).is_ok() {
+             if state.sched_iface.send(SchedulerMessage::InsertFrame(sequence_id, position, default_step_value)).is_ok() {
                  ServerMessage::Success
              } else {
                  eprintln!("[!] Failed to send InsertStep to scheduler.");
@@ -396,7 +396,7 @@ async fn on_message(
          },
          ClientMessage::RemoveStep(sequence_id, position) => {
              // Forward to scheduler
-             if state.sched_iface.send(SchedulerMessage::RemoveStep(sequence_id, position)).is_ok() {
+             if state.sched_iface.send(SchedulerMessage::RemoveFrame(sequence_id, position)).is_ok() {
                  ServerMessage::Success
              } else {
                  eprintln!("[!] Failed to send RemoveStep to scheduler.");
@@ -405,7 +405,7 @@ async fn on_message(
          },
         ClientMessage::SetSequenceStartStep(sequence_id, start_step) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::SetSequenceStartStep(sequence_id, start_step)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::SetLineStartFrame(sequence_id, start_step)).is_ok() {
                  ServerMessage::Success
              } else {
                  eprintln!("[!] Failed to send SetSequenceStartStep to scheduler.");
@@ -414,7 +414,7 @@ async fn on_message(
         },
         ClientMessage::SetSequenceEndStep(sequence_id, end_step) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::SetSequenceEndStep(sequence_id, end_step)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::SetLineEndFrame(sequence_id, end_step)).is_ok() {
                  ServerMessage::Success
              } else {
                  eprintln!("[!] Failed to send SetSequenceEndStep to scheduler.");
@@ -445,7 +445,7 @@ async fn on_message(
         },
         ClientMessage::StartedEditingStep(seq_idx, step_idx) => {
             // Broadcast notification that this client started editing
-            let _ = state.update_sender.send(SchedulerNotification::PeerStartedEditingStep(
+            let _ = state.update_sender.send(SchedulerNotification::PeerStartedEditingFrame(
                 client_name.clone(),
                 seq_idx,
                 step_idx
@@ -454,7 +454,7 @@ async fn on_message(
         },
         ClientMessage::StoppedEditingStep(seq_idx, step_idx) => {
             // Broadcast notification that this client stopped editing
-             let _ = state.update_sender.send(SchedulerNotification::PeerStoppedEditingStep(
+             let _ = state.update_sender.send(SchedulerNotification::PeerStoppedEditingFrame(
                  client_name.clone(),
                  seq_idx,
                  step_idx
@@ -625,9 +625,9 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     break;
                 }
                 let notification = update_receiver.borrow().clone();
-                let is_pattern_update = matches!(notification, SchedulerNotification::UpdatedPattern(_)); // Simpler way to check
+                let is_pattern_update = matches!(notification, SchedulerNotification::UpdatedScene(_)); // Simpler way to check
                 let broadcast_msg_opt: Option<ServerMessage> = match notification {
-                    SchedulerNotification::UpdatedPattern(p) => {
+                    SchedulerNotification::UpdatedScene(p) => {
                         // Remove log
                         // println!("[SRV {}] Received UpdatedPattern notification, mapped to PatternValue ({} sequences).", client_name, p.sequences.len());
                         Some(ServerMessage::PatternValue(p))
@@ -649,7 +649,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                             None
                         }
                     }
-                    SchedulerNotification::StepPositionChanged(positions) => {
+                    SchedulerNotification::FramePositionChanged(positions) => {
                         Some(ServerMessage::StepPosition(positions))
                     }
                     SchedulerNotification::PeerGridSelectionChanged(sender_name, selection) => {
@@ -660,7 +660,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                             None
                         }
                     }
-                    SchedulerNotification::PeerStartedEditingStep(sender_name, seq_idx, step_idx) => {
+                    SchedulerNotification::PeerStartedEditingFrame(sender_name, seq_idx, step_idx) => {
                          // Don't send the update back to the originator
                          if sender_name != *client_name {
                              Some(ServerMessage::PeerStartedEditing(sender_name, seq_idx, step_idx))
@@ -668,7 +668,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                              None
                          }
                     }
-                    SchedulerNotification::PeerStoppedEditingStep(sender_name, seq_idx, step_idx) => {
+                    SchedulerNotification::PeerStoppedEditingFrame(sender_name, seq_idx, step_idx) => {
                          // Don't send the update back to the originator
                          if sender_name != *client_name {
                              Some(ServerMessage::PeerStoppedEditing(sender_name, seq_idx, step_idx))
@@ -677,13 +677,13 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                          }
                     }
                     SchedulerNotification::Nothing | 
-                    SchedulerNotification::UpdatedSequence(_, _) | 
-                    SchedulerNotification::EnableSteps(_, _) | 
-                    SchedulerNotification::DisableSteps(_, _) | 
+                    SchedulerNotification::UpdatedLine(_, _) | 
+                    SchedulerNotification::EnableFrames(_, _) | 
+                    SchedulerNotification::DisableFrames(_, _) | 
                     SchedulerNotification::UploadedScript(_, _, _) |
-                    SchedulerNotification::UpdatedSequenceSteps(_, _) | 
-                    SchedulerNotification::AddedSequence(_) | 
-                    SchedulerNotification::RemovedSequence(_) => { None } 
+                    SchedulerNotification::UpdatedLineFrames(_, _) | 
+                    SchedulerNotification::AddedLine(_) | 
+                    SchedulerNotification::RemovedLine(_) => { None } 
                 };
 
                 if let Some(broadcast_msg) = broadcast_msg_opt {

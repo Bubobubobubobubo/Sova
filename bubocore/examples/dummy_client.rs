@@ -5,7 +5,7 @@ use bubocorelib::{
     clock::{ClockServer, TimeSpan},
     device_map::DeviceMap,
     lang::{Instruction, Program, event::Event},
-    pattern::Line,
+    scene::Line,
     protocol::midi::{MidiInterface, MidiOut},
     server::{
         BuboCoreServer, ServerState,
@@ -89,7 +89,7 @@ async fn client() -> tokio::io::Result<()> {
     seq.set_script(1, note.clone().into());
     seq.set_script(3, note.clone().into());
     seq.set_script(4, note.clone().into());
-    let msg = SchedulerMessage::AddSequence(seq);
+    let msg = SchedulerMessage::AddLine(seq);
     let msg = ClientMessage::SchedulerControl(msg);
     client.send(msg).await?;
 

@@ -205,7 +205,7 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => VariableValue::Integer(i1 + i2),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 + f2),
-            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.add(d2, ctx.clock, ctx.step_len())),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.add(d2, ctx.clock, ctx.frame_len())),
             _ => panic!("Addition with wrong types, this should never happen"),
         }
     }
@@ -226,7 +226,7 @@ impl VariableValue {
                     VariableValue::Float(0.0)
                 }
             },
-            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.div(d2, ctx.clock, ctx.step_len())),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.div(d2, ctx.clock, ctx.frame_len())),
             _ => panic!("Division with wrong types, this should never happen"),
         }
     }
@@ -241,7 +241,7 @@ impl VariableValue {
                 }
             },
             (VariableValue::Float(_), VariableValue::Float(_)) => VariableValue::Float(0.0),
-            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.rem(d2, ctx.clock, ctx.step_len())),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.rem(d2, ctx.clock, ctx.frame_len())),
             _ => panic!("Reminder (modulo) with wrong types, this should never happen"),
         }
     }
@@ -250,7 +250,7 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => VariableValue::Integer(i1 * i2),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 * f2),
-            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.mul(d2, ctx.clock, ctx.step_len())),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.mul(d2, ctx.clock, ctx.frame_len())),
             _ => panic!("Multiplication with wrong types, this should never happen"),
         }
     }
@@ -259,7 +259,7 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => VariableValue::Integer(i1 - i2),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 - f2),
-            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.sub(d2, ctx.clock, ctx.step_len())),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Dur(d1.sub(d2, ctx.clock, ctx.frame_len())),
             _ => panic!("Subtraction with wrong types, this should never happen"),
         }
     }
@@ -327,7 +327,7 @@ impl VariableValue {
                 Ok(n) => n,
                 Err(_) => 0,
             }
-            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.step_len()).try_into().unwrap(),
+            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.frame_len()).try_into().unwrap(),
         VariableValue::Func(_) => todo!(),
         }
     }
@@ -341,7 +341,7 @@ impl VariableValue {
                 Ok(n) => n,
                 Err(_) => 0.0,
             }
-            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.step_len()) as f64,
+            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.frame_len()) as f64,
         VariableValue::Func(_) => todo!(),
         }
     }
@@ -352,7 +352,7 @@ impl VariableValue {
             VariableValue::Float(f) => *f != 0.0,
             VariableValue::Bool(b) => *b,
             VariableValue::Str(s) => s.len() > 0,
-            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.step_len()) != 0,
+            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.frame_len()) != 0,
             VariableValue::Func(_) => todo!(),
         }
     }
@@ -363,7 +363,7 @@ impl VariableValue {
             VariableValue::Float(f) => f.to_string(),
             VariableValue::Bool(b) => if *b { "True".to_string() } else { "False".to_string() },
             VariableValue::Str(s) => s.to_string(),
-            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.step_len()).to_string(),
+            VariableValue::Dur(d) => d.as_micros(ctx.clock, ctx.frame_len()).to_string(),
             VariableValue::Func(_) => todo!(),
         }
     }
@@ -384,8 +384,8 @@ impl VariableValue {
 pub enum Variable {
     Environment(EnvironmentFunc),
     Global(String),
-    Sequence(String), // not fully handled
-    Step(String),
+    Line(String), // not fully handled
+    Frame(String),
     Instance(String),
     Constant(VariableValue),
 }
