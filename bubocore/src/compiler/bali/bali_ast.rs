@@ -1,4 +1,4 @@
-use crate::{lang::{Program, event::Event, Instruction, control_asm::ControlASM, variable::Variable}};
+use crate::{lang::{Program, event::Event, Instruction, control_asm::ControlASM, variable::Variable, environment_func::EnvironmentFunc}};
 use std::cmp::Ordering;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
@@ -316,8 +316,9 @@ impl Effect { // TODO : on veut que les durées soient des fractions
         match self {
             Effect::Definition(v, expr) => {
                 res.extend(expr.as_asm());
-                let v = v.tostr();
-                res.push(Instruction::Control(ControlASM::Pop(Variable::Instance(v))));
+                if let Value::Variable(v) = v {
+                    res.push(Instruction::Control(ControlASM::Pop(Value::as_variable(v))));
+                }
                 if delay > 0.0 {
                     res.push(Instruction::Effect(Event::Nop, time_var.clone()));
                 }
@@ -621,8 +622,8 @@ impl Value {
         match self {
             Value::Number(n) => Instruction::Control(ControlASM::Push((*n).into())),
             Value::Variable(s) => {
-                match Value::as_note(s) {
-                    None => Instruction::Control(ControlASM::Push(Variable::Instance(s.to_string()))),
+                match Self::as_note(s) {
+                    None => Instruction::Control(ControlASM::Push(Self::as_variable(s))),
                     Some(n) => Instruction::Control(ControlASM::Push((*n).into())),
                 }
             },
@@ -638,6 +639,15 @@ impl Value {
 
     pub fn as_note(name: &String) -> Option<&i64> {
         NOTE_MAP.get(name)
+    }
+
+    pub fn as_variable(name: &str) -> Variable {
+        match name {
+            "A" | "B" | "C" | "D" | "W" | "X" | "Y" | "Z" => Variable::Global(name.to_string()),
+            "T" => Variable::Environment(EnvironmentFunc::GetTempo),
+            "R" => Variable::Environment(EnvironmentFunc::RandomU8),
+            _ => Variable::Instance(name.to_string()),
+        }
     }
 
 }
