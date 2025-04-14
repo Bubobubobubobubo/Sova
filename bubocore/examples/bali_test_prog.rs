@@ -133,22 +133,12 @@ pub const DEFAULT_QUANTUM: f64 = 4.0;
         let bali = BaliCompiler;
 
         let bali_program: Program = bali.compile("
+            ;test
             (<< (def n c))
             (<< (def v 90))
-            (<< (def chan 12))
-            (loop 12 12
-                (seq
-                    (def i 0)
-                    (for (lt i 5)
-                        (seq
-                            (note (+ n (* i 5)) v chan 12)
-                            (def i (+ i 1))
-                        )
-                    )
-                    (note n v chan 12)
-                    (def n (+ n 1))
-                    (def v (% (+ v 4) 90))
-                )
+            (<< (def chan 12)) ;test2
+            (loop 5 (1 // 2) ; test 3
+                (note n v chan)
             )
         ").unwrap();
     
