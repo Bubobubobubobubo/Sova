@@ -9,7 +9,7 @@ use bubocorelib::compiler::{
 };
 use bubocorelib::device_map::DeviceMap;
 use bubocorelib::lang::Program;
-use bubocorelib::pattern::{Scene, Line};
+use bubocorelib::scene::{Scene, Line};
 use bubocorelib::protocol::midi::{MidiInterface, MidiOut};
 use bubocorelib::schedule::{Scheduler, SchedulerMessage, SchedulerNotification};
 use bubocorelib::world::World;
@@ -86,29 +86,29 @@ fn greeter() {
                     Ok(p) => {
                         let mut guard = pattern_image_maintainer.blocking_lock();
                         match &p {
-                            SchedulerNotification::UpdatedPattern(pattern) => {
+                            SchedulerNotification::UpdatedScene(pattern) => {
                                 *guard = pattern.clone();
                             },
-                            SchedulerNotification::UpdatedSequence(i, sequence) => {
+                            SchedulerNotification::UpdatedLine(i, sequence) => {
                                 *guard.mut_line(*i) = sequence.clone()
                             },
-                            SchedulerNotification::StepPositionChanged(positions) => {
+                            SchedulerNotification::FramePositionChanged(positions) => {
                                 // No update to pattern_image needed for this notification
                             },
-                            SchedulerNotification::EnableSteps(sequence_index, step_indices) => {
+                            SchedulerNotification::EnableFrames(sequence_index, step_indices) => {
                                 guard.mut_line(*sequence_index).enable_frames(step_indices);
                             },
-                            SchedulerNotification::DisableSteps(sequence_index, step_indices) => {
+                            SchedulerNotification::DisableFrames(sequence_index, step_indices) => {
                                 guard.mut_line(*sequence_index).disable_frames(step_indices);
                             },
                             SchedulerNotification::UploadedScript(_, _, _script) => { /* guard.mut_sequence...set_script...? */ },
-                            SchedulerNotification::UpdatedSequenceSteps(sequence_index, items) => {
+                            SchedulerNotification::UpdatedLineFrames(sequence_index, items) => {
                                 guard.mut_line(*sequence_index).set_frames(items.clone());
                             },
-                            SchedulerNotification::AddedSequence(sequence) => {
+                            SchedulerNotification::AddedLine(sequence) => {
                                 guard.add_line(sequence.clone());
                             },
-                            SchedulerNotification::RemovedSequence(index) => {
+                            SchedulerNotification::RemovedLine(index) => {
                                 guard.remove_line(*index);
                             },
                             _ => ()
@@ -121,7 +121,7 @@ fn greeter() {
             }
         });
     
-        if let Err(e) = sched_iface.send(SchedulerMessage::UploadPattern(initial_pattern)) {
+        if let Err(e) = sched_iface.send(SchedulerMessage::UploadSequence(initial_pattern)) {
             eprintln!("[!] Failed to send initial pattern to scheduler: {}", e);
             std::process::exit(1);
         }
@@ -184,8 +184,8 @@ fn greeter() {
         ".to_string();
     
 
-        client.send(ClientMessage::SchedulerControl(SchedulerMessage::AddSequence)).await?;
-        client.send(ClientMessage::SchedulerControl(SchedulerMessage::InsertStep(0, 0, 2.0))).await?;
+        client.send(ClientMessage::SchedulerControl(SchedulerMessage::AddLine)).await?;
+        client.send(ClientMessage::SchedulerControl(SchedulerMessage::InsertFrame(0, 0, 2.0))).await?;
         client.send(ClientMessage::SetScript(0, 0, bali_program)).await?;
 
 /*

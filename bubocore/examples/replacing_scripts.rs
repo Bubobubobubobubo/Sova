@@ -2,7 +2,7 @@ use bubocorelib::{
     clock::{ClockServer, TimeSpan},
     device_map::DeviceMap,
     lang::{Instruction, Program, event::Event},
-    pattern::{Scene, Line},
+    scene::{Scene, Line},
     protocol::midi::{MidiInterface, MidiOut},
     schedule::{Scheduler, SchedulerMessage},
     world::World,
@@ -64,31 +64,31 @@ fn main() {
     sequence2.set_script(0, script_2.clone().into());
     sequence3.set_script(0, script_3.clone().into());
     let pattern = Scene::new(vec![sequence1]);
-    let message = SchedulerMessage::UploadPattern(pattern);
+    let message = SchedulerMessage::UploadSequence(pattern);
     let _ = sched_iface.send(message);
 
     // Adding sequences
     thread::sleep(Duration::from_millis(1000));
     println!("Adding sequence 2");
-    let message2 = SchedulerMessage::AddSequence(sequence2);
+    let message2 = SchedulerMessage::AddLine(sequence2);
     let _ = sched_iface.send(message2);
     thread::sleep(Duration::from_millis(1000));
     println!("Adding sequence 3");
-    let message3 = SchedulerMessage::AddSequence(sequence3);
+    let message3 = SchedulerMessage::AddLine(sequence3);
     let _ = sched_iface.send(message3);
 
     // Removing sequences
     thread::sleep(Duration::from_millis(4000));
     println!("Removing sequence 0");
-    let message3 = SchedulerMessage::RemoveSequence(0);
+    let message3 = SchedulerMessage::RemoveLine(0);
     let _ = sched_iface.send(message3);
     thread::sleep(Duration::from_millis(4000));
     println!("Removing sequence 1");
-    let message2 = SchedulerMessage::RemoveSequence(1);
+    let message2 = SchedulerMessage::RemoveLine(1);
     let _ = sched_iface.send(message2);
     thread::sleep(Duration::from_millis(4000));
     println!("Removing sequence 2");
-    let message1 = SchedulerMessage::RemoveSequence(2);
+    let message1 = SchedulerMessage::RemoveLine(2);
     let _ = sched_iface.send(message1);
 
     sched_handle.join().expect("Scheduler thread error");

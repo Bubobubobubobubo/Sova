@@ -23,7 +23,7 @@ impl EnvironmentFunc {
             StepLen(x, y) => {
                 let seq_i = ctx.evaluate(x).as_integer(ctx) as usize;
                 let step_i = ctx.evaluate(y).as_integer(ctx) as usize;
-                ctx.sequences[seq_i % ctx.sequences.len()].step_len(step_i).into()
+                ctx.lines[seq_i % ctx.lines.len()].frame_len(step_i).into()
             },
         }
     }

@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Instruction, Program};
 
-use crate::pattern::script::ReturnInfo;
+use crate::scene::script::ReturnInfo;
 use crate::clock::TimeSpan;
 
 #[cfg(test)]

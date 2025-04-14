@@ -1,4 +1,4 @@
-use crate::{clock::Clock, pattern::{script::Script, Line}};
+use crate::{clock::Clock, scene::{script::Script, Line}};
 
 use super::variable::{Variable, VariableStore, VariableValue};
 
@@ -7,31 +7,31 @@ pub struct EvaluationContext<'a> {
     pub step_vars : &'a mut VariableStore,
     pub instance_vars : &'a mut VariableStore,
     pub stack : &'a mut Vec<VariableValue>,
-    pub sequences : &'a mut [Line],
-    pub current_sequence : usize,
+    pub lines : &'a mut [Line],
+    pub current_scene : usize,
     pub script : &'a Script,
     pub clock : &'a Clock
 }
 
 impl<'a> EvaluationContext<'a> {
 
-    pub fn sequence(&self) -> &Line {
-        &self.sequences[self.current_sequence % self.sequences.len()]
+    pub fn line(&self) -> &Line {
+        &self.lines[self.current_scene % self.lines.len()]
     }
 
-    pub fn step_len(&self) -> f64 {
-        self.sequence().step_len(self.script.index)
+    pub fn frame_len(&self) -> f64 {
+        self.line().frame_len(self.script.index)
     }
 
-    pub fn sequence_mut(&mut self) -> &mut Line {
-        &mut self.sequences[self.current_sequence % self.sequences.len()]
+    pub fn line_mut(&mut self) -> &mut Line {
+        &mut self.lines[self.current_scene % self.lines.len()]
     }
 
     pub fn set_var(&mut self, var : &Variable, value : VariableValue) {
         match var {
             Variable::Global(n) => self.global_vars.insert(n.clone(), value),
-            Variable::Sequence(n) => self.sequence_mut().vars.insert(n.clone(), value),
-            Variable::Step(n) => self.step_vars.insert(n.clone(), value),
+            Variable::Line(n) => self.line_mut().vars.insert(n.clone(), value),
+            Variable::Frame(n) => self.step_vars.insert(n.clone(), value),
             Variable::Instance(n) => self.instance_vars.insert(n.clone(), value),
             _ => None
         };
@@ -40,8 +40,8 @@ impl<'a> EvaluationContext<'a> {
     pub fn evaluate(&self, var : &Variable) -> VariableValue {
         let res = match var {
             Variable::Global(n) => self.global_vars.get(n),
-            Variable::Sequence(n) => self.sequence().vars.get(n),
-            Variable::Step(n) => self.step_vars.get(n),
+            Variable::Line(n) => self.line().vars.get(n),
+            Variable::Frame(n) => self.step_vars.get(n),
             Variable::Instance(n) => self.instance_vars.get(n),
             Variable::Environment(environment_func) => {
                 return environment_func.execute(self);
