@@ -12,15 +12,15 @@ pub type SyncTime = u64;
 pub enum TimeSpan {
     Micros(SyncTime),
     Beats(f64),
-    Steps(f64),
+    Frames(f64),
 }
 
 impl TimeSpan {
-    pub fn as_micros(&self, clock: &Clock, step_len : f64) -> SyncTime {
+    pub fn as_micros(&self, clock: &Clock, frame_len : f64) -> SyncTime {
         match self {
             TimeSpan::Micros(m) => *m,
             TimeSpan::Beats(b) => clock.beats_to_micros(*b),
-            TimeSpan::Steps(s) => clock.beats_to_micros((*s) * step_len),
+            TimeSpan::Frames(s) => clock.beats_to_micros((*s) * frame_len),
         }
     }
 
@@ -28,66 +28,66 @@ impl TimeSpan {
         self.as_micros(clock, 1.0)
     }
 
-    pub fn add(self, other: TimeSpan, clock: &Clock, step_len : f64) -> TimeSpan {
+    pub fn add(self, other: TimeSpan, clock: &Clock, frame_len : f64) -> TimeSpan {
 
-        let in_micros = self.as_micros(clock, step_len) + other.as_micros(clock, step_len);
+        let in_micros = self.as_micros(clock, frame_len) + other.as_micros(clock, frame_len);
 
         match (self, other) {
-            (TimeSpan::Steps(_), _) | (_, TimeSpan::Steps(_)) => TimeSpan::Steps(clock.micros_to_beats(in_micros) / step_len),
+            (TimeSpan::Frames(_), _) | (_, TimeSpan::Frames(_)) => TimeSpan::Frames(clock.micros_to_beats(in_micros) / frame_len),
             (TimeSpan::Beats(_), _) | (_, TimeSpan::Beats(_)) => TimeSpan::Beats(clock.micros_to_beats(in_micros)),
             _ => TimeSpan::Micros(in_micros),
         }
     }
 
-    pub fn div(self, other: TimeSpan, clock: &Clock, step_len : f64) -> TimeSpan {
+    pub fn div(self, other: TimeSpan, clock: &Clock, frame_len : f64) -> TimeSpan {
 
-        let other_micros = other.as_micros(clock, step_len);
+        let other_micros = other.as_micros(clock, frame_len);
         let in_micros = if other_micros != 0 {
-            self.as_micros(clock, step_len) / other_micros
+            self.as_micros(clock, frame_len) / other_micros
         } else {
             0
         };
 
         match (self, other) {
-            (TimeSpan::Steps(_), _) | (_, TimeSpan::Steps(_)) => TimeSpan::Steps(clock.micros_to_beats(in_micros) / step_len),
+            (TimeSpan::Frames(_), _) | (_, TimeSpan::Frames(_)) => TimeSpan::Frames(clock.micros_to_beats(in_micros) / frame_len),
             (TimeSpan::Beats(_), _) | (_, TimeSpan::Beats(_)) => TimeSpan::Beats(clock.micros_to_beats(in_micros)),
             _ => TimeSpan::Micros(in_micros),
         }
     }
 
-    pub fn rem(self, other: TimeSpan, clock: &Clock, step_len : f64) -> TimeSpan {
+    pub fn rem(self, other: TimeSpan, clock: &Clock, frame_len : f64) -> TimeSpan {
 
-        let other_micros = other.as_micros(clock, step_len);
+        let other_micros = other.as_micros(clock, frame_len);
         let in_micros = if other_micros != 0 {
-            self.as_micros(clock, step_len) % other_micros
+            self.as_micros(clock, frame_len) % other_micros
         } else {
-            self.as_micros(clock, step_len)
+            self.as_micros(clock, frame_len)
         };
 
         match (self, other) {
-            (TimeSpan::Steps(_), _) | (_, TimeSpan::Steps(_)) => TimeSpan::Steps(clock.micros_to_beats(in_micros) / step_len),
+            (TimeSpan::Frames(_), _) | (_, TimeSpan::Frames(_)) => TimeSpan::Frames(clock.micros_to_beats(in_micros) / frame_len),
             (TimeSpan::Beats(_), _) | (_, TimeSpan::Beats(_)) => TimeSpan::Beats(clock.micros_to_beats(in_micros)),
             _ => TimeSpan::Micros(in_micros),
         }
     }
 
-    pub fn mul(self, other: TimeSpan, clock: &Clock, step_len : f64) -> TimeSpan {
+    pub fn mul(self, other: TimeSpan, clock: &Clock, frame_len : f64) -> TimeSpan {
 
-        let in_micros = self.as_micros(clock, step_len) * other.as_micros(clock, step_len);
+        let in_micros = self.as_micros(clock, frame_len) * other.as_micros(clock, frame_len);
 
         match (self, other) {
-            (TimeSpan::Steps(_), _) | (_, TimeSpan::Steps(_)) => TimeSpan::Steps(clock.micros_to_beats(in_micros) / step_len),
+            (TimeSpan::Frames(_), _) | (_, TimeSpan::Frames(_)) => TimeSpan::Frames(clock.micros_to_beats(in_micros) / frame_len),
             (TimeSpan::Beats(_), _) | (_, TimeSpan::Beats(_)) => TimeSpan::Beats(clock.micros_to_beats(in_micros)),
             _ => TimeSpan::Micros(in_micros),
         }
     }
 
-    pub fn sub(self, other: TimeSpan, clock: &Clock, step_len : f64) -> TimeSpan {
+    pub fn sub(self, other: TimeSpan, clock: &Clock, frame_len : f64) -> TimeSpan {
 
-        let in_micros = self.as_micros(clock, step_len) - other.as_micros(clock, step_len);
+        let in_micros = self.as_micros(clock, frame_len) - other.as_micros(clock, frame_len);
 
         match (self, other) {
-            (TimeSpan::Steps(_), _) | (_, TimeSpan::Steps(_)) => TimeSpan::Steps(clock.micros_to_beats(in_micros) / step_len),
+            (TimeSpan::Frames(_), _) | (_, TimeSpan::Frames(_)) => TimeSpan::Frames(clock.micros_to_beats(in_micros) / frame_len),
             (TimeSpan::Beats(_), _) | (_, TimeSpan::Beats(_)) => TimeSpan::Beats(clock.micros_to_beats(in_micros)),
             _ => TimeSpan::Micros(in_micros),
         }

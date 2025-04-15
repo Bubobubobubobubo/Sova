@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{clock::{Clock, SyncTime}, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, variable::{VariableStore, VariableValue}, Instruction, Program}};
 
-use super::Sequence;
+use super::Line;
 
 #[derive(Debug, Default, Serialize, Deserialize)]
 pub struct Script {
@@ -13,7 +13,7 @@ pub struct Script {
     #[serde(skip_serializing, default)]
     pub compiled : Program,
     #[serde(skip_serializing, default)]
-    pub step_vars : Mutex<VariableStore>,
+    pub frame_vars : Mutex<VariableStore>,
     pub index : usize
 }
 
@@ -23,7 +23,7 @@ impl Script {
             content,
             lang,
             compiled,
-            step_vars: Mutex::new(VariableStore::new()),
+            frame_vars: Mutex::new(VariableStore::new()),
             index
         }
     }
@@ -37,7 +37,7 @@ pub enum ReturnInfo {
 
 pub struct ScriptExecution {
     pub script : Arc<Script>,
-    pub sequence_index : usize,
+    pub line_index : usize,
     pub prog: Program,
     pub instance_vars : VariableStore,
     pub stack : Vec<VariableValue>,
@@ -67,7 +67,7 @@ impl Clone for Script {
             lang: self.lang.clone(),
             content: self.content.clone(), 
             compiled: self.compiled.clone(), 
-            step_vars: Mutex::new(self.step_vars.lock().unwrap().clone()), 
+            frame_vars: Mutex::new(self.frame_vars.lock().unwrap().clone()), 
             index: self.index.clone() 
         }
     }
@@ -86,10 +86,10 @@ impl From<String> for Script {
 
 impl ScriptExecution {
 
-    pub fn execute_at(script : Arc<Script>, sequence_index : usize, date : SyncTime) -> Self {
+    pub fn execute_at(script : Arc<Script>, line_index : usize, date : SyncTime) -> Self {
         ScriptExecution {
             script: Arc::clone(&script),
-            sequence_index,
+            line_index,
             prog: script.compiled.clone(),
             instance_vars: HashMap::new(),
             stack: Vec::new(),
@@ -128,29 +128,29 @@ impl ScriptExecution {
         &self.prog[self.instruction_index]
     }
 
-    pub fn execute_next(&mut self, clock : &Clock, globals : &mut VariableStore, sequences : &mut [Sequence]) -> Option<(ConcreteEvent, SyncTime)> {
+    pub fn execute_next(&mut self, clock : &Clock, globals : &mut VariableStore, lines : &mut [Line]) -> Option<(ConcreteEvent, SyncTime)> {
         if self.has_terminated() {
             return None;
         }
         let current = &self.prog[self.instruction_index];
         match current {
             Instruction::Control(_) => {
-                self.execute_control(clock, globals, sequences);
+                self.execute_control(clock, globals, lines);
                 None
             },
             Instruction::Effect(event, var_time_span) => {
                 self.instruction_index += 1;
                 let mut ctx = EvaluationContext {
                     global_vars: globals,
-                    step_vars: &mut self.script.step_vars.lock().unwrap(),
+                    frame_vars: &mut self.script.frame_vars.lock().unwrap(),
                     instance_vars: &mut self.instance_vars,
                     stack: &mut self.stack,
-                    sequences,
-                    current_sequence : self.sequence_index,
+                    lines,
+                    current_scene : self.line_index,
                     script: &self.script,
                     clock,
                 };
-                let wait = ctx.evaluate(var_time_span).as_dur().as_micros(clock, ctx.step_len());
+                let wait = ctx.evaluate(var_time_span).as_dur().as_micros(clock, ctx.frame_len());
                 let c_event = event.make_concrete(&mut ctx);
                 let res = (c_event, self.scheduled_time);
                 self.scheduled_time += wait;
@@ -159,17 +159,17 @@ impl ScriptExecution {
         }
     }
 
-    fn execute_control(&mut self, clock : &Clock, globals : &mut VariableStore, sequences : &mut [Sequence]) {
+    fn execute_control(&mut self, clock : &Clock, globals : &mut VariableStore, lines : &mut [Line]) {
         let Instruction::Control(control) =  &self.prog[self.instruction_index] else {
             return;
         };
         let mut ctx = EvaluationContext {
             global_vars: globals,
-            step_vars: &mut self.script.step_vars.lock().unwrap(),
+            frame_vars: &mut self.script.frame_vars.lock().unwrap(),
             instance_vars: &mut self.instance_vars,
             stack: &mut self.stack,
-            sequences,
-            current_sequence: self.sequence_index,
+            lines,
+            current_scene: self.line_index,
             script: &self.script,
             clock,
         };
