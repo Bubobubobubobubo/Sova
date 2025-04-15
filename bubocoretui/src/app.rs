@@ -17,8 +17,7 @@ use crate::commands::CommandMode;
 use crate::ui::Flash;
 use crate::disk;
 use bubocorelib::scene::Scene;
-use bubocorelib::server::{ServerMessage, client::ClientMessage, Snapshot};
-use bubocorelib::schedule::ActionTiming;
+use bubocorelib::server::{ServerMessage, client::ClientMessage};
 use bubocorelib::GridSelection;
 use color_eyre::Result as EyreResult;
 use ratatui::{
@@ -115,6 +114,8 @@ pub struct EditorData {
     pub textarea: TextArea<'static>,
     /// The currently loaded scene data.
     pub scene: Option<Scene>,
+    /// Stores the last compilation error related to the currently viewed script.
+    pub compilation_error: Option<String>,
 }
 
 /// State related to the server connection, clock sync, and shared data.
@@ -223,6 +224,7 @@ impl App {
                 },
                 textarea: TextArea::default(),
                 scene: None,
+                compilation_error: None,
             },
             server: ServerState {
                 is_connected: false,
@@ -333,6 +335,10 @@ impl App {
     /// * `message` - The `ServerMessage` to process.
     fn handle_server_message(&mut self, message: ServerMessage) {
         match message {
+            ServerMessage::CompilationErrorOccurred(error) => {
+                self.editor.compilation_error = Some(error.to_string());
+                self.add_log(LogLevel::Error, format!("Compilation error: {}", error));
+            }
             // Received a chat message from another peer.
             ServerMessage::Chat(msg) => {
                 self.add_log(LogLevel::Info, format!("Received: {}", msg.to_string()));
@@ -447,6 +453,7 @@ impl App {
                 } else {
                     // Assume it's for the editor: consume content here
                     self.add_log(LogLevel::Info, format!("Loading script for ({}, {}) into editor.", line_idx, frame_idx));
+                    self.editor.compilation_error = None;
                     self.editor.textarea = TextArea::new(content.lines().map(|s| s.to_string()).collect()); // Move content here
                     self.editor.active_line.line_index = line_idx;
                     self.editor.active_line.frame_index = frame_idx;
