@@ -29,7 +29,7 @@
 
 \
 
-*Abstract.* theTool has been designed so that it is (relatively) simple for a user to define their own scripting language(s) to be used for Live-Coding the steps of a scene.
+*Abstract.* theTool has been designed so that it is (relatively) simple for a user to define their own scripting language(s) to be used for Live-Coding the frames of a scene.
 The general idea is to write a compiler that will translate scripts to a low-level language – theLanguage – that is interpreted by the theTool scheduler.
 This requires to know theLanguage and to understand how the theTool scheduler works, which is the object of this document.
 At the end we also give a few guidelines on how to properly integrate a new scripting language into theTool.
@@ -44,11 +44,11 @@ As show in @fig:overview, the scheduler is responsible for emitting (time-stampe
 These events are mostly sent to the World, the interface between theTool and the different devices — hardware or software — that it controls.
 They can also occasionally be sent to other parts of theTool.
 
-For that the scheduler loops forever, executing sequences of steps (each taken into a finite set of steps).
-The events that shall be emitted at each of these steps are specified as a line of instructions (a program) written in the theTool Intermediate Low-level Language (theLanguage).
-So, each step is associated to a theLanguage program.
+For that the scheduler loops forever, executing sequences of frames (each taken into a finite set of frames).
+The events that shall be emitted at each of these frames are specified as a line of instructions (a program) written in the theTool Intermediate Low-level Language (theLanguage).
+So, each frame is associated to a theLanguage program.
 
-In order to know how and when each step should occur, theTool scheduler relies on an environment that provides information on everything else (clocks, devices, etc).
+In order to know how and when each frame should occur, theTool scheduler relies on an environment that provides information on everything else (clocks, devices, etc).
 
 #figure(
   image("sched.png", width: 80%),
@@ -57,17 +57,17 @@ In order to know how and when each step should occur, theTool scheduler relies o
 
 == Lifespan of a theLanguage program execution
 
-Each step is always associated to a (potentially empty) theLanguage program.
-When the environment is such that a new step shall begin, the scheduler is responsible for instantiating a new execution of the theLanguage program associated to this step (as shown in @fig:steps where programs BP1, BP2 and BP3 respectively correspond to steps 1, 2 and 3).
+Each frame is always associated to a (potentially empty) theLanguage program.
+When the environment is such that a new frame shall begin, the scheduler is responsible for instantiating a new execution of the theLanguage program associated to this frame (as shown in @fig:frames where programs BP1, BP2 and BP3 respectively correspond to frames 1, 2 and 3).
 Once a program execution is instantiated, this program is executed by the scheduler until it is finished (that is, until a normal end of the program is reached, or until an error occurs in the program).
 
-Notice that the duration of a program execution is in general not related to the duration of the step in which it started: it may be shorter or longer.
-It is even possible that the same step occurs again before the end of the corresponding program execution, leading to two instances of the same program running at the same time (as for program BP2 in @fig:steps)
+Notice that the duration of a program execution is in general not related to the duration of the frame in which it started: it may be shorter or longer.
+It is even possible that the same frame occurs again before the end of the corresponding program execution, leading to two instances of the same program running at the same time (as for program BP2 in @fig:frames)
 
 #figure(
-  image("steps.png", width: 80%),
-  caption: [A theLanguage program execution is instantiated at each step],
-) <fig:steps>
+  image("frames.png", width: 80%),
+  caption: [A theLanguage program execution is instantiated at each frame],
+) <fig:frames>
 
 == How theLanguage programs are executed
 
@@ -104,30 +104,30 @@ This means that control instructions are executed as fast as possible but that t
 
 === Execution of several programs in parallel
 
-When several programs execute in parallel (as in step 3 in @fig:steps) each runs as described in @sec:execsingle.
+When several programs execute in parallel (as in frame 3 in @fig:frames) each runs as described in @sec:execsingle.
 The scheduler executes, in turn, one instruction from each program.
 The order in which the programs are considered is the order in which they started their execution.
 In case a program shall execute an effect instruction but the time for the event emission has not yet been met, its turn is skipped (so it does not pause all the other program executions).
 
-== scene, sequences, steps and some vocabulary
+== scene, sequences, frames and some vocabulary
 
-For the moment, we abstracted the exact way in which theTool scheduler handles steps.
+For the moment, we abstracted the exact way in which theTool scheduler handles frames.
 The idea is that there is an object that we call a _scene_ which is an array of objects called _sequences_. 
-Each of these sequences is itself an array of _steps_.
-A step is constituted of a theLanguage program (that we call the program _associated_ to this step) and a duration.
+Each of these sequences is itself an array of _frames_.
+A frame is constituted of a theLanguage program (that we call the program _associated_ to this frame) and a duration.
 
 The theTool scheduler executes all the sequences in the scene in parallel.
-For executing a line it starts at the first step in the array.
-Each steps is occurring for a time corresponding to its duration.
-At the end of a step, the scheduler switches to the next step in the same line.
+For executing a line it starts at the first frame in the array.
+Each frame is occurring for a time corresponding to its duration.
+At the end of a frame, the scheduler switches to the next frame in the same line.
 At the end of a line, the scheduler goes back to the start of this line.
-At the beginning of any step, the scheduler starts an execution of the corresponding theLanguage program.
+At the beginning of any frame, the scheduler starts an execution of the corresponding theLanguage program.
 We call this execution an _instance_ of the program.
 
 == How variables are handled
 
 theLanguage programs can manipulate variables with control instructions and use them in effect instructions.
-These variables are of five kinds: environment variables, global variables, line variables, step variables and instance variables (@lst:variables).
+These variables are of five kinds: environment variables, global variables, line variables, frame variables and instance variables (@lst:variables).
 
 
 #figure([
@@ -136,7 +136,7 @@ These variables are of five kinds: environment variables, global variables, line
     Environment(String),
     Global(String),
     Sequence(String),
-    Step(String),
+    Frame(String),
     Instance(String),
     Constant(VariableValue),
 }")
@@ -158,11 +158,11 @@ Global variables are shared among all the theLanguage program executions.
 === Sequence variables
 
 Sequence variables are shared among all the theLanguage programs of a given line (the line in which they are declared).
-They cannot be seen by programs associated to steps from other sequences.
+They cannot be seen by programs associated to frames from other sequences.
 
-=== Step variables
+=== Frame variables
 
-Step variables are shared among all the instances of the theLanguage program in which they are declared but are not seen by other programs.
+Frame variables are shared among all the instances of the theLanguage program in which they are declared but are not seen by other programs.
 
 === Instance variables
 
@@ -196,7 +196,7 @@ We also list the environment variables (@sec:envvariables).
 
 == Types of variables <sec:variables>
 
-Each variable (being environment, global, line, step, or instance) and constant has a type.
+Each variable (being environment, global, line, frame, or instance) and constant has a type.
 
 === Existing types
 
@@ -257,11 +257,11 @@ In this table, $bot$ denotes a function that does nothing (the program is a sing
 
 == Dealing with durations <sec:timing>
 
-According to @lst:timespan (which is an extract of the file ``` src/clock.rs```), variables representing durations can hold three kinds of values: microseconds, beats, and steps.
+According to @lst:timespan (which is an extract of the file ``` src/clock.rs```), variables representing durations can hold three kinds of values: microseconds, beats, and frames.
 A duration expressed as microseconds is an absolute time.
 A duration expressed as beats is a relative time: the exact duration depends on the number of microseconds in a beat.
-A duration expressed as steps is a relative time as well: the exact duration depends on the number of beats in the step associated to the theLanguage program in which the duration is used (that is, the step at which the program execution started).
-The duration of a beat or a step can be changed by theLanguage programs and by the environment.
+A duration expressed as frames is a relative time as well: the exact duration depends on the number of beats in the frame associated to the theLanguage program in which the duration is used (that is, the frame at which the program execution started).
+The duration of a beat or a frame can be changed by theLanguage programs and by the environment.
 
 
 // en tout cas, il faut pouvoir convertir de n'importe quelle sorte vers n'importe quelle autre
@@ -273,7 +273,7 @@ The duration of a beat or a step can be changed by theLanguage programs and by t
   #raw("pub enum TimeSpan {
     Micros(u64),
     Beats(f64),
-    Steps(f64),
+    Frames(f64),
 }")
   ],
   caption: "TimeSpan definition"
@@ -296,15 +296,15 @@ Before that, durations are always kept as general as possible: when an arithmeti
     },
   align: horizon,
   table.header(
-    [], [*microseconds*], [*beats*], [*steps*],
+    [], [*microseconds*], [*beats*], [*frames*],
   ),
-  [*microseconds*], [microseconds], [beats], [steps],
-  [*beats*], [], [beats], [steps],
-  [*steps*], [], [], [steps],
+  [*microseconds*], [microseconds], [beats], [frames],
+  [*beats*], [], [beats], [frames],
+  [*frames*], [], [], [frames],
 )
 ) <tab:duration>
 
-Sometimes, one may want the result of a computation on durations not to be as general as possible, e.g to be evaluated as microseconds immediately, to prevent the duration to change with changes to the beat duration or to a step duration.
+Sometimes, one may want the result of a computation on durations not to be as general as possible, e.g to be evaluated as microseconds immediately, to prevent the duration to change with changes to the beat duration or to a frame duration.
 For that, we provide operations to change the concreteness of a duration in @sec:control.
 
 == Control instructions <sec:control>
@@ -366,17 +366,17 @@ The existing control instructions are given in @lst:asm, which is an extract of 
           #raw("    // Time manipulation
     AsBeats(Variable, Variable),
     AsMicros(Variable, Variable),
-    AsSteps(Variable, Variable),
+    AsFrames(Variable, Variable),
     BeatsToNum(Variable, Variable),
     MicrosToNum(Variable, Variable),
-    StepsToNum(Variable, Variable),
+    FramesToNum(Variable, Variable),
     FloatAsBeats(Variable, Variable),
-    FloatAsSteps(Variable, Variable),
+    FloatAsFrames(Variable, Variable),
     // Memory manipulation
     DeclareGlobale(String, Variable),
     DeclareInstance(String, Variable),
     DeclareSequence(String, Variable),
-    DeclareStep(String, Variable),
+    DeclareFrame(String, Variable),
     Mov(Variable, Variable),
     // Stack operations
     Push(Variable),
@@ -536,21 +536,21 @@ These instructions allow to perform conversions on durations.
 
 *AsMicros(d, v).* Casts $d$ to a duration. Set this duration to microseconds, cast it to the type of $v$, and then store it in $v$.
 
-*AsSteps(d, v).* Casts $d$ to a duration. Set this duration to steps, cast it to the type of $v$, and then store it in $v$.
+*AsFrames(d, v).* Casts $d$ to a duration. Set this duration to frames, cast it to the type of $v$, and then store it in $v$.
 
 *BeatsToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of beats as a float, cast it to the type of $v$, and then store it in $v$.
 
 *MicrosToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of microseconds as an int, cast it to the type of $v$, and then store it in $v$.
 
-*StepsToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of steps as a float, cast it to the type of $v$, and then store it in $v$.
+*FramesToNum(d, v).* Casts $d$ to a duration. Get the corresponding number of frames as a float, cast it to the type of $v$, and then store it in $v$.
 
 *FloatAsBeats(f, v).* Casts $f$ to a float, then consider this float as a number of beats. Cast this number of beats to the type of $v$, and then store it in $v$.
 
-*FloatAsSteps(f, v).* Casts $f$ to a float, then consider this float as a number of steps. Cast this number of steps to the type of $v$, and then store it in $v$.
+*FloatAsFrames(f, v).* Casts $f$ to a float, then consider this float as a number of frames. Cast this number of frames to the type of $v$, and then store it in $v$.
 
 === Memory manipulation
 
-The four variable declaration instructions (DeclareGlobal, DeclareInstance, DeclareSequence, DeclareStep) are of the form ``` Declare(name, value)``` and will create a new (Global, Instance, Sequence or Step) variable named ``` name``` and initialize its value to ``` value```.
+The four variable declaration instructions (DeclareGlobal, DeclareInstance, DeclareSequence, DeclareFrame) are of the form ``` Declare(name, value)``` and will create a new (Global, Instance, Sequence or Frame) variable named ``` name``` and initialize its value to ``` value```.
 The type of the new variable is the type of ``` value```.
 
 Notice that, in any program instruction arguments, if a variable that does not exist is read this will give a 0 value.
@@ -642,8 +642,8 @@ In this section we give the semantics of these events.
     MidiClock(Variable),
     // Time handling
     SetBeatDuration(Variable),
-    SetCurrentStepDuration(Variable),
-    SetStepDuration(Variable, Variable),
+    SetCurrentFrameDuration(Variable),
+    SetFrameDuration(Variable, Variable),
     // Program starting
     Continue,
     ContinueInstance(Variable),
@@ -651,9 +651,9 @@ In this section we give the semantics of these events.
     ContinueSequence(Variable),
     ContinueSequenceOldest(Variable),
     ContinueSequenceYoungest(Variable),
-    ContinueStep(Variable),
-    ContinueStepOldest(Variable, Variable),
-    ContinueStepYoungest(Variable, Variable),
+    ContinueFrame(Variable),
+    ContinueFrameOldest(Variable, Variable),
+    ContinueFrameYoungest(Variable, Variable),
     ContinueYoungest(Variable),
     Start(Variable, Variable),
     // Program halting
@@ -663,9 +663,9 @@ In this section we give the semantics of these events.
     PauseSequence(Variable),
     PauseSequenceOldest(Variable, Variable),
     PauseSequenceYoungest(Variable, Variable),
-    PauseStep(Variable),
-    PauseStepOldest(Variable, Variable),
-    PauseStepYoungest(Variable, Variable),
+    PauseFrame(Variable),
+    PauseFrameOldest(Variable, Variable),
+    PauseFrameYoungest(Variable, Variable),
     PauseYoungest(Variable),
     Stop,
     StopInstance(Variable),
@@ -673,9 +673,9 @@ In this section we give the semantics of these events.
     StopSequence(Variable),
     StopSequenceOldest(Variable, Variable),
     StopSequenceYoungest(Variable, Variable),
-    StopStep(Variable),
-    StopStepOldest(Variable, Variable),
-    StopStepYoungest(Variable, Variable),
+    StopFrame(Variable),
+    StopFrameOldest(Variable, Variable),
+    StopFrameYoungest(Variable, Variable),
     StopYoungest(Variable),
 }")
   ],
@@ -715,13 +715,13 @@ This is process is detailed for the MidiNote event below and is similar for all 
 
 === Time handling events
 
-Time handling events allow to manage the relations between beats, step duration, and absolute time.
+Time handling events allow to manage the relations between beats, frame duration, and absolute time.
 
 *SetBeatDuration(t).* Sets the duration of one beat to $t$ (casted to a duration). This duration is set in microseconds (absolute time) by first evaluating $t$ in microseconds. The standard use is to give $t$ in microseconds to setup a tempo. However, one could give $t$ in beats for relative change of tempo (if $t$ is 3 beats the tempo is divided by 3 as the duration of a beat is multiplied by 3).
 
-*SetCurrentStepDuration(t).* Sets the duration of the step associated to the program instance calling this instruction to $t$ (casted to a duration). This duration is set in beats if possible or, else, it is set in microseconds. The standard use is to give $t$ in beats, so that if beat duration changes step duration changes accordingly. However one could give $t$ in microseconds to avoid this side effect.
+*SetCurrentFrameDuration(t).* Sets the duration of the frame associated to the program instance calling this instruction to $t$ (casted to a duration). This duration is set in beats if possible or, else, it is set in microseconds. The standard use is to give $t$ in beats, so that if beat duration changes frame duration changes accordingly. However one could give $t$ in microseconds to avoid this side effect.
 
-*SetStepDuration(n, t).* Same as SetCurrentStepDuration but for step $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
+*SetFrameDuration(n, t).* Same as SetCurrentFrameDuration but for frame $n$ (casted to an int). See @sec:envvariables for knowing how to get frame numbers.
 
 === Program starting events <sec:starting>
 
@@ -734,22 +734,22 @@ How program instances can be paused is described in @sec:halting.
 
 *ContinueOldest(k).* Resumes the $k$ (casted to an int) program instances that were paused the longest time ago.
 
-*ContinueSequence(n).* Resumes all currently paused program instances corresponding to steps in line $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
+*ContinueSequence(n).* Resumes all currently paused program instances corresponding to frames in line $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
 
-*ContinueSequenceOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to steps in line $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get line numbers.
+*ContinueSequenceOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to frames in line $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get line numbers.
 
-*ContinueSequenceYoungest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to steps in line $n$ (casted to an int) that were paused the shortest time ago. See @sec:envvariables for knowing how to get line numbers.
+*ContinueSequenceYoungest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to frames in line $n$ (casted to an int) that were paused the shortest time ago. See @sec:envvariables for knowing how to get line numbers.
 
-*ContinueStep(n).* Resumes all currently paused program instances corresponding to step $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
+*ContinueFrame(n).* Resumes all currently paused program instances corresponding to frame $n$ (casted to an int). See @sec:envvariables for knowing how to get frame numbers.
 
-*ContinueStepOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to step $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get step numbers.
+*ContinueFrameOldest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to frame $n$ (casted to an int) that were paused the longest time ago. See @sec:envvariables for knowing how to get frame numbers.
 
-*ContinueStepYoungest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to step $n$ (casted to an int) that were paused the shortest time ago. See @sec:envvariables for knowing how to get step numbers.
+*ContinueFrameYoungest(n, k).* Resumes the $k$ (casted to an int) program instances corresponding to frame $n$ (casted to an int) that were paused the shortest time ago. See @sec:envvariables for knowing how to get frame numbers.
 
 *ContinueYoungest(k).* Resumes the $k$ (casted to an int) program instances that were paused the shortest time ago.
 
-*Start(p, i).* Starts a new instance of program $p$. If $p$ is a function, then this function is used as a program. Else the program corresponding to step $p$ (casted to an int) is used. The number of the new instance is recorded in $i$ (after casting it to the type of $i$).
-Remark that such a program instance is associated to the step and the line to which the program instance in which Start was called is associated.
+*Start(p, i).* Starts a new instance of program $p$. If $p$ is a function, then this function is used as a program. Else the program corresponding to frame $p$ (casted to an int) is used. The number of the new instance is recorded in $i$ (after casting it to the type of $i$).
+Remark that such a program instance is associated to the frame and the line to which the program instance in which Start was called is associated.
 
 === Program halting events <sec:halting>
 
@@ -765,17 +765,17 @@ We describe here the stop events as the corresponding pause events have the same
 
 *StopOldest(k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago).
 
-*StopSequence(n).* Stops all the program instances corresponding to steps in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
+*StopSequence(n).* Stops all the program instances corresponding to frames in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
 
-*StopSequenceOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to steps in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
+*StopSequenceOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to frames in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
 
-*StopSequenceYoungest(n, k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago) corresponding to steps in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
+*StopSequenceYoungest(n, k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago) corresponding to frames in line number $n$ (casted to an int). See @sec:envvariables for knowing how to get line numbers.
 
-*StopStep(n).* Stops all the program instances corresponding to step number $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
+*StopFrame(n).* Stops all the program instances corresponding to frame number $n$ (casted to an int). See @sec:envvariables for knowing how to get frame numbers.
 
-*StopStepOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to step number $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
+*StopFrameOldest(n, k).* Stops the $k$ (casted to an int) oldest program instances (that started the longest time ago) corresponding to frame number $n$ (casted to an int). See @sec:envvariables for knowing how to get frame numbers.
 
-*StopStepYoungest(n, k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago) corresponding to step number $n$ (casted to an int). See @sec:envvariables for knowing how to get step numbers.
+*StopFrameYoungest(n, k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago) corresponding to frame number $n$ (casted to an int). See @sec:envvariables for knowing how to get frame numbers.
 
 *StopYoungest(k).* Stops the $k$ (casted to an int) youngest program instances (that started the shortest time ago).
 
@@ -789,44 +789,44 @@ We describe here the stop events as the corresponding pause events have the same
 The environment variables provided by theTool are given below. 
 Some of them are parameterized for simplicity. 
 Parameters are depicted here between dollars signs, they should be replaced by integers.
-For example, Sequence\$n\$NumSteps corresponds to the variables Sequence1NumSteps, Sequence2NumSteps, and so on.
+For example, Sequence\$n\$NumFrames corresponds to the variables Sequence1NumFrames, Sequence2NumFrames, and so on.
 
 - *InstanceID.* ID of this program instance.
-- *Instance\$n\$SequenceID.* ID of the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$SequenceBeats.* Number of beats in the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$SequenceMicros.* Number of microseconds in the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepID.* ID of the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepBeats.* Number of beats in the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepMicros.* Number of microseconds in the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$SequenceNumInstances.* Same as NumInstances but only for instances corresponding to the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$SequenceNumRunning.* Same as NumRunning but only for instances corresponding to the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$SequenceNumPaused.* Same as NumPaused but only for instances corresponding to the line containing the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepNumInstances.* Same as NumInstances but only for instances corresponding to the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepNumRunning.* Same as NumRunning but only for instances corresponding to the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
-- *Instance\$n\$StepNumPaused.* Same as NumPaused but only for instances corresponding to the step associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceID.* ID of the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceBeats.* Number of beats in the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceMicros.* Number of microseconds in the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameID.* ID of the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameBeats.* Number of beats in the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameMicros.* Number of microseconds in the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceNumInstances.* Same as NumInstances but only for instances corresponding to the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceNumRunning.* Same as NumRunning but only for instances corresponding to the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$SequenceNumPaused.* Same as NumPaused but only for instances corresponding to the line containing the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameNumInstances.* Same as NumInstances but only for instances corresponding to the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameNumRunning.* Same as NumRunning but only for instances corresponding to the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
+- *Instance\$n\$FrameNumPaused.* Same as NumPaused but only for instances corresponding to the frame associated to the program instance number $n$ (or the instance of the program using this variable if $n$ is omitted).
 - *NumInstances.* Number of instances currently running or paused.
 - *NumPaused.* Number of instances currently paused.
 - *NumRunning.* Number of instances currently running.
 - *NumSequences.* Number of sequences.
-- *Sequence\$n\$NumSteps.* Number of steps in line number $n$.
-- *SequenceID.* ID of the line containing the step corresponding to this program.
-- *Sequence\$n\$Beats.* Number of beats in the line number $n$ (or the line containing the step associated to the program using this variable if $n$ is omitted).
-- *Sequence\$n\$Micros.* Number of microseconds in the line number $n$ (or the line containing the step associated to the program using this variable if $n$ is omitted).
-- *Sequence\$n\$NumInstances.* Same as NumInstances but only for instances corresponding to the line number $n$ (or the line containing the step associated to the program using this variable if $n$ is omitted).
-- *Sequence\$n\$NumRunning.* Same as NumRunning but only for instances corresponding to the line number $n$ (or the line containing the step associated to the program using this variable if $n$ is omitted).
-- *Sequence\$n\$NumPaused.* Same as NumPaused but only for instances corresponding to the line number $n$ (or the line containing the step associated to the program using this variable if $n$ is omitted).
-- *StepID.* ID of the step corresponding to this program.
-- *Step\$n\$SequenceID.* ID of the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$SequenceBeats.* Number of beats in the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$SequenceMicros.* Number of microseconds in the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$Beats.* Number of beats in the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$Micros.* Number of microseconds in the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$NumInstances.* Same as NumInstances but only for instances corresponding to the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$NumRunning.* Same as NumRunning but only for instances corresponding to the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$NumPaused.* Same as NumPaused but only for instances corresponding to the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$SequenceNumInstances.* Same as NumInstances but only for instances corresponding to the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$SequenceNumRunning.* Same as NumRunning but only for instances corresponding to the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
-- *Step\$n\$SequenceNumPaused.* Same as NumPaused but only for instances corresponding to the line containing the step number $n$ (or the step associated to the program using this variable if $n$ is omitted).
+- *Sequence\$n\$NumFrames.* Number of frames in line number $n$.
+- *SequenceID.* ID of the line containing the frame corresponding to this program.
+- *Sequence\$n\$Beats.* Number of beats in the line number $n$ (or the line containing the frame associated to the program using this variable if $n$ is omitted).
+- *Sequence\$n\$Micros.* Number of microseconds in the line number $n$ (or the line containing the frame associated to the program using this variable if $n$ is omitted).
+- *Sequence\$n\$NumInstances.* Same as NumInstances but only for instances corresponding to the line number $n$ (or the line containing the frame associated to the program using this variable if $n$ is omitted).
+- *Sequence\$n\$NumRunning.* Same as NumRunning but only for instances corresponding to the line number $n$ (or the line containing the frame associated to the program using this variable if $n$ is omitted).
+- *Sequence\$n\$NumPaused.* Same as NumPaused but only for instances corresponding to the line number $n$ (or the line containing the frame associated to the program using this variable if $n$ is omitted).
+- *FrameID.* ID of the frame corresponding to this program.
+- *Frame\$n\$SequenceID.* ID of the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$SequenceBeats.* Number of beats in the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$SequenceMicros.* Number of microseconds in the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$Beats.* Number of beats in the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$Micros.* Number of microseconds in the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$NumInstances.* Same as NumInstances but only for instances corresponding to the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$NumRunning.* Same as NumRunning but only for instances corresponding to the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$NumPaused.* Same as NumPaused but only for instances corresponding to the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$SequenceNumInstances.* Same as NumInstances but only for instances corresponding to the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$SequenceNumRunning.* Same as NumRunning but only for instances corresponding to the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
+- *Frame\$n\$SequenceNumPaused.* Same as NumPaused but only for instances corresponding to the line containing the frame number $n$ (or the frame associated to the program using this variable if $n$ is omitted).
 - *TotalBeats.* Number of beats since the launch of theTool.
 - *TotalMicros.* Number of microseconds since the launch of theTool. This cannot be computed from TotalBeats as the duration of a beat may have changed over time.
 - *BeatMicros.* Number of microseconds in a beat. 

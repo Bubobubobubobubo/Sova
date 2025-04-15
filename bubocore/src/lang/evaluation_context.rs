@@ -4,7 +4,7 @@ use super::variable::{Variable, VariableStore, VariableValue};
 
 pub struct EvaluationContext<'a> {
     pub global_vars : &'a mut VariableStore,
-    pub step_vars : &'a mut VariableStore,
+    pub frame_vars : &'a mut VariableStore,
     pub instance_vars : &'a mut VariableStore,
     pub stack : &'a mut Vec<VariableValue>,
     pub lines : &'a mut [Line],
@@ -31,7 +31,7 @@ impl<'a> EvaluationContext<'a> {
         match var {
             Variable::Global(n) => self.global_vars.insert(n.clone(), value),
             Variable::Line(n) => self.line_mut().vars.insert(n.clone(), value),
-            Variable::Frame(n) => self.step_vars.insert(n.clone(), value),
+            Variable::Frame(n) => self.frame_vars.insert(n.clone(), value),
             Variable::Instance(n) => self.instance_vars.insert(n.clone(), value),
             _ => None
         };
@@ -41,7 +41,7 @@ impl<'a> EvaluationContext<'a> {
         let res = match var {
             Variable::Global(n) => self.global_vars.get(n),
             Variable::Line(n) => self.line().vars.get(n),
-            Variable::Frame(n) => self.step_vars.get(n),
+            Variable::Frame(n) => self.frame_vars.get(n),
             Variable::Instance(n) => self.instance_vars.get(n),
             Variable::Environment(environment_func) => {
                 return environment_func.execute(self);

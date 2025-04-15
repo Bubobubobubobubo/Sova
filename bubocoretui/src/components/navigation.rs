@@ -361,38 +361,38 @@ impl Component for NavigationComponent {
 
                 if let Some(scene) = &app.editor.scene {
                     if scene.lines.is_empty() {
-                         Text::from("scene has no sequences.")
+                         Text::from("scene has no lines.")
                     } else {
-                        // 4 chars per seq. Format: '[ ] G ' (Begin, End, Status/Playhead, Space)
-                        let max_seq_to_show = (available_width / 4).max(1) as usize;
-                        let max_steps_to_show = available_height.saturating_sub(1) as usize; // Minus header line
+                        // 4 chars per line. Format: '[ ] G ' (Begin, End, Status/Playhead, Space)
+                        let max_lines_to_show = (available_width / 4).max(1) as usize;
+                        let max_frames_to_show = available_height.saturating_sub(1) as usize; // Minus header line
 
                         let mut lines = Vec::new();
 
                         // Header: S1  S2  S3  ...
-                        let header_spans: Vec<Span> = (0..scene.lines.len().min(max_seq_to_show))
+                        let header_spans: Vec<Span> = (0..scene.lines.len().min(max_lines_to_show))
                             .map(|i| Span::styled(format!("S{}  ", i + 1), Style::default().fg(Color::Yellow).add_modifier(Modifier::BOLD)))
                             .collect();
                         lines.push(Line::from(header_spans));
 
                         // Grid content
-                        let max_steps_in_scene = scene.lines.iter().map(|s| s.frames.len()).max().unwrap_or(0);
+                        let max_frames_in_scene = scene.lines.iter().map(|s| s.frames.len()).max().unwrap_or(0);
 
-                        for step_idx in 0..max_steps_in_scene.min(max_steps_to_show) {
-                            let mut step_spans = Vec::new();
-                            for seq_idx in 0..scene.lines.len().min(max_seq_to_show) {
-                                if let Some(seq) = scene.lines.get(seq_idx) {
-                                    if step_idx < seq.frames.len() {
-                                        let is_enabled = seq.is_frame_enabled(step_idx);
+                        for frame_idx in 0..max_frames_in_scene.min(max_frames_to_show) {
+                            let mut frame_spans = Vec::new();
+                            for line_idx in 0..scene.lines.len().min(max_lines_to_show) {
+                                if let Some(line) = scene.lines.get(line_idx) {
+                                    if frame_idx < line.frames.len() {
+                                        let is_enabled = line.is_frame_enabled(frame_idx);
                                         let is_current = app.server.current_frame_positions.as_ref()
-                                            .and_then(|p| p.get(seq_idx))
-                                            .map_or(false, |&current| current == step_idx);
+                                            .and_then(|p| p.get(line_idx))
+                                            .map_or(false, |&current| current == frame_idx);
 
                                         // Range Marker (like grid.rs)
-                                        let should_draw_range_bar = if let Some(start) = seq.start_frame {
-                                            if let Some(end) = seq.end_frame { step_idx >= start && step_idx <= end }
-                                            else { step_idx >= start }
-                                        } else { if let Some(end) = seq.end_frame { step_idx <= end } else { false } };
+                                        let should_draw_range_bar = if let Some(start) = line.start_frame {
+                                            if let Some(end) = line.end_frame { frame_idx >= start && frame_idx <= end }
+                                            else { frame_idx >= start }
+                                        } else { if let Some(end) = line.end_frame { frame_idx <= end } else { false } };
                                         let range_marker = if should_draw_range_bar { "▌" } else { " " };
 
                                         // Playhead Marker
@@ -405,19 +405,19 @@ impl Component for NavigationComponent {
                                         let status_style = Style::default().fg(status_color);
 
                                         // Assemble the cell: R P S Space
-                                        step_spans.push(Span::raw(range_marker)); // Default style
-                                        step_spans.push(Span::styled(playhead_marker, playhead_style));
-                                        step_spans.push(Span::styled(status_char.to_string(), status_style));
-                                        step_spans.push(Span::raw(" ")); // Padding
+                                        frame_spans.push(Span::raw(range_marker)); // Default style
+                                        frame_spans.push(Span::styled(playhead_marker, playhead_style));
+                                        frame_spans.push(Span::styled(status_char.to_string(), status_style));
+                                        frame_spans.push(Span::raw(" ")); // Padding
 
                                     } else {
-                                        step_spans.push(Span::raw("    ")); // Empty slot with 4 spaces
+                                        frame_spans.push(Span::raw("    ")); // Empty slot with 4 spaces
                                     }
                                 } else {
-                                    step_spans.push(Span::raw("    "));
+                                    frame_spans.push(Span::raw("    "));
                                 }
                             }
-                            lines.push(Line::from(step_spans));
+                            lines.push(Line::from(frame_spans));
                         }
                         Text::from(lines)
                     }
