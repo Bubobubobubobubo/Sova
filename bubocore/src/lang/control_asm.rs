@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Instruction, Program};
 
-use crate::pattern::script::ReturnInfo;
+use crate::scene::script::ReturnInfo;
 use crate::clock::TimeSpan;
 
 #[cfg(test)]
@@ -39,15 +39,15 @@ pub enum ControlASM {
     //Concat(Variable, Variable, Variable),
     // Time manipulation
     FloatAsBeats(Variable, Variable),
-    FloatAsSteps(Variable, Variable),
+    FloatAsFrames(Variable, Variable),
     // AsBeats(Variable, Variable),
     // AsMicros(Variable, Variable),
-    // AsSteps(Variable, Variable),
+    // AsFrames(Variable, Variable),
     // Memory manipulation
     //DeclareGlobale(String, Variable),
     //DeclareInstance(String, Variable),
-    //DeclareSequence(String, Variable),
-    //DeclareStep(String, Variable),
+    //DeclareLine(String, Variable),
+    //DeclareFrame(String, Variable),
     Mov(Variable, Variable),    
     // Stack operations
     Push(Variable),
@@ -227,10 +227,10 @@ impl ControlASM {
                 ctx.set_var(z, res_value);
                 ReturnInfo::None
             }
-            ControlASM::FloatAsSteps(x, z) => {
+            ControlASM::FloatAsFrames(x, z) => {
                 let x_value = ctx.evaluate(x);
                 let x_value = x_value.cast_as_float(ctx);
-                let res_value = VariableValue::Dur(TimeSpan::Steps(x_value.as_float(ctx)));
+                let res_value = VariableValue::Dur(TimeSpan::Frames(x_value.as_float(ctx)));
                 ctx.set_var(z, res_value);
                 ReturnInfo::None
             }

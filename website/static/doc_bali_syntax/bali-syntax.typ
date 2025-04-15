@@ -62,8 +62,8 @@ This document presents the grammar of this language and gives insights on its se
 
 == The grammar itself
 
-In the below grammar, a #t([Number]) is any sequence of one or more digits (ASCII characters 48 to 57).
-An #t([Identifier]) is any sequence of one or more letters (ASCII characters 65 to 90 and 97 to 122) and - and \# characters, starting with a letter.
+In the below grammar, a #t([Number]) is any line of one or more digits (ASCII characters 48 to 57).
+An #t([Identifier]) is any line of one or more letters (ASCII characters 65 to 90 and 97 to 122) and - and \# characters, starting with a letter.
 
 #grid(
   columns: 3,
@@ -123,8 +123,8 @@ This comment ends at the end of the line.
 
 = The semantics
 
-A bali program is associated to a step (and thus a sequence and a pattern) in theTool.
-Each timing information used in bali is relative to this step. 
+A bali program is associated to a frame (and thus a line and a scene) in theTool.
+Each timing information used in bali is relative to this frame. 
 
 == #t([Number]) and #t([Identifier])
 
@@ -206,7 +206,7 @@ With control _con_, value $v$, and on channel $c$.
 
 == #nt([Control-Effect]) and #nt([Control-List])
 
-A #nt([Control-Effect]) allows to perform #nt([Effect]) (or #nt([Control-Effect])) in sequence (seq), in loop (for), or conditionally (if).
+A #nt([Control-Effect]) allows to perform #nt([Effect]) (or #nt([Control-Effect])) in line (seq), in loop (for), or conditionally (if).
 A #nt([Control-List]) is simply an ordered set of #nt([Control-Effect]).
 
 ``` (seq s)``` will execute in order the elements of $s$.
@@ -219,9 +219,9 @@ A #nt([Control-List]) is simply an ordered set of #nt([Control-Effect]).
 
 A #nt([Time-Statement]) allows to perform some (list of) #nt([Control-Effect]) at a given point in time.
 The time is expressed as a #nt([Concrete-Fract]) because having variables here would lead to execution orders that cannot be decided at compile time.
-The time is relative to the length of the step in which the program is executed.
+The time is relative to the length of the frame in which the program is executed.
 It is possible to have nested #nt([Time-Statement]), in which case times are added.
-The default time for executing something, when there is no #nt([Time-Statement]) is 0 (so, right at the beginning of the step).
+The default time for executing something, when there is no #nt([Time-Statement]) is 0 (so, right at the beginning of the frame).
 
 ``` (> frac p)``` executes $p$ at a point in time _frac_ after what was expected.
 
@@ -232,7 +232,7 @@ In case $p$ should be executed at a negative time $t$, it will be executed at ti
 
 ``` (<< p)``` executes $p$ at the expected time point, but just before everything else that should occur at this time point.
 
-For example, the program ``` (> 5 p1 (<< p2) (>> p3)``` will execute _p1_, _p2_ and _p3_ all at $1/5$ of the step, but in the following order: _p2_, then _p1_, then _p3_.
+For example, the program ``` (> 5 p1 (<< p2) (>> p3)``` will execute _p1_, _p2_ and _p3_ all at $1/5$ of the frame, but in the following order: _p2_, then _p1_, then _p3_.
 
 Finally ``` (loop n frac p)``` executes $n$ times $p$.
 First at the expected time point, then _frac_ after this point, then _frac_ later, and so on.

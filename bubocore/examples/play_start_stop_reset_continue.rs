@@ -2,7 +2,7 @@ use bubocorelib::{
     clock::{ClockServer, TimeSpan},
     device_map::DeviceMap,
     lang::{Instruction, Program, event::Event},
-    pattern::{Pattern, Sequence},
+    scene::{Scene, Line},
     protocol::midi::{MidiInterface, MidiOut},
     schedule::{Scheduler, SchedulerMessage},
     world::World,
@@ -43,14 +43,14 @@ fn main() {
         TimeSpan::Micros(1_000_000).into(),
     )];
 
-    let mut sequence = Sequence::new(vec![1.0, 1.0, 1.0, 1.0]);
-    sequence.set_script(0, start.clone().into());
-    sequence.set_script(1, stop.clone().into());
-    sequence.set_script(2, reset.clone().into());
-    sequence.set_script(3, continu.clone().into());
-    let pattern = Pattern::new(vec![sequence]);
+    let mut line = Line::new(vec![1.0, 1.0, 1.0, 1.0]);
+    line.set_script(0, start.clone().into());
+    line.set_script(1, stop.clone().into());
+    line.set_script(2, reset.clone().into());
+    line.set_script(3, continu.clone().into());
+    let scene = Scene::new(vec![line]);
 
-    let message = SchedulerMessage::UploadPattern(pattern);
+    let message = SchedulerMessage::UploadScene(scene);
     let _ = sched_iface.send(message);
 
     sched_handle.join().expect("Scheduler thread error");

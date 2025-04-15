@@ -31,7 +31,7 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
     let time_var = Variable::Instance("_time".to_owned());
 
     if total_delay > 0.0 {
-        res.push(Instruction::Control(ControlASM::FloatAsSteps(total_delay.into(), time_var.clone())));
+        res.push(Instruction::Control(ControlASM::FloatAsFrames(total_delay.into(), time_var.clone())));
         res.push(Instruction::Effect(Event::Nop, time_var.clone()));
     }
 
@@ -228,7 +228,7 @@ impl TopLevelEffect {
                 position += 5;
                 res.push(Instruction::Control(ControlASM::Pop(bvar_out.clone())));
                 res.push(Instruction::Control(ControlASM::JumpIf(bvar_out.clone(), position)));
-                res.push(Instruction::Control(ControlASM::FloatAsSteps(delay.into(), time_var.clone())));
+                res.push(Instruction::Control(ControlASM::FloatAsFrames(delay.into(), time_var.clone())));
                 res.push(Instruction::Effect(Event::Nop, time_var.clone()));
 
                 // Compute effects
@@ -263,7 +263,7 @@ impl TopLevelEffect {
                 position += 5;
                 res.push(Instruction::Control(ControlASM::Pop(bvar_out.clone())));
                 res.push(Instruction::Control(ControlASM::JumpIf(bvar_out.clone(), position)));
-                res.push(Instruction::Control(ControlASM::FloatAsSteps(delay.into(), time_var.clone())));
+                res.push(Instruction::Control(ControlASM::FloatAsFrames(delay.into(), time_var.clone())));
                 res.push(Instruction::Effect(Event::Nop, time_var.clone()));
 
                 // Compute effects
@@ -311,7 +311,7 @@ impl Effect { // TODO : on veut que les durées soient des fractions
         let program_var = Variable::Instance("_program".to_owned());
         let control_var = Variable::Instance("_control".to_owned());
         let value_var = Variable::Instance("_control_value".to_owned());
-        let mut res = vec![Instruction::Control(ControlASM::FloatAsSteps(delay.into(), time_var.clone()))];
+        let mut res = vec![Instruction::Control(ControlASM::FloatAsFrames(delay.into(), time_var.clone()))];
         
         match self {
             Effect::Definition(v, expr) => {
@@ -340,7 +340,7 @@ impl Effect { // TODO : on veut que les durées soient des fractions
                 }
                 res.extend(d.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(duration_var.clone())));
-                res.push(Instruction::Control(ControlASM::FloatAsSteps(duration_var.clone(), duration_time_var.clone())));
+                res.push(Instruction::Control(ControlASM::FloatAsFrames(duration_var.clone(), duration_time_var.clone())));
                 res.push(Instruction::Effect(Event::MidiNote(
                     note_var.clone(), velocity_var.clone(), chan_var.clone(), 
                     duration_time_var.clone(), MIDIDEVICE.to_string().into()

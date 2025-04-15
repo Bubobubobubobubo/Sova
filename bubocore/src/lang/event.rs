@@ -46,7 +46,7 @@ impl Event {
             Event::Nop => ConcreteEvent::Nop,
             Event::MidiNote(note, vel, chan, time, dev) => {
                 let note = ctx.evaluate(note).as_integer(ctx) as u64;
-                let time = ctx.evaluate(time).as_dur().as_micros(ctx.clock, ctx.step_len());
+                let time = ctx.evaluate(time).as_dur().as_micros(ctx.clock, ctx.frame_len());
                 let chan = ctx.evaluate(chan).as_integer(ctx) as u64;
                 let vel = ctx.evaluate(vel).as_integer(ctx) as u64;
                 let dev = ctx.evaluate(dev).as_str(ctx);
