@@ -12,7 +12,6 @@ use tokio::{
     select, signal,
     sync::{Mutex, watch},
 };
-use thread_priority::ThreadBuilder;
 
 use crate::{
     clock::{Clock, ClockServer, SyncTime},
@@ -179,6 +178,8 @@ pub enum ServerMessage {
     PeerStoppedEditing(String, usize, usize), // (username, line_idxx, frame_idx)
     /// The current length of the scene.
     SceneLength(usize),
+    /// Sends compilation error details back to the client.
+    CompilationErrorOccurred(crate::compiler::CompilationError),
 }
 
 /// Represents a complete snapshot of the server's current state.
@@ -291,8 +292,14 @@ async fn on_message(
                     }
                 }
                 Err(e) => {
-                    eprintln!("[!] {}", e);
-                    ServerMessage::InternalError(format!("Script compilation failed: {}", e))
+                    eprintln!("[!] Script compilation failed for Line {}, Frame {}: {}", line_id, frame_id, e);
+                    // Extract CompilationError if possible, otherwise send generic InternalError
+                    match e {
+                        crate::transcoder::TranscoderError::CompilationFailed(comp_err) => {
+                             ServerMessage::CompilationErrorOccurred(comp_err)
+                        }
+                        _ => ServerMessage::InternalError(format!("Script compilation error: {}", e))
+                    }
                 }
             }
         }
@@ -858,14 +865,19 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     SchedulerNotification::SceneLengthChanged(length) => {
                         Some(ServerMessage::SceneLength(length))
                     }
-                    SchedulerNotification::Nothing |
+                    // Map scene-modifying notifications to SceneValue to trigger client refresh
                     SchedulerNotification::UpdatedLine(_, _) |
                     SchedulerNotification::EnableFrames(_, _) |
                     SchedulerNotification::DisableFrames(_, _) |
                     SchedulerNotification::UploadedScript(_, _, _) |
                     SchedulerNotification::UpdatedLineFrames(_, _) |
                     SchedulerNotification::AddedLine(_) |
-                    SchedulerNotification::RemovedLine(_) => { None }
+                    SchedulerNotification::RemovedLine(_) => {
+                        // Fetch the latest scene state and send it
+                        let scene = state.scene_image.lock().await.clone();
+                        Some(ServerMessage::SceneValue(scene))
+                    }
+                    SchedulerNotification::Nothing => { None } // Explicitly ignore Nothing
                 };
 
                 if let Some(broadcast_msg) = broadcast_msg_opt {

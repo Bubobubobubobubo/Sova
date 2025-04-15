@@ -39,6 +39,8 @@ impl Component for EditorComponent {
                 app.editor.active_line.line_index,
                 app.editor.active_line.frame_index
             ));
+            // Clear any compilation error when exiting
+            app.editor.compilation_error = None;
             // Switch back to grid mode
             app.events.sender.send(crate::event::Event::App(crate::event::AppEvent::SwitchToGrid))?;
             app.set_status_message("Exited editor (Esc).".to_string());
@@ -57,6 +59,8 @@ impl Component for EditorComponent {
                         app.editor.textarea.lines().join("\n"),
                         ActionTiming::Immediate
                     ));
+                    // Clear error on successful send attempt
+                    app.editor.compilation_error = None;
                     app.set_status_message("Sent script content (Ctrl+S).".to_string());
                     app.flash_screen();
                     return Ok(true); // Handled
@@ -118,6 +122,8 @@ impl Component for EditorComponent {
                                 let target_line_idx = current_line_idx;
                                 let target_frame_idx = current_frame_idx - 1;
                                 // Validity check is implicit as we are moving within the same line and checked current_frame_idx > 0
+                                // Clear error when requesting new script
+                                app.editor.compilation_error = None;
                                 app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
                                 app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
                             }
@@ -129,6 +135,8 @@ impl Component for EditorComponent {
                                     }
                                     let target_line_idx = current_line_idx;
                                     let target_frame_idx = current_frame_idx + 1;
+                                    // Clear error when requesting new script
+                                    app.editor.compilation_error = None;
                                     app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
                                     app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
                                 } else { return Ok(true); /* Should not happen */ }
@@ -145,6 +153,8 @@ impl Component for EditorComponent {
                                     return Ok(true);
                                 }
                                 let target_frame_idx = min(current_frame_idx, target_line_len - 1);
+                                // Clear error when requesting new script
+                                app.editor.compilation_error = None;
                                 app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
                                 app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
                             }
@@ -160,6 +170,8 @@ impl Component for EditorComponent {
                                     return Ok(true);
                                 }
                                 let target_frame_idx = min(current_frame_idx, target_line_len - 1);
+                                // Clear error when requesting new script
+                                app.editor.compilation_error = None;
                                 app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
                                 app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
                             }
@@ -226,16 +238,50 @@ impl Component for EditorComponent {
         frame.render_widget(editor_block.clone(), area);
         let inner_editor_area = editor_block.inner(area);
 
-        let editor_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints([
-                Constraint::Min(0), // Contenu
-                Constraint::Length(1), // Aide
-            ])
-            .split(inner_editor_area);
-        
-        let editor_text_area = editor_chunks[0];
-        let editor_help_area = editor_chunks[1];
+        let editor_text_area: Rect;
+        let editor_help_area: Rect;
+        let error_area: Option<Rect> = None; // Initialize error_area
+
+        // Conditionally create layout based on compilation error
+        if let Some(error_msg) = &app.editor.compilation_error {
+            let editor_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0),       // Editor Content
+                    Constraint::Length(5),    // Error Panel (adjustable)
+                    Constraint::Length(1),    // Help Text
+                ])
+                .split(inner_editor_area);
+            editor_text_area = editor_chunks[0];
+            let error_panel_area = editor_chunks[1]; // Assign error_area inside the if block
+            editor_help_area = editor_chunks[2];
+
+            // Render error panel
+            let error_block = Block::default()
+                .title(" Compilation Error ")
+                .borders(Borders::ALL)
+                .border_type(BorderType::Plain)
+                .style(Style::default().fg(Color::Red));
+            let error_paragraph = Paragraph::new(error_msg.as_str())
+                .wrap(ratatui::widgets::Wrap { trim: true })
+                .block(error_block.clone());
+            frame.render_widget(error_paragraph, error_panel_area);
+            // render border separately to ensure it's drawn over content
+            frame.render_widget(error_block, error_panel_area); 
+
+        } else {
+            // Layout without error panel
+            let editor_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints([
+                    Constraint::Min(0), // Editor Content
+                    Constraint::Length(1), // Help Text
+                ])
+                .split(inner_editor_area);
+            editor_text_area = editor_chunks[0];
+            editor_help_area = editor_chunks[1];
+            // error_area remains None
+        }
 
         let mut text_area = app.editor.textarea.clone();
         text_area.set_line_number_style(Style::default().fg(Color::DarkGray));
