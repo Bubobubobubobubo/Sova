@@ -111,9 +111,9 @@ pub enum ServerMessage {
     LogMessage(TimedMessage),
     /// A chat message broadcast from another client or the server itself.
     Chat(String),
-    /// The current step positions within each line of the scene.
+    /// The current frame positions within each line of the scene.
     /// (Currently unused in favor of sending the whole `SceneValue`).
-    StepPosition(Vec<usize>),
+    FramePosition(Vec<usize>),
     /// Initial greeting message sent upon successful connection.
     /// Includes necessary state for the client to initialize (scene, devices, peers).
     Hello {
@@ -146,18 +146,18 @@ pub enum ServerMessage {
     InternalError(String),
     /// Broadcast containing the updated list of connected client names.
     PeersUpdated(Vec<String>),
-    /// Confirmation that a specific step has been enabled.
+    /// Confirmation that a specific frame has been enabled.
     /// (Currently unused in favor of sending the whole `SceneValue`).
-    StepEnabled(usize, usize),
-    /// Confirmation that a specific step has been disabled.
+    FrameEnabbled(usize, usize),
+    /// Confirmation that a specific frame has been disabled.
     /// (Currently unused in favor of sending the whole `SceneValue`).
-    StepDisabled(usize, usize),
+    FrameDisabled(usize, usize),
     /// Sends the requested script content to the client.
     ScriptContent {
         /// The index of the line the script belongs to.
-        sequence_idx: usize,
-        /// The index of the step within the line.
-        step_idx: usize,
+        line_idx: usize,
+        /// The index of the frame within the line.
+        frame_idx: usize,
         /// The script content as a string.
         content: String
     },
@@ -165,10 +165,10 @@ pub enum ServerMessage {
     Snapshot(Snapshot),
     /// Broadcasts an update to a specific peer's grid selection.
     PeerGridSelectionUpdate(String, GridSelection),
-    /// Broadcasts that a peer started editing a specific step.
-    PeerStartedEditing(String, usize, usize), // (username, sequence_idx, step_idx)
-    /// Broadcasts that a peer stopped editing a specific step.
-    PeerStoppedEditing(String, usize, usize), // (username, sequence_idx, step_idx)
+    /// Broadcasts that a peer started editing a specific frame.
+    PeerStartedEditing(String, usize, usize), // (username, line_idx, frame_idx)
+    /// Broadcasts that a peer stopped editing a specific frame 
+    PeerStoppedEditing(String, usize, usize), // (username, line_idxx, frame_idx)
 }
 
 /// Represents a complete snapshot of the server's current state.
@@ -233,25 +233,25 @@ async fn on_message(
     println!("{}", log_string);
     
     match msg {
-        ClientMessage::EnableFrames(sequence_id, steps) => {
-            if state.sched_iface.send(SchedulerMessage::EnableFrames(sequence_id, steps)).is_err() {
-                eprintln!("[!] Failed to send EnableSteps to scheduler.");
+        ClientMessage::EnableFrames(line_id, frames) => {
+            if state.sched_iface.send(SchedulerMessage::EnableFrames(line_id, frames)).is_err() {
+                eprintln!("[!] Failed to send EnableFrames to scheduler.");
             }
             ServerMessage::Success
         },
-        ClientMessage::DisableFrames(sequence_id, steps) => {
-            // Forward to scheduler with the vector of steps
-            if state.sched_iface.send(SchedulerMessage::DisableFrames(sequence_id, steps)).is_err() {
-                 eprintln!("[!] Failed to send DisableSteps to scheduler.");
+        ClientMessage::DisableFrames(line_id, frames) => {
+            // Forward to scheduler with the vector of frames
+            if state.sched_iface.send(SchedulerMessage::DisableFrames(line_id, frames)).is_err() {
+                 eprintln!("[!] Failed to send DisableFrames to scheduler.");
             }
             ServerMessage::Success
         },
-        ClientMessage::SetScript(sequence_id, step_id, script_content) => {
+        ClientMessage::SetScript(line_id, frame_id, script_content) => {
             // Compile and forward to scheduler
             match state.transcoder.lock().await.compile_active(&script_content) {
                 Ok(compiled_script) => {
-                    let script = Script::new(script_content, compiled_script, "bali".to_string(), step_id);
-                    if state.sched_iface.send(SchedulerMessage::UploadScript(sequence_id, step_id, script)).is_err() {
+                    let script = Script::new(script_content, compiled_script, "bali".to_string(), frame_id);
+                    if state.sched_iface.send(SchedulerMessage::UploadScript(line_id, frame_id, script)).is_err() {
                         eprintln!("[!] Failed to send UploadScript to scheduler.");
                          ServerMessage::InternalError("Scheduler communication error.".to_string())
                     } else {
@@ -264,39 +264,39 @@ async fn on_message(
                 }
             }
         },
-        ClientMessage::GetScript(sequence_idx, step_idx) => {
+        ClientMessage::GetScript(line_idx, frame_idx) => {
             // Lock the scene image to read the script content
             let scene = state.scene_image.lock().await;
-            match scene.lines.get(sequence_idx) {
+            match scene.lines.get(line_idx) {
                 Some(line) => {
-                    // Find the script Arc with the matching index (step_idx) within the line's scripts vector
-                    let script_opt = line.scripts.iter().find(|script_arc| script_arc.index == step_idx);
+                    // Find the script Arc with the matching index (frame_idx) within the line's scripts vector
+                    let script_opt = line.scripts.iter().find(|script_arc| script_arc.index == frame_idx);
 
                     match script_opt {
                         Some(script_arc) => {
                              // Found the script Arc, get the content from the inner Script
                             ServerMessage::ScriptContent {
-                                sequence_idx,
-                                step_idx,
+                                line_idx,
+                                frame_idx,
                                 content: script_arc.content.clone(),
                             }
                         }
                         None => {
-                             // Sequence valid, but no script found for this specific step_idx
-                             eprintln!("[!] No script found for Seq {}, Step {}", sequence_idx, step_idx);
+                             // Sequence valid, but no script found for this specific frame_idx
+                             eprintln!("[!] No script found for Line {}, Frame {}", line_idx, frame_idx);
                              // Send back a placeholder script content
                             ServerMessage::ScriptContent {
-                                sequence_idx,
-                                step_idx,
-                                content: format!("// No script found for Seq {}, Step {}", sequence_idx, step_idx),
+                                line_idx,
+                                frame_idx,
+                                content: format!("// No script found for Line {}, Frame {}", line_idx, frame_idx),
                             }
                         }
                     }
                 }
                 None => {
                      // Sequence index out of bounds
-                     eprintln!("[!] Invalid line index {} requested for script.", sequence_idx);
-                     ServerMessage::InternalError(format!("Invalid line index: {}", sequence_idx))
+                     eprintln!("[!] Invalid line index {} requested for script.", line_idx);
+                     ServerMessage::InternalError(format!("Invalid line index: {}", line_idx))
                 }
             }
         },
@@ -375,50 +375,50 @@ async fn on_message(
                 ServerMessage::InternalError("Failed to apply scene update to scheduler.".to_string())
             }
         },
-        ClientMessage::UpdateLineFrames(sequence_id, steps) => {
+        ClientMessage::UpdateLineFrames(line_id, frames) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::UpdateLineFrames(sequence_id, steps)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::UpdateLineFrames(line_id, frames)).is_ok() {
                  ServerMessage::Success
              } else {
-                 eprintln!("[!] Failed to send UpdateSequenceSteps to scheduler.");
+                 eprintln!("[!] Failed to send UpdateLineFrames to scheduler.");
                  ServerMessage::InternalError("Failed to send line update to scheduler.".to_string())
              }
          },
-        ClientMessage::InsertFrame(sequence_id, position) => {
+        ClientMessage::InsertFrame(line_id, position) => {
              // Forward to scheduler with a default value (e.g., 1.0)
-             let default_step_value = 1.0;
-             if state.sched_iface.send(SchedulerMessage::InsertFrame(sequence_id, position, default_step_value)).is_ok() {
+             let default_frame_value = 1.0;
+             if state.sched_iface.send(SchedulerMessage::InsertFrame(line_id, position, default_frame_value)).is_ok() {
                  ServerMessage::Success
              } else {
-                 eprintln!("[!] Failed to send InsertStep to scheduler.");
-                 ServerMessage::InternalError("Failed to send insert step update to scheduler.".to_string())
+                 eprintln!("[!] Failed to send InsertFrame to scheduler.");
+                 ServerMessage::InternalError("Failed to send insert frame update to scheduler.".to_string())
              }
          },
-         ClientMessage::RemoveFrame(sequence_id, position) => {
+         ClientMessage::RemoveFrame(line_id, position) => {
              // Forward to scheduler
-             if state.sched_iface.send(SchedulerMessage::RemoveFrame(sequence_id, position)).is_ok() {
+             if state.sched_iface.send(SchedulerMessage::RemoveFrame(line_id, position)).is_ok() {
                  ServerMessage::Success
              } else {
-                 eprintln!("[!] Failed to send RemoveStep to scheduler.");
-                 ServerMessage::InternalError("Failed to send remove step update to scheduler.".to_string())
+                 eprintln!("[!] Failed to send RemoveLine to scheduler.");
+                 ServerMessage::InternalError("Failed to send remove line update to scheduler.".to_string())
              }
          },
-        ClientMessage::SetLineStartFrame(sequence_id, start_step) => {
+        ClientMessage::SetLineStartFrame(line_id, start_frame) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::SetLineStartFrame(sequence_id, start_step)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::SetLineStartFrame(line_id, start_frame)).is_ok() {
                  ServerMessage::Success
              } else {
-                 eprintln!("[!] Failed to send SetSequenceStartStep to scheduler.");
-                 ServerMessage::InternalError("Failed to send line start step update to scheduler.".to_string())
+                 eprintln!("[!] Failed to send SetLineStartFrame to scheduler.");
+                 ServerMessage::InternalError("Failed to send line start frame update to scheduler.".to_string())
              }
         },
-        ClientMessage::SetLineEndFrame(sequence_id, end_step) => {
+        ClientMessage::SetLineEndFrame(line_id, end_frame) => {
              // Forward to scheduler
-              if state.sched_iface.send(SchedulerMessage::SetLineEndFrame(sequence_id, end_step)).is_ok() {
+              if state.sched_iface.send(SchedulerMessage::SetLineEndFrame(line_id, end_frame)).is_ok() {
                  ServerMessage::Success
              } else {
-                 eprintln!("[!] Failed to send SetSequenceEndStep to scheduler.");
-                 ServerMessage::InternalError("Failed to send line end step update to scheduler.".to_string())
+                 eprintln!("[!] Failed to send SetLineEndFrame to scheduler.");
+                 ServerMessage::InternalError("Failed to send line end frame update to scheduler.".to_string())
              }
         },
         ClientMessage::GetSnapshot => {
@@ -443,21 +443,21 @@ async fn on_message(
             // Return Success just to acknowledge receipt, though no client-side action needed for this specifically
             ServerMessage::Success 
         },
-        ClientMessage::StartedEditingFrame(seq_idx, step_idx) => {
+        ClientMessage::StartedEditingFrame(line_idx, frame_idx) => {
             // Broadcast notification that this client started editing
             let _ = state.update_sender.send(SchedulerNotification::PeerStartedEditingFrame(
                 client_name.clone(),
-                seq_idx,
-                step_idx
+                line_idx,
+                frame_idx
             ));
             ServerMessage::Success // Acknowledge receipt
         },
-        ClientMessage::StoppedEditingFrame(seq_idx, step_idx) => {
+        ClientMessage::StoppedEditingFrame(line_idx, frame_idx) => {
             // Broadcast notification that this client stopped editing
              let _ = state.update_sender.send(SchedulerNotification::PeerStoppedEditingFrame(
                  client_name.clone(),
-                 seq_idx,
-                 step_idx
+                 line_idx,
+                 frame_idx
              ));
             ServerMessage::Success // Acknowledge receipt
         }
@@ -650,7 +650,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                         }
                     }
                     SchedulerNotification::FramePositionChanged(positions) => {
-                        Some(ServerMessage::StepPosition(positions))
+                        Some(ServerMessage::FramePosition(positions))
                     }
                     SchedulerNotification::PeerGridSelectionChanged(sender_name, selection) => {
                         // Don't send the update back to the originator
@@ -660,18 +660,18 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                             None
                         }
                     }
-                    SchedulerNotification::PeerStartedEditingFrame(sender_name, seq_idx, step_idx) => {
+                    SchedulerNotification::PeerStartedEditingFrame(sender_name, line_idx, frame_idx) => {
                          // Don't send the update back to the originator
                          if sender_name != *client_name {
-                             Some(ServerMessage::PeerStartedEditing(sender_name, seq_idx, step_idx))
+                             Some(ServerMessage::PeerStartedEditing(sender_name, line_idx, frame_idx))
                          } else {
                              None
                          }
                     }
-                    SchedulerNotification::PeerStoppedEditingFrame(sender_name, seq_idx, step_idx) => {
+                    SchedulerNotification::PeerStoppedEditingFrame(sender_name, line_idx, frame_idx) => {
                          // Don't send the update back to the originator
                          if sender_name != *client_name {
-                             Some(ServerMessage::PeerStoppedEditing(sender_name, seq_idx, step_idx))
+                             Some(ServerMessage::PeerStoppedEditing(sender_name, line_idx, frame_idx))
                          } else {
                              None
                          }

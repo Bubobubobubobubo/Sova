@@ -22,7 +22,6 @@ use crate::{
         Scene, Line,
     },
     protocol::TimedMessage,
-    server::Snapshot,
     shared_types::GridSelection,
 };
 
@@ -262,7 +261,7 @@ impl Scheduler {
                      let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
                      self.processed_scene_modification = true;
                  } else {
-                     eprintln!("[!] Scheduler: SetLineStartStep received for invalid line index {}", line_index);
+                     eprintln!("[!] Scheduler: SetLineStartFrame received for invalid line index {}", line_index);
                  }
             }
             SchedulerMessage::SetLineEndFrame(line_index, end_frame) => {
@@ -302,31 +301,31 @@ impl Scheduler {
         let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
     }
 
-    pub fn disable_step(&mut self, line: usize, step: usize) {
-        self.scene.mut_line(line).disable_frame(step);
+    pub fn disable_frame(&mut self, line: usize, frame: usize) {
+        self.scene.mut_line(line).disable_frame(frame);
         let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
     }
     
-    pub fn enable_step(&mut self, line: usize, step: usize) {
-        self.scene.mut_line(line).enable_frame(step);
+    pub fn enable_frame(&mut self, line: usize, frame: usize) {
+        self.scene.mut_line(line).enable_frame(frame);
         let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
     }
 
-    pub fn disable_frames(&mut self, line_idx: usize, steps: &[usize]) {
+    pub fn disable_frames(&mut self, line_idx: usize, frames: &[usize]) {
         if let Some(line) = self.scene.lines.get_mut(line_idx) {
-            line.disable_frames(steps);
+            line.disable_frames(frames);
             let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
         } else {
-            eprintln!("[!] Scheduler: DisableSteps received for invalid line index {}", line_idx);
+            eprintln!("[!] Scheduler: DisableFrames received for invalid line index {}", line_idx);
         }
     }
 
-    pub fn enable_frames(&mut self, line_idx: usize, steps: &[usize]) {
+    pub fn enable_frames(&mut self, line_idx: usize, frames: &[usize]) {
         if let Some(line) = self.scene.lines.get_mut(line_idx) {
-            line.enable_frames(steps);
+            line.enable_frames(frames);
             let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
         } else {
-            eprintln!("[!] Scheduler: EnableSteps received for invalid line index {}", line_idx);
+            eprintln!("[!] Scheduler: EnableFrames received for invalid line index {}", line_idx);
         }
     }
 
@@ -354,27 +353,27 @@ impl Scheduler {
 
             let date = self.theoretical_date();
 
-            let mut next_step_delay = SyncTime::MAX;
+            let mut next_frame_delay = SyncTime::MAX;
             let mut current_positions = Vec::with_capacity(self.scene.n_lines());
             let mut positions_changed = false;
 
             for line in self.scene.lines_iter_mut() {
-                let (step, iter, scheduled_date, track_step_delay) = Self::frame_index(&self.clock, line, date);
-                next_step_delay = std::cmp::min(next_step_delay, track_step_delay);
+                let (frame, iter, scheduled_date, track_frame_delay) = Self::frame_index(&self.clock, line, date);
+                next_frame_delay = std::cmp::min(next_frame_delay, track_frame_delay);
 
-                current_positions.push(step);
+                current_positions.push(frame);
 
-                let has_changed_step = (step != line.current_frame) || (iter != line.current_iteration);
+                let has_changed_frame = (frame != line.current_frame) || (iter != line.current_iteration);
 
-                if has_changed_step {
+                if has_changed_frame {
                     line.frames_passed += 1;
                     positions_changed = true;
                 }
 
-                if step < usize::MAX && has_changed_step && line.is_frame_enabled(step) {
-                    let script = Arc::clone(&line.scripts[step]);
+                if frame < usize::MAX && has_changed_frame && line.is_frame_enabled(frame) {
+                    let script = Arc::clone(&line.scripts[frame]);
                     self.executions.push(ScriptExecution::execute_at(script, line.index, scheduled_date));
-                    line.current_frame = step;
+                    line.current_frame = frame;
                     line.frames_executed += 1;
                 }
                 line.current_iteration = iter;
@@ -386,7 +385,7 @@ impl Scheduler {
 
             let next_exec_delay = self.execution_loop();
 
-            let next_delay = std::cmp::min(next_exec_delay, next_step_delay);
+            let next_delay = std::cmp::min(next_exec_delay, next_frame_delay);
             if next_delay > 0 {
                 self.next_wait = Some(next_delay);
             } else {
@@ -441,7 +440,7 @@ impl Scheduler {
             line.insert_frame(position, value);
             let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
         } else {
-            eprintln!("[!] Scheduler: InsertStep received for invalid line index {}", line_idx);
+            eprintln!("[!] Scheduler: InsertFrame received for invalid line index {}", line_idx);
         }
     }
 
@@ -450,7 +449,7 @@ impl Scheduler {
             line.remove_frame(position);
             let _ = self.update_notifier.send(SchedulerNotification::UpdatedScene(self.scene.clone()));
         } else {
-            eprintln!("[!] Scheduler: RemoveStep received for invalid line index {}", line_idx);
+            eprintln!("[!] Scheduler: RemoveFrame received for invalid line index {}", line_idx);
         }
     }
 

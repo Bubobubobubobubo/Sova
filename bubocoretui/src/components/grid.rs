@@ -32,16 +32,16 @@ impl Component for GridComponent {
     ///
     /// Handles:
     /// - Grid-specific actions:
-    ///   - `+`: Sends a message to the server to add a default step (length 1.0) to the current line.
-    ///   - `-`: Sends a message to the server to remove the last step from the current line.
+    ///   - `+`: Sends a message to the server to add a default frame (length 1.0) to the current line.
+    ///   - `-`: Sends a message to the server to remove the last frame from the current line.
     ///   - Arrow keys (`Up`, `Down`, `Left`, `Right`): Navigates the grid cursor.
     ///   - Shift + Arrow keys: Extend the selection range.
-    ///   - `Space`: Sends a message to the server to toggle the enabled/disabled state of the selected step.
-    ///   - `Enter`: Sends a message to request the script for the selected step and edit it.
-    ///   - `<` / `,`: Decrease step length.
-    ///   - `>` / `.`: Increase step length.
-    ///   - `b`: Mark selected step as the line start.
-    ///   - `e`: Mark selected step as the line end.
+    ///   - `Space`: Sends a message to the server to toggle the enabled/disabled state of the selected frame.
+    ///   - `Enter`: Sends a message to request the script for the selected frame and edit it.
+    ///   - `<` / `,`: Decrease frame length.
+    ///   - `>` / `.`: Increase frame length.
+    ///   - `b`: Mark selected frame as the line start.
+    ///   - `e`: Mark selected frame as the line end.
     ///   - `a`: Add a new line.
     ///   - `d`: Remove the last line.
     ///   - `c`: Copy the selected cells to the clipboard.
@@ -64,7 +64,7 @@ impl Component for GridComponent {
         let scene_opt = app.editor.scene.as_ref();
         let num_cols = scene_opt.map_or(0, |p| p.lines.len());
 
-        // Handle 'a' regardless of whether sequences exist
+        // Handle 'a' regardless of whether lines exist
         if key_event.code == KeyCode::Char('a') {
              // Send the request to add a line; the server will create the default one.
             app.send_client_message(ClientMessage::SchedulerControl(
@@ -97,7 +97,7 @@ impl Component for GridComponent {
                     handled = false;
                 }
             }
-            // Add a new step to the line (default length 1.0) after the cursor
+            // Add a new frame to the line (default length 1.0) after the cursor
             KeyCode::Char('+') => {
                  let cursor_pos = current_selection.cursor_pos();
                  current_selection = GridSelection::single(cursor_pos.0, cursor_pos.1); // Keep selection single
@@ -109,18 +109,18 @@ impl Component for GridComponent {
                      // Check if the insert position is valid (can be equal to len for appending)
                      if insert_pos <= line.frames.len() {
                          app.send_client_message(ClientMessage::InsertFrame(col_idx, insert_pos));
-                         app.set_status_message(format!("Requested inserting step at ({}, {})", col_idx, insert_pos));
+                         app.set_status_message(format!("Requested inserting frame at ({}, {})", col_idx, insert_pos));
                      } else {
-                         app.add_log(LogLevel::Warn, format!("Attempted to insert step at invalid position {} in line {}", insert_pos, col_idx));
-                         app.set_status_message("Cannot insert step here".to_string());
+                         app.add_log(LogLevel::Warn, format!("Attempted to insert frame at invalid position {} in line {}", insert_pos, col_idx));
+                         app.set_status_message("Cannot insert frame here".to_string());
                          handled = false;
                      }
                  } else {
-                     app.set_status_message("Invalid line for adding step".to_string());
+                     app.set_status_message("Invalid line for adding frame".to_string());
                      handled = false;
                  }
             }
-            // Remove the step immediately AFTER the cursor position
+            // Remove the frame immediately AFTER the cursor position
             KeyCode::Char('-') => {
                 let cursor_pos = current_selection.cursor_pos();
                 current_selection = GridSelection::single(cursor_pos.0, cursor_pos.1); // Keep selection single
@@ -132,17 +132,17 @@ impl Component for GridComponent {
                      // Check if the position to remove is valid
                      if remove_pos < line.frames.len() {
                          app.send_client_message(ClientMessage::RemoveFrame(col_idx, remove_pos));
-                         app.set_status_message(format!("Requested removing step at ({}, {})", col_idx, remove_pos));
+                         app.set_status_message(format!("Requested removing frame at ({}, {})", col_idx, remove_pos));
                      } else {
-                         app.set_status_message(format!("No step found at ({}, {}) to remove", col_idx, remove_pos));
+                         app.set_status_message(format!("No frame found at ({}, {}) to remove", col_idx, remove_pos));
                          handled = false; // Indicate nothing was done
                      }
                  } else {
-                     app.set_status_message("Invalid line for removing step".to_string());
+                     app.set_status_message("Invalid line for removing frame".to_string());
                      handled = false;
                  }
             }
-            // Request the script for the selected step form the server and edit it
+            // Request the script for the selected frame form the server and edit it
             KeyCode::Enter => {
                 let cursor_pos = current_selection.cursor_pos();
                 current_selection = GridSelection::single(cursor_pos.0, cursor_pos.1);
@@ -153,9 +153,9 @@ impl Component for GridComponent {
                         if row_idx < line.frames.len() {
                             // Send request to server for the script content
                             app.send_client_message(ClientMessage::GetScript(col_idx, row_idx));
-                            // Also notify server that we START editing this step
+                            // Also notify server that we START editing this frame
                             app.send_client_message(ClientMessage::StartedEditingFrame(col_idx, row_idx));
-                            status_update = Some(format!("Requested script for Seq {}, Step {}", col_idx, row_idx));
+                            status_update = Some(format!("Requested script for Line {}, Frame {}", col_idx, row_idx));
                         } else {
                             status_update = Some("Cannot request script for an empty slot".to_string());
                             handled = false;
@@ -172,93 +172,93 @@ impl Component for GridComponent {
                 if let Some(status) = status_update { app.set_status_message(status); }
                 // Note: We don't switch to the editor here. We wait for the server response.
             }
-            // Increment step length (fixed to 0.25 increments for now)
+            // Increment frame length (fixed to 0.25 increments for now)
             KeyCode::Char('>') | KeyCode::Char('.') => {
                 let ((top, left), (bottom, right)) = current_selection.bounds();
-                let mut modified_sequences: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
-                let mut steps_changed = 0;
+                let mut modified_lines: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
+                let mut frames_changed = 0;
 
                 // Iterate over the selection bounds
                 for col_idx in left..=right {
                     if let Some(line) = scene.lines.get(col_idx) {
-                        let mut current_steps = line.frames.clone();
+                        let mut current_frames = line.frames.clone();
                         let mut was_modified = false;
                         for row_idx in top..=bottom {
-                            if row_idx < current_steps.len() {
-                                let current_length = current_steps[row_idx];
+                            if row_idx < current_frames.len() {
+                                let current_length = current_frames[row_idx];
                                 let new_length = current_length + 0.25;
-                                current_steps[row_idx] = new_length;
+                                current_frames[row_idx] = new_length;
                                 was_modified = true;
-                                steps_changed += 1;
+                                frames_changed += 1;
                             }
                         }
                         if was_modified {
-                            modified_sequences.insert(col_idx, current_steps);
+                            modified_lines.insert(col_idx, current_frames);
                         }
                     }
                 }
 
-                // Send messages for modified sequences
-                for (col, updated_steps) in modified_sequences {
-                     app.send_client_message(ClientMessage::UpdateLineFrames(col, updated_steps));
+                // Send messages for modified lines
+                for (col, updated_frames) in modified_lines {
+                     app.send_client_message(ClientMessage::UpdateLineFrames(col, updated_frames));
                 }
 
-                if steps_changed > 0 {
-                    app.set_status_message(format!("Requested increasing length for {} steps", steps_changed));
+                if frames_changed > 0 {
+                    app.set_status_message(format!("Requested increasing length for {} frames", frames_changed));
                 } else {
-                    app.set_status_message("No valid steps in selection to increase length".to_string());
+                    app.set_status_message("No valid frames in selection to increase length".to_string());
                     handled = false;
                 }
             }
-            // Decrement step length (fixed to 0.25 increments for now)
+            // Decrement frame length (fixed to 0.25 increments for now)
             KeyCode::Char('<') | KeyCode::Char(',') => {
                 let ((top, left), (bottom, right)) = current_selection.bounds();
-                let mut modified_sequences: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
-                let mut steps_changed = 0;
+                let mut modified_lines: std::collections::HashMap<usize, Vec<f64>> = std::collections::HashMap::new();
+                let mut frames_changed = 0;
 
                 for col_idx in left..=right {
                     if let Some(line) = scene.lines.get(col_idx) {
-                        let mut current_steps = line.frames.clone();
+                        let mut current_frames = line.frames.clone();
                         let mut was_modified = false;
                         for row_idx in top..=bottom {
-                            if row_idx < current_steps.len() {
-                                let current_length = current_steps[row_idx];
+                            if row_idx < current_frames.len() {
+                                let current_length = current_frames[row_idx];
                                 let new_length = (current_length - 0.25).max(0.01); // Keep minimum
-                                current_steps[row_idx] = new_length;
+                                current_frames[row_idx] = new_length;
                                 was_modified = true;
-                                steps_changed += 1;
+                                frames_changed += 1;
                             }
                         }
                         if was_modified {
-                            modified_sequences.insert(col_idx, current_steps);
+                            modified_lines.insert(col_idx, current_frames);
                         }
                     }
                 }
 
-                for (col, updated_steps) in modified_sequences {
-                     app.send_client_message(ClientMessage::UpdateLineFrames(col, updated_steps));
+                for (col, updated_frames) in modified_lines {
+                     app.send_client_message(ClientMessage::UpdateLineFrames(col, updated_frames));
                 }
 
-                if steps_changed > 0 {
-                    app.set_status_message(format!("Requested decreasing length for {} steps", steps_changed));
+                if frames_changed > 0 {
+                    app.set_status_message(format!("Requested decreasing length for {} frames", frames_changed));
                 } else {
-                    app.set_status_message("No valid steps in selection to decrease length".to_string());
+                    app.set_status_message("No valid frames in selection to decrease length".to_string());
                     handled = false;
                 }
             }
 
-            // Set the start step of the line
+            // Set the start frame of the line
             KeyCode::Char('b') => {
                  let cursor_pos = current_selection.cursor_pos();
                  current_selection = GridSelection::single(cursor_pos.0, cursor_pos.1);
                  let (row_idx, col_idx) = cursor_pos;
                  if let Some(line) = scene.lines.get(col_idx) {
                      if row_idx < line.frames.len() {
-                         let start_step_val = if line.start_frame == Some(row_idx) { None } else { Some(row_idx) };
-                         app.send_client_message(ClientMessage::SetLineStartFrame(col_idx, start_step_val));
-                         app.set_status_message(format!("Requested setting start step to {:?} for Seq {}", start_step_val, col_idx));
+                         let start_frame_val = if line.start_frame == Some(row_idx) { None } else { Some(row_idx) };
+                         app.send_client_message(ClientMessage::SetLineStartFrame(col_idx, start_frame_val));
+                         app.set_status_message(format!("Requested setting start frame to {:?} for Line {}", start_frame_val, col_idx));
                      } else {
-                         app.set_status_message("Cannot set start step on empty slot".to_string());
+                         app.set_status_message("Cannot set start frame on empty slot".to_string());
                          handled = false;
                      }
                  } else { handled = false; }
@@ -269,22 +269,22 @@ impl Component for GridComponent {
                  let (row_idx, col_idx) = cursor_pos;
                  if let Some(line) = scene.lines.get(col_idx) {
                      if row_idx < line.frames.len() {
-                         let end_step_val = if line.end_frame == Some(row_idx) { None } else { Some(row_idx) };
-                         app.send_client_message(ClientMessage::SetLineEndFrame(col_idx, end_step_val));
-                         app.set_status_message(format!("Requested setting end step to {:?} for Seq {}", end_step_val, col_idx));
+                         let end_frame_val = if line.end_frame == Some(row_idx) { None } else { Some(row_idx) };
+                         app.send_client_message(ClientMessage::SetLineEndFrame(col_idx, end_frame_val));
+                         app.set_status_message(format!("Requested setting end frame to {:?} for Line {}", end_frame_val, col_idx));
                      } else {
-                         app.set_status_message("Cannot set end step on empty slot".to_string());
+                         app.set_status_message("Cannot set end frame on empty slot".to_string());
                          handled = false;
                      }
                  } else { handled = false; }
             }
-            // Down arrow key: Move the cursor one step down (if shift is pressed, extend the selection)
+            // Down arrow key: Move the cursor one frame down (if shift is pressed, extend the selection)
             KeyCode::Down => {
                 let mut end_pos = current_selection.end;
-                if let Some(seq) = scene.lines.get(end_pos.1) {
-                    let steps_in_col = seq.frames.len();
-                    if steps_in_col > 0 {
-                        end_pos.0 = min(end_pos.0 + 1, steps_in_col - 1);
+                if let Some(line) = scene.lines.get(end_pos.1) {
+                    let frames_in_col = line.frames.len();
+                    if frames_in_col > 0 {
+                        end_pos.0 = min(end_pos.0 + 1, frames_in_col - 1);
                     }
                 }
                 if is_shift_pressed {
@@ -293,7 +293,7 @@ impl Component for GridComponent {
                      current_selection = GridSelection::single(end_pos.0, end_pos.1);
                  }
             }
-            // Up arrow key: Move the cursor one step up (if shift is pressed, decrease the selection)
+            // Up arrow key: Move the cursor one frame up (if shift is pressed, decrease the selection)
             KeyCode::Up => {
                 let mut end_pos = current_selection.end;
                 end_pos.0 = end_pos.0.saturating_sub(1);
@@ -308,8 +308,8 @@ impl Component for GridComponent {
                 let mut end_pos = current_selection.end;
                 let next_col = end_pos.1.saturating_sub(1);
                 if next_col != end_pos.1 {
-                     let steps_in_next_col = scene.lines.get(next_col).map_or(0, |s| s.frames.len());
-                     end_pos.0 = min(end_pos.0, steps_in_next_col.saturating_sub(1));
+                     let frames_in_next_col = scene.lines.get(next_col).map_or(0, |s| s.frames.len());
+                     end_pos.0 = min(end_pos.0, frames_in_next_col.saturating_sub(1));
                      end_pos.1 = next_col;
 
                      if is_shift_pressed {
@@ -326,8 +326,8 @@ impl Component for GridComponent {
                 let mut end_pos = current_selection.end;
                 let next_col = min(end_pos.1 + 1, num_cols.saturating_sub(1)); // Ensure not out of bounds
                  if next_col != end_pos.1 { // Check if column actually changed
-                     let steps_in_next_col = scene.lines.get(next_col).map_or(0, |s| s.frames.len());
-                     end_pos.0 = min(end_pos.0, steps_in_next_col.saturating_sub(1)); // Adjust row
+                     let frames_in_next_col = scene.lines.get(next_col).map_or(0, |s| s.frames.len());
+                     end_pos.0 = min(end_pos.0, frames_in_next_col.saturating_sub(1)); // Adjust row
                      end_pos.1 = next_col;
 
                      if is_shift_pressed {
@@ -339,12 +339,12 @@ impl Component for GridComponent {
                      handled = false; 
                  }
             }
-            // Enable / Disable steps
+            // Enable / Disable frames
             KeyCode::Char(' ') => {
                  let ((top, left), (bottom, right)) = current_selection.bounds();
                  let mut to_enable: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
                  let mut to_disable: std::collections::HashMap<usize, Vec<usize>> = std::collections::HashMap::new();
-                 let mut steps_toggled = 0;
+                 let mut frames_toggled = 0;
 
                  for col_idx in left..=right {
                      if let Some(line) = scene.lines.get(col_idx) {
@@ -356,7 +356,7 @@ impl Component for GridComponent {
                                  } else {
                                      to_enable.entry(col_idx).or_default().push(row_idx);
                                  }
-                                 steps_toggled += 1;
+                                 frames_toggled += 1;
                              }
                          }
                      }
@@ -374,23 +374,23 @@ impl Component for GridComponent {
                     }
                  }
 
-                 if steps_toggled > 0 {
-                     app.set_status_message(format!("Requested toggling {} steps", steps_toggled));
+                 if frames_toggled > 0 {
+                     app.set_status_message(format!("Requested toggling {} frames", frames_toggled));
                  } else {
-                     app.set_status_message("No valid steps in selection to toggle".to_string());
+                     app.set_status_message("No valid frames in selection to toggle".to_string());
                      handled = false;
                  }
             }
-            // Remove the last step from the line
+            // Remove the last frame from the line
             KeyCode::Char('d') => {
                 let cursor_pos = current_selection.cursor_pos();
                 current_selection = GridSelection::single(cursor_pos.0, cursor_pos.1);
-                let mut last_sequence_index_opt : Option<usize> = None;
+                let mut last_line_index_opt : Option<usize> = None;
 
                 if let Some(scene) = &app.editor.scene {
                      if scene.lines.len() > 0 {
-                        let last_sequence_index = scene.lines.len() - 1;
-                        last_sequence_index_opt = Some(last_sequence_index);
+                        let last_line_index = scene.lines.len() - 1;
+                        last_line_index_opt = Some(last_line_index);
                     } else {
                          app.set_status_message("No lines to remove".to_string());
                          handled = false;
@@ -401,11 +401,11 @@ impl Component for GridComponent {
                 }
 
                 if handled {
-                     if let Some(last_sequence_index) = last_sequence_index_opt {
+                     if let Some(last_line_index) = last_line_index_opt {
                         app.send_client_message(ClientMessage::SchedulerControl(
-                            bubocorelib::schedule::SchedulerMessage::RemoveLine(last_sequence_index)
+                            bubocorelib::schedule::SchedulerMessage::RemoveLine(last_line_index)
                         ));
-                        app.set_status_message(format!("Requested removing line {}", last_sequence_index));
+                        app.set_status_message(format!("Requested removing line {}", last_line_index));
                     }
                 }
 
@@ -432,7 +432,7 @@ impl Component for GridComponent {
                             length,
                             is_enabled,
                         };
-                        app.set_status_message(format!("Requesting script for copy: Seq {}, Step {}", col_idx, row_idx));
+                        app.set_status_message(format!("Requesting script for copy: Line {}, Frame {}", col_idx, row_idx));
                         app.add_log(LogLevel::Info, format!("Requested script copy for ({}, {}). Length: {}, Enabled: {}", col_idx, row_idx, length, is_enabled));
                         handled_copy = true; // Successfully initiated copy
                     } else {
@@ -455,13 +455,13 @@ impl Component for GridComponent {
                          let mut messages_sent = 0;
                          let mut script_pasted = false;
 
-                         if let Some(target_sequence) = scene.lines.get(target_col) {
-                             if target_row < target_sequence.frames.len() {
+                         if let Some(target_line) = scene.lines.get(target_col) {
+                             if target_row < target_line.frames.len() {
                                  // 1. Paste Length
-                                 let mut updated_steps = target_sequence.frames.clone();
-                                 if target_row < updated_steps.len() { // Double check bounds
-                                     updated_steps[target_row] = copied_data.length;
-                                     app.send_client_message(ClientMessage::UpdateLineFrames(target_col, updated_steps));
+                                 let mut updated_frames = target_line.frames.clone();
+                                 if target_row < updated_frames.len() { // Double check bounds
+                                     updated_frames[target_row] = copied_data.length;
+                                     app.send_client_message(ClientMessage::UpdateLineFrames(target_col, updated_frames));
                                      messages_sent += 1;
                                  }
 
@@ -597,10 +597,10 @@ impl Component for GridComponent {
         let help_spans_line2 = vec![
             Span::styled("Shift+Arrows", key_style), Span::raw(":Select  "),
             Span::styled("Esc", key_style), Span::raw(":Reset Sel  "),
-            Span::styled("+", key_style), Span::raw("/"), Span::styled("-", key_style), Span::raw(":Ins/Del Step  "),
-            Span::styled("a", key_style), Span::raw("/"), Span::styled("d", key_style), Span::raw(":Add/Rem Seq  "),
+            Span::styled("+", key_style), Span::raw("/"), Span::styled("-", key_style), Span::raw(":Ins/Del Frame  "),
+            Span::styled("a", key_style), Span::raw("/"), Span::styled("d", key_style), Span::raw(":Add/Rem Line "),
             Span::styled("c", key_style), Span::raw("/"), Span::styled("p", key_style),
-            Span::raw(":Copy/Paste Step"),
+            Span::raw(":Copy/Paste Frame"),
         ];
 
         // Split the help area into two rows
@@ -614,20 +614,20 @@ impl Component for GridComponent {
 
         // Grid table (requiring scene data)
         if let Some(scene) = &app.editor.scene {
-            let sequences = &scene.lines;
-            if sequences.is_empty() {
+            let lines = &scene.lines;
+            if lines.is_empty() {
                 frame.render_widget(Paragraph::new("No lines in scene. Use 'a' to add.").yellow().centered(), table_area);
                 return;
             }
 
-            let num_sequences = sequences.len();
-            // Determine the maximum number of steps across all sequences for table height
-            let max_steps = sequences.iter().map(|seq| seq.frames.len()).max().unwrap_or(0);
+            let num_lines = lines.len();
+            // Determine the maximum number of frames across all lines for table height
+            let max_frames = lines.iter().map(|line| line.frames.len()).max().unwrap_or(0);
 
-            // Placeholder message if sequences exist but have no steps
-            if max_steps == 0 && num_sequences > 0 {
+            // Placeholder message if lines exist but have no frames
+            if max_frames == 0 && num_lines > 0 {
                 frame.render_widget(
-                    Paragraph::new("Sequences have no steps. Use '+' to add.")
+                    Paragraph::new("Lines have no frames. Use '+' to add.")
                     .yellow()
                     .centered(), 
                     table_area
@@ -648,15 +648,15 @@ impl Component for GridComponent {
             let bar_char_inactive = " ";
 
             // Calculate column widths (distribute available width, min width 6)
-            let col_width = if num_sequences > 0 { table_area.width / num_sequences as u16 } else { table_area.width };
+            let col_width = if num_lines > 0 { table_area.width / num_lines as u16 } else { table_area.width };
             let widths: Vec<Constraint> = std::iter::repeat(Constraint::Min(col_width.max(6)))
-                .take(num_sequences)
+                .take(num_lines)
                 .collect();
 
-            // Table Header (SEQ 1, SEQ 2, ...)
-            let header_cells = sequences.iter().enumerate()
+            // Table Header (LINE 1, LINE 2, ...)
+            let header_cells = lines.iter().enumerate()
                 .map(|(i, _)| {
-                     let text = format!("SEQ {}", i + 1);
+                     let text = format!("LINE {}", i + 1);
                      Cell::from(Line::from(text).alignment(ratatui::layout::Alignment::Center))
                          .style(header_style)
                  });
@@ -664,40 +664,40 @@ impl Component for GridComponent {
 
             // Create Padding Row: use default style
             let padding_cells = std::iter::repeat(Cell::from("").style(Style::default())) 
-                                  .take(num_sequences);
+                                  .take(num_lines);
             let padding_row = Row::new(padding_cells).height(1); // Height 1 for one line of padding
 
             // Create Data Rows 
-            let data_rows = (0..max_steps).map(|step_idx| {
-                 let cells = sequences.iter().enumerate().map(|(col_idx, seq)| {
-                    if step_idx < seq.frames.len() {
-                        let step_val = seq.frames[step_idx];
-                        let is_enabled = seq.is_frame_enabled(step_idx);
+            let data_rows = (0..max_frames).map(|frame_idx| {
+                 let cells = lines.iter().enumerate().map(|(col_idx, line)| {
+                    if frame_idx < line.frames.len() {
+                        let frame_val = line.frames[frame_idx];
+                        let is_enabled = line.is_frame_enabled(frame_idx);
                         let base_style = if is_enabled { enabled_style } else { disabled_style };
-                        let is_current_step = app.server.current_step_positions.as_ref()
+                        let is_current_frame = app.server.current_frame_positions.as_ref()
                             .and_then(|positions| positions.get(col_idx))
-                            .map_or(false, |&current| current == step_idx);
-                        let should_draw_bar = if let Some(start) = seq.start_frame {
-                            if let Some(end) = seq.end_frame { step_idx >= start && step_idx <= end }
-                            else { step_idx >= start }
-                        } else { if let Some(end) = seq.end_frame { step_idx <= end } else { false } };
+                            .map_or(false, |&current| current == frame_idx);
+                        let should_draw_bar = if let Some(start) = line.start_frame {
+                            if let Some(end) = line.end_frame { frame_idx >= start && frame_idx <= end }
+                            else { frame_idx >= start }
+                        } else { if let Some(end) = line.end_frame { frame_idx <= end } else { false } };
                         let bar_char = if should_draw_bar { bar_char_active } else { bar_char_inactive };
-                        let play_marker = if is_current_step { "▶" } else { " " };
+                        let play_marker = if is_current_frame { "▶" } else { " " };
                         let bar_span = Span::styled(bar_char, if should_draw_bar { start_end_marker_style } else { Style::default() });
                         let play_marker_span = Span::raw(play_marker);
-                        let value_span = Span::raw(format!("{:.2}", step_val));
+                        let value_span = Span::raw(format!("{:.2}", frame_val));
                         let ((top, left), (bottom, right)) = app.interface.components.grid_selection.bounds();
-                        let is_selected_locally = step_idx >= top && step_idx <= bottom && col_idx >= left && col_idx <= right;
-                        let is_local_cursor = (step_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
+                        let is_selected_locally = frame_idx >= top && frame_idx <= bottom && col_idx >= left && col_idx <= right;
+                        let is_local_cursor = (frame_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
 
                         // Find if a peer's cursor is on this cell
                         let peer_on_cell: Option<(String, GridSelection)> = app.server.peer_sessions.iter()
                             .filter_map(|(name, peer_state)| peer_state.grid_selection.map(|sel| (name.clone(), sel)))
-                            .find(|(_, peer_selection)| (step_idx, col_idx) == peer_selection.cursor_pos());
+                            .find(|(_, peer_selection)| (frame_idx, col_idx) == peer_selection.cursor_pos());
 
                         // Check if any peer is editing this specific cell *before* the main logic block
                         let is_being_edited_by_peer = app.server.peer_sessions.values()
-                            .any(|peer_state| peer_state.editing_step == Some((col_idx, step_idx)));
+                            .any(|peer_state| peer_state.editing_frame == Some((col_idx, frame_idx)));
 
                         // Determine final style and content based on state
                         let mut final_style;
@@ -734,15 +734,15 @@ impl Component for GridComponent {
                         // Empty Cell Logic 
                         let peer_on_cell: Option<(String, GridSelection)> = app.server.peer_sessions.iter()
                             .filter_map(|(name, peer_state)| peer_state.grid_selection.map(|sel| (name.clone(), sel)))
-                            .find(|(_, peer_selection)| (step_idx, col_idx) == peer_selection.cursor_pos());
+                            .find(|(_, peer_selection)| (frame_idx, col_idx) == peer_selection.cursor_pos());
 
                          let mut final_style;
                          let cell_content;
                          let cell_content_span; // Use a different name
 
-                         let is_local_cursor = (step_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
+                         let is_local_cursor = (frame_idx, col_idx) == app.interface.components.grid_selection.cursor_pos();
                          let is_being_edited_by_peer = app.server.peer_sessions.values()
-                                .any(|peer_state| peer_state.editing_step == Some((col_idx, step_idx)));
+                                .any(|peer_state| peer_state.editing_frame == Some((col_idx, frame_idx)));
 
                          // 1. Determine Base Style & Content Span
                          if is_local_cursor {

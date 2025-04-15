@@ -384,7 +384,7 @@ impl Component for NavigationComponent {
                                 if let Some(seq) = scene.lines.get(seq_idx) {
                                     if step_idx < seq.frames.len() {
                                         let is_enabled = seq.is_frame_enabled(step_idx);
-                                        let is_current = app.server.current_step_positions.as_ref()
+                                        let is_current = app.server.current_frame_positions.as_ref()
                                             .and_then(|p| p.get(seq_idx))
                                             .map_or(false, |&current| current == step_idx);
 

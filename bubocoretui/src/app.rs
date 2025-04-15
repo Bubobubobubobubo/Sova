@@ -78,7 +78,7 @@ pub struct PeerSessionState {
     /// The peer's last known grid cursor/selection state.
     pub grid_selection: Option<GridSelection>,
     /// The specific step the peer is currently editing (if any).
-    pub editing_step: Option<(usize, usize)>, // (sequence_idx, step_idx)
+    pub editing_frame: Option<(usize, usize)>, // (sequence_idx, step_idx)
     // Add other states later, e.g.:
     // pub current_focus: Option<FocusArea>,
     // pub editing_status: Option<EditingStatus>,
@@ -135,7 +135,7 @@ pub struct ServerState {
     /// State related to Ableton Link synchronization.
     pub link: Link,
     /// Current step index for each line, updated by the server.
-    pub current_step_positions: Option<Vec<usize>>,
+    pub current_frame_positions: Option<Vec<usize>>,
     /// Stores the last known state of other connected peers.
     pub peer_sessions: HashMap<String, PeerSessionState>,
 }
@@ -232,7 +232,7 @@ impl App {
                 username: username.clone(),
                 network: NetworkManager::new(ip, port, username, event_sender),
                 connection_state: None,
-                current_step_positions: None,
+                current_frame_positions: None,
                 peer_sessions: HashMap::new(),
             },
             interface: InterfaceState {
@@ -400,7 +400,7 @@ impl App {
             }
             // Received the current step positions from the server.
             ServerMessage::StepPosition(positions) => {
-                self.server.current_step_positions = Some(positions);
+                self.server.current_frame_positions = Some(positions);
             }
             ServerMessage::SceneLayout(_layout) => {
             }
@@ -414,10 +414,10 @@ impl App {
             ServerMessage::LogMessage(message) => {
                 self.add_log(LogLevel::Info, message.to_string());
             }
-            ServerMessage::StepEnabled(_a, _b) => {},
-            ServerMessage::StepDisabled(_a, _b) => {},
+            ServerMessage::FrameEnabbled(_a, _b) => {},
+            ServerMessage::FrameDisabled(_a, _b) => {},
             // Received the content of a script requested by the client.
-            ServerMessage::ScriptContent { sequence_idx, step_idx, content } => {
+            ServerMessage::ScriptContent { line_idx: sequence_idx, frame_idx: step_idx, content } => {
                 self.add_log(LogLevel::Debug, format!("Received script for ({}, {})", sequence_idx, step_idx));
 
                 // Check if this matches an ongoing clipboard fetch
@@ -505,7 +505,7 @@ impl App {
                 if username != self.server.username {
                     self.add_log(LogLevel::Debug, format!("Peer '{}' started editing Seq {}, Step {}", username, seq_idx, step_idx));
                     let peer_state = self.server.peer_sessions.entry(username.clone()).or_default();
-                    peer_state.editing_step = Some((seq_idx, step_idx));
+                    peer_state.editing_frame = Some((seq_idx, step_idx));
                 }
             }
             // Received notification that a peer stopped editing a step
@@ -514,8 +514,8 @@ impl App {
                      self.add_log(LogLevel::Debug, format!("Peer '{}' stopped editing Seq {}, Step {}", username, seq_idx, step_idx));
                      let peer_state = self.server.peer_sessions.entry(username.clone()).or_default();
                      // Only clear if they stopped editing the *same* step we thought they were editing
-                     if peer_state.editing_step == Some((seq_idx, step_idx)) {
-                         peer_state.editing_step = None;
+                     if peer_state.editing_frame == Some((seq_idx, step_idx)) {
+                         peer_state.editing_frame = None;
                      }
                  }
             }
