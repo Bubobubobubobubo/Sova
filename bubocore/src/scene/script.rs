@@ -13,7 +13,7 @@ pub struct Script {
     #[serde(skip_serializing, default)]
     pub compiled : Program,
     #[serde(skip_serializing, default)]
-    pub step_vars : Mutex<VariableStore>,
+    pub frame_vars : Mutex<VariableStore>,
     pub index : usize
 }
 
@@ -23,7 +23,7 @@ impl Script {
             content,
             lang,
             compiled,
-            step_vars: Mutex::new(VariableStore::new()),
+            frame_vars: Mutex::new(VariableStore::new()),
             index
         }
     }
@@ -67,7 +67,7 @@ impl Clone for Script {
             lang: self.lang.clone(),
             content: self.content.clone(), 
             compiled: self.compiled.clone(), 
-            step_vars: Mutex::new(self.step_vars.lock().unwrap().clone()), 
+            frame_vars: Mutex::new(self.frame_vars.lock().unwrap().clone()), 
             index: self.index.clone() 
         }
     }
@@ -142,7 +142,7 @@ impl ScriptExecution {
                 self.instruction_index += 1;
                 let mut ctx = EvaluationContext {
                     global_vars: globals,
-                    step_vars: &mut self.script.step_vars.lock().unwrap(),
+                    frame_vars: &mut self.script.frame_vars.lock().unwrap(),
                     instance_vars: &mut self.instance_vars,
                     stack: &mut self.stack,
                     lines: sequences,
@@ -165,7 +165,7 @@ impl ScriptExecution {
         };
         let mut ctx = EvaluationContext {
             global_vars: globals,
-            step_vars: &mut self.script.step_vars.lock().unwrap(),
+            frame_vars: &mut self.script.frame_vars.lock().unwrap(),
             instance_vars: &mut self.instance_vars,
             stack: &mut self.stack,
             lines: sequences,

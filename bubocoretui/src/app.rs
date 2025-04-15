@@ -49,7 +49,7 @@ pub enum Mode {
 } 
 
 #[derive(Clone, Debug)]
-pub struct CopiedStepData {
+pub struct CopiedFrameData {
     pub length: f64,
     pub is_enabled: bool,
     pub script_content: Option<String>, 
@@ -69,7 +69,7 @@ pub enum ClipboardState {
         is_enabled: bool,
     },
     // All available data is ready
-    Ready(CopiedStepData),
+    Ready(CopiedFrameData),
 }
 
 /// Represents the observable state of a connected peer.
@@ -77,8 +77,8 @@ pub enum ClipboardState {
 pub struct PeerSessionState {
     /// The peer's last known grid cursor/selection state.
     pub grid_selection: Option<GridSelection>,
-    /// The specific step the peer is currently editing (if any).
-    pub editing_frame: Option<(usize, usize)>, // (sequence_idx, step_idx)
+    /// The specific frame the peer is currently editing (if any).
+    pub editing_frame: Option<(usize, usize)>, // (line_idx, frame_idx)
     // Add other states later, e.g.:
     // pub current_focus: Option<FocusArea>,
     // pub editing_status: Option<EditingStatus>,
@@ -94,22 +94,22 @@ pub struct ScreenState {
     pub previous_mode: Option<Mode>,
     /// State related to Ableton Link synchronization.
     pub link: Link,
-    /// Current step index for each line, updated by the server.
-    pub current_step_positions: Option<Vec<usize>>,
+    /// Current frame index for each line, updated by the server.
+    pub current_frame_positions: Option<Vec<usize>>,
     /// Stores the last known state of other connected peers.
     pub peer_sessions: HashMap<String, PeerSessionState>,
 }
 
-/// Represents the user's current position within the scene (line and step).
+/// Represents the user's current position within the scene (line and frame).
 pub struct UserPosition {
-    pub sequence_index: usize,
-    pub step_index: usize,
+    pub line_index: usize,
+    pub frame_index: usize,
 }
 
 /// State specific to the text editor component.
 pub struct EditorData {
-    /// The line and step currently being edited or viewed.
-    pub active_sequence: UserPosition,
+    /// The line and frame currently being edited or viewed.
+    pub active_line: UserPosition,
     /// The `tui_textarea` widget state for the editor.
     pub textarea: TextArea<'static>,
     /// The currently loaded scene data.
@@ -134,7 +134,7 @@ pub struct ServerState {
     pub devices: Vec<String>,
     /// State related to Ableton Link synchronization.
     pub link: Link,
-    /// Current step index for each line, updated by the server.
+    /// Current frame index for each line, updated by the server.
     pub current_frame_positions: Option<Vec<usize>>,
     /// Stores the last known state of other connected peers.
     pub peer_sessions: HashMap<String, PeerSessionState>,
@@ -216,9 +216,9 @@ impl App {
         let mut app = Self {
             running: true,
             editor: EditorData {
-                active_sequence: UserPosition {
-                    sequence_index: 0,
-                    step_index: 0,
+                active_line: UserPosition {
+                    line_index: 0,
+                    frame_index: 0,
                 },
                 textarea: TextArea::default(),
                 scene: None,
@@ -246,7 +246,7 @@ impl App {
                     },
                     previous_mode: None,
                     link: Link::new(),
-                    current_step_positions: None,
+                    current_frame_positions: None,
                     peer_sessions: HashMap::new(),
                 },
                 components: ComponentState {
@@ -367,7 +367,7 @@ impl App {
                 // Now move ownership of clients
                 self.server.peers = clients; 
 
-                // Check if we can request the first script (Seq 0, Step 0)
+                // Check if we can request the first script (Line 0, Frame 0)
                 let mut request_first_script = false;
                 if let Some(first_sequence) = scene.lines.get(0) {
                     if !first_sequence.frames.is_empty() {
@@ -376,10 +376,10 @@ impl App {
                 }
 
                 if request_first_script {
-                    self.add_log(LogLevel::Info, "Requesting script for Seq 0, Step 0 after handshake.".to_string());
+                    self.add_log(LogLevel::Info, "Requesting script for Line 0, Frame 0 after handshake.".to_string());
                     self.send_client_message(ClientMessage::GetScript(0, 0));
                 } else {
-                     self.add_log(LogLevel::Info, "No script requested after handshake (scene empty or seq 0 has no steps).".to_string());
+                     self.add_log(LogLevel::Info, "No script requested after handshake (scene empty or seq 0 has no frames).".to_string());
                     if matches!(self.interface.screen.mode, Mode::Splash) {
                          let _ = self.events.sender.send(Event::App(AppEvent::SwitchToGrid))
                             .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e));
@@ -398,8 +398,8 @@ impl App {
                 self.set_status_message(String::from("Received scene update"));
                 self.editor.scene = Some(new_scene);
             }
-            // Received the current step positions from the server.
-            ServerMessage::StepPosition(positions) => {
+            // Received the current frame positions from the server.
+            ServerMessage::FramePosition(positions) => {
                 self.server.current_frame_positions = Some(positions);
             }
             ServerMessage::SceneLayout(_layout) => {
@@ -417,12 +417,12 @@ impl App {
             ServerMessage::FrameEnabbled(_a, _b) => {},
             ServerMessage::FrameDisabled(_a, _b) => {},
             // Received the content of a script requested by the client.
-            ServerMessage::ScriptContent { line_idx: sequence_idx, frame_idx: step_idx, content } => {
-                self.add_log(LogLevel::Debug, format!("Received script for ({}, {})", sequence_idx, step_idx));
+            ServerMessage::ScriptContent { line_idx, frame_idx, content } => {
+                self.add_log(LogLevel::Debug, format!("Received script for ({}, {})", line_idx, frame_idx));
 
                 // Check if this matches an ongoing clipboard fetch
                 let match_clipboard = if let ClipboardState::FetchingScript { col, row, .. } = self.clipboard {
-                    col == sequence_idx && row == step_idx
+                    col == line_idx && row == frame_idx
                 } else {
                     false
                 };
@@ -430,7 +430,7 @@ impl App {
                 if match_clipboard {
                     // Consume content into the clipboard state
                     if let ClipboardState::FetchingScript { col, row, length, is_enabled } = self.clipboard {
-                         self.clipboard = ClipboardState::Ready(CopiedStepData {
+                         self.clipboard = ClipboardState::Ready(CopiedFrameData {
                              length,
                              is_enabled,
                              script_content: Some(content), // Move content here
@@ -445,14 +445,14 @@ impl App {
                     }
                 } else {
                     // Assume it's for the editor: consume content here
-                    self.add_log(LogLevel::Info, format!("Loading script for ({}, {}) into editor.", sequence_idx, step_idx));
+                    self.add_log(LogLevel::Info, format!("Loading script for ({}, {}) into editor.", line_idx, frame_idx));
                     self.editor.textarea = TextArea::new(content.lines().map(|s| s.to_string()).collect()); // Move content here
-                    self.editor.active_sequence.sequence_index = sequence_idx;
-                    self.editor.active_sequence.step_index = step_idx;
+                    self.editor.active_line.line_index = line_idx;
+                    self.editor.active_line.frame_index = frame_idx;
                     // Switch to editor view
                     let _ = self.events.sender.send(Event::App(AppEvent::SwitchToEditor))
                         .map_err(|e| color_eyre::eyre::eyre!("Send Error: {}", e));
-                    self.set_status_message(format!("Loaded script for Seq {}, Step {} into editor", sequence_idx, step_idx));
+                    self.set_status_message(format!("Loaded script for Line {}, Frame {} into editor", line_idx, frame_idx));
                 }
             }
             // Received a snapshot from the server, usually after a `GetSnapshot` request.
@@ -500,21 +500,21 @@ impl App {
                     peer_state.grid_selection = Some(selection);
                 }
             }
-            // Received notification that a peer started editing a step
-            ServerMessage::PeerStartedEditing(username, seq_idx, step_idx) => {
+            // Received notification that a peer started editing a frame
+            ServerMessage::PeerStartedEditing(username, line_idx, frame_idx) => {
                 if username != self.server.username {
-                    self.add_log(LogLevel::Debug, format!("Peer '{}' started editing Seq {}, Step {}", username, seq_idx, step_idx));
+                    self.add_log(LogLevel::Debug, format!("Peer '{}' started editing Line {}, Frame {}", username, line_idx, frame_idx));
                     let peer_state = self.server.peer_sessions.entry(username.clone()).or_default();
-                    peer_state.editing_frame = Some((seq_idx, step_idx));
+                    peer_state.editing_frame = Some((line_idx, frame_idx));
                 }
             }
-            // Received notification that a peer stopped editing a step
-            ServerMessage::PeerStoppedEditing(username, seq_idx, step_idx) => {
+            // Received notification that a peer stopped editing a frame
+            ServerMessage::PeerStoppedEditing(username, line_idx, frame_idx) => {
                  if username != self.server.username {
-                     self.add_log(LogLevel::Debug, format!("Peer '{}' stopped editing Seq {}, Step {}", username, seq_idx, step_idx));
+                     self.add_log(LogLevel::Debug, format!("Peer '{}' stopped editing Line {}, Frame {}", username, line_idx, frame_idx));
                      let peer_state = self.server.peer_sessions.entry(username.clone()).or_default();
-                     // Only clear if they stopped editing the *same* step we thought they were editing
-                     if peer_state.editing_frame == Some((seq_idx, step_idx)) {
+                     // Only clear if they stopped editing the *same* frame we thought they were editing
+                     if peer_state.editing_frame == Some((line_idx, frame_idx)) {
                          peer_state.editing_frame = None;
                      }
                  }

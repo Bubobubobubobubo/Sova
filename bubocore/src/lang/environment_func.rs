@@ -6,7 +6,7 @@ pub enum EnvironmentFunc {
     RandomU8,
     RandomInt,
     RandomFloat,
-    StepLen(Box<Variable>, Box<Variable>)
+    FrameLen(Box<Variable>, Box<Variable>)
 }
 pub use EnvironmentFunc::*;
 
@@ -20,10 +20,10 @@ impl EnvironmentFunc {
             RandomU8 => (rand::random::<u8>() as i64).into(),
             RandomInt => rand::random::<i64>().into(),
             RandomFloat => rand::random::<f64>().into(),
-            StepLen(x, y) => {
-                let seq_i = ctx.evaluate(x).as_integer(ctx) as usize;
-                let step_i = ctx.evaluate(y).as_integer(ctx) as usize;
-                ctx.lines[seq_i % ctx.lines.len()].frame_len(step_i).into()
+            FrameLen(x, y) => {
+                let line_i = ctx.evaluate(x).as_integer(ctx) as usize;
+                let frame_i = ctx.evaluate(y).as_integer(ctx) as usize;
+                ctx.lines[line_i % ctx.lines.len()].frame_len(frame_i).into()
             },
         }
     }
