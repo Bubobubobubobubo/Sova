@@ -155,6 +155,9 @@ async fn main() {
                         SchedulerNotification::RemovedLine(index) => {
                             guard.remove_line(*index);
                         },
+                        SchedulerNotification::SceneLengthChanged(length) => {
+                            guard.set_length(*length);
+                        },
                         _ => ()
                     };
                     drop(guard);
