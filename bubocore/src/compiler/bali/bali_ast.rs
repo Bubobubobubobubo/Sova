@@ -15,15 +15,20 @@ const MIDIDEVICE: &str = "log";
 const DEFAULT_VELOCITY: i64 = 90;
 const DEFAULT_CHAN: i64 = 1;
 const DEFAULT_DEVICE: i64 = 0;
+const DEFAULT_DURATION: i64 = 2;
 
 pub fn bali_as_asm(prog: BaliProgram) -> Program {
     //print!("Original prog {:?}\n", prog);
     //let prog = expend_loop(prog);
     //print!("Loopless prog {:?}\n", prog);
     let default_context = BaliContext{
-        channel: Some(DEFAULT_CHAN),
+        channel: Some(Expression::Value(Value::Number(DEFAULT_CHAN))),
         device: Some(DEFAULT_DEVICE),
-        velocity: Some(DEFAULT_VELOCITY),
+        velocity: Some(Expression::Value(Value::Number(DEFAULT_VELOCITY))),
+        duration: Some(Fraction{
+            numerator: Box::new(Expression::Value(Value::Number(1))),
+            denominator: Box::new(Expression::Value(Value::Number(DEFAULT_DURATION))),
+        }),
     };
 
 
@@ -70,22 +75,23 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
 
 
 pub fn expend_prog(prog: BaliProgram, c: BaliContext) -> BaliPreparedProgram {
-    prog.into_iter().map(|s| s.expend(&ConcreteFraction{signe: 1, numerator: 0, denominator: 1}, c)).flatten().collect()
+    prog.into_iter().map(|s| s.expend(&ConcreteFraction{signe: 1, numerator: 0, denominator: 1}, c.clone())).flatten().collect()
 }
 
 pub fn set_context_prog(prog: BaliProgram, c: BaliContext) -> BaliProgram {
-    prog.into_iter().map(|s| s.set_context(c)).collect()
+    prog.into_iter().map(|s| s.set_context(c.clone())).collect()
 }
 
 pub fn set_context_effect_set(set: Vec<TopLevelEffect>, c: BaliContext) -> Vec<TopLevelEffect> {
-    set.into_iter().map(|e| e.set_context(c)).collect()
+    set.into_iter().map(|e| e.set_context(c.clone())).collect()
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct BaliContext {
-    pub channel: Option<i64>,
+    pub channel: Option<Expression>,
     pub device: Option<i64>,
-    pub velocity: Option<i64>,
+    pub velocity: Option<Expression>,
+    pub duration: Option<Fraction>,
 }
 
 impl BaliContext {
@@ -94,6 +100,7 @@ impl BaliContext {
             channel: None,
             device: None,
             velocity: None,
+            duration: None,
         }
     }
 
@@ -110,6 +117,10 @@ impl BaliContext {
         b.velocity = match self.velocity {
             Some(_) => self.velocity,
             None => above.velocity,
+        };
+        b.duration = match self.duration {
+            Some(_) => self.duration,
+            None => above.duration,
         };
         b
     }
@@ -138,7 +149,7 @@ impl TimeStatement {
 
     pub fn as_asm(&self, delay: f64, position: usize) -> Vec<Instruction> {
         match self {
-            TimeStatement::At(_, x, context) | TimeStatement::JustBefore(_, x, context) | TimeStatement::JustAfter(_, x, context) => x.as_asm(delay, position, *context),
+            TimeStatement::At(_, x, context) | TimeStatement::JustBefore(_, x, context) | TimeStatement::JustAfter(_, x, context) => x.as_asm(delay, position, context.clone()),
         }
     }
 
@@ -230,23 +241,23 @@ impl Statement {
     }
 
     pub fn expend(self, val: &ConcreteFraction, c: BaliContext) -> Vec<TimeStatement> {
-        let c = match self {
-            Statement::AfterFrac(_, _, cc) | Statement::BeforeFrac(_, _, cc) | Statement::Loop(_, _, _, cc) | Statement::After(_, cc) | Statement::Before(_, cc) | Statement::Effect(_, cc) => cc.update(c),
-        };
+        /*let c = match self {
+            Statement::AfterFrac(_, _, ref cc) | Statement::BeforeFrac(_, _, ref cc) | Statement::Loop(_, _, _, ref cc) | Statement::After(_, ref cc) | Statement::Before(_, ref cc) | Statement::Effect(_, ref cc) => cc.clone().update(c),
+        };*/
         match self {
-            Statement::AfterFrac(v, es, _) => es.into_iter().map(|e| e.expend(&v.add(val), c)).flatten().collect(),
-            Statement::BeforeFrac(v, es, _) => es.into_iter().map(|e| e.expend(&val.sub(&v), c)).flatten().collect(),
-            Statement::Loop(it, v, es, _) => {
+            Statement::AfterFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&v.add(val), cc.clone().update(c.clone()))).flatten().collect(),
+            Statement::BeforeFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&val.sub(&v), cc.clone().update(c.clone()))).flatten().collect(),
+            Statement::Loop(it, v, es, cc) => {
                 let mut res = Vec::new();
                 for i in 0..it {
-                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(i)), c)).flatten().collect();
+                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(i)), cc.clone().update(c.clone()))).flatten().collect();
                     res.extend(content);
                 };
                 res
             },
-            Statement::After(es, _) => es.into_iter().map(|e| TimeStatement::JustAfter(val.clone(), e, c)).collect(),
-            Statement::Before(es, _) => es.into_iter().map(|e| TimeStatement::JustBefore(val.clone(), e, c)).collect(),
-            Statement::Effect(e, _) => vec![TimeStatement::At(val.clone(), e, c)],
+            Statement::After(es, cc) => es.into_iter().map(|e| TimeStatement::JustAfter(val.clone(), e, cc.clone().update(c.clone()))).collect(),
+            Statement::Before(es, cc) => es.into_iter().map(|e| TimeStatement::JustBefore(val.clone(), e, cc.clone().update(c.clone()))).collect(),
+            Statement::Effect(e, cc) => vec![TimeStatement::At(val.clone(), e, cc.clone().update(c.clone()))],
         }
     }
 
@@ -278,14 +289,14 @@ impl TopLevelEffect {
             TopLevelEffect::Seq(s, seq_context) => {
                 let mut res = Vec::new();
                 let mut position = position;
-                let context = seq_context.update(context);
+                let context = seq_context.clone().update(context.clone());
                 for i in 0..s.len() {
                     let true_delay = if i < s.len() - 1 {
                         0.0
                     } else {
                         delay
                     };
-                    let to_add = s[i].as_asm(true_delay, position, context);
+                    let to_add = s[i].as_asm(true_delay, position, context.clone());
                     position += to_add.len();
                     res.extend(to_add);
                 };
@@ -309,10 +320,10 @@ impl TopLevelEffect {
                 res.push(Instruction::Effect(Event::Nop, time_var.clone()));
 
                 // Compute effects
-                let context = for_context.update(context);
+                let context = for_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(0.0, position, context);
+                    let to_add = s[i].as_asm(0.0, position, context.clone());
                     position += to_add.len();
                     effects.extend(to_add);
                 };
@@ -345,7 +356,7 @@ impl TopLevelEffect {
                 res.push(Instruction::Effect(Event::Nop, time_var.clone()));
 
                 // Compute effects
-                let context = if_context.update(context);
+                let context = if_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
                     let true_delay = if i < s.len() - 1 {
@@ -353,7 +364,7 @@ impl TopLevelEffect {
                     } else {
                         delay
                     };
-                    let to_add = s[i].as_asm(true_delay, position, context);
+                    let to_add = s[i].as_asm(true_delay, position, context.clone());
                     position += to_add.len();
                     effects.extend(to_add);
                 };
@@ -367,7 +378,7 @@ impl TopLevelEffect {
                 res
             }
             TopLevelEffect::Effect(ef, effect_context) => {
-                let context = effect_context.update(context);
+                let context = effect_context.clone().update(context.clone());
                 ef.as_asm(delay, context)
             },
         }
@@ -377,9 +388,9 @@ impl TopLevelEffect {
 #[derive(Debug, Clone)]
 pub enum Effect {
     Definition(Value, Box<Expression>),
-    Note(Box<Expression>, Option<Box<Expression>>, Option<Box<Expression>>, Fraction),
-    ProgramChange(Box<Expression>, Box<Expression>),
-    ControlChange(Box<Expression>, Box<Expression>, Box<Expression>),
+    Note(Box<Expression>, BaliContext),
+    ProgramChange(Box<Expression>, BaliContext),
+    ControlChange(Box<Expression>, Box<Expression>, BaliContext),
 }
 
 impl Effect { // TODO : on veut que les durées soient des fractions
@@ -405,30 +416,30 @@ impl Effect { // TODO : on veut que les durées soient des fractions
                     res.push(Instruction::Effect(Event::Nop, time_var.clone()));
                 }
             },
-            Effect::Note(n, v, c, d) => {
+            Effect::Note(n, c) => {
+                let context = c.clone().update(context);
                 res.extend(n.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(note_var.clone())));
-                if let Some(v) = v {
+                if let Some(v) = context.velocity {
                     res.extend(v.as_asm());
                     res.push(Instruction::Control(ControlASM::Pop(velocity_var.clone())));
                 } else {
-                    if let Some(context_velocity) = context.velocity {
-                        res.push(Instruction::Control(ControlASM::Mov(context_velocity.into(), velocity_var.clone())))
-                    } else {
-                        res.push(Instruction::Control(ControlASM::Mov(DEFAULT_VELOCITY.into(), velocity_var.clone())))
-                    }
+                    res.push(Instruction::Control(ControlASM::Mov(DEFAULT_VELOCITY.into(), velocity_var.clone())))
                 }
-                if let Some(c) = c {
-                    res.extend(c.as_asm());
+                if let Some(ch) = context.channel {
+                    res.extend(ch.as_asm());
                     res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
                 } else {
-                    if let Some(context_chan) = context.channel {
-                        res.push(Instruction::Control(ControlASM::Mov(context_chan.into(), chan_var.clone())))
-                    } else {
-                        res.push(Instruction::Control(ControlASM::Mov(DEFAULT_CHAN.into(), chan_var.clone())))
-                    }
+                    res.push(Instruction::Control(ControlASM::Mov(DEFAULT_CHAN.into(), chan_var.clone())))
                 }
-                res.extend(d.as_asm());
+                if let Some(d) = context.duration {
+                    res.extend(d.as_asm());
+                } else {
+                    res.extend(Fraction{
+                        numerator: Box::new(Expression::Value(Value::Number(1))),
+                        denominator: Box::new(Expression::Value(Value::Number(DEFAULT_DURATION))),
+                    }.as_asm());
+                }
                 res.push(Instruction::Control(ControlASM::Pop(duration_var.clone())));
                 res.push(Instruction::Control(ControlASM::FloatAsSteps(duration_var.clone(), duration_time_var.clone())));
                 res.push(Instruction::Effect(Event::MidiNote(
@@ -437,21 +448,31 @@ impl Effect { // TODO : on veut que les durées soient des fractions
                 ), time_var.clone()));
             },
             Effect::ProgramChange(p, c) => {
+                let context = c.clone().update(context);
                 res.extend(p.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(program_var.clone())));
-                res.extend(c.as_asm());
-                res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
+                if let Some(ch) = context.channel {
+                    res.extend(ch.as_asm());
+                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
+                } else {
+                    res.push(Instruction::Control(ControlASM::Mov(DEFAULT_CHAN.into(), chan_var.clone())))
+                }
                 res.push(Instruction::Effect(Event::MidiProgram(
                     program_var.clone(), chan_var.clone(), MIDIDEVICE.to_string().into()
                 ), time_var.clone()));
             },
             Effect::ControlChange(con, v, c) => {
+                let context = c.clone().update(context);
                 res.extend(con.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(control_var.clone())));
                 res.extend(v.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(value_var.clone())));
-                res.extend(c.as_asm());
-                res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
+                if let Some(ch) = context.channel {
+                    res.extend(ch.as_asm());
+                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
+                } else {
+                    res.push(Instruction::Control(ControlASM::Mov(DEFAULT_CHAN.into(), chan_var.clone())))
+                }
                 res.push(Instruction::Effect(Event::MidiControl(
                     control_var.clone(), value_var.clone(), chan_var.clone(), MIDIDEVICE.to_string().into()
                 ), time_var.clone()));
