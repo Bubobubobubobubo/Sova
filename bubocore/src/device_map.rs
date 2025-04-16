@@ -149,8 +149,8 @@ impl DeviceMap {
         device: Arc<ProtocolDevice>,
     ) -> Vec<TimedMessage> {
         match payload {
-            // Update pattern match for all Midi* variants to expect _device_id
             ConcreteEvent::MidiNote(note, vel, chan, dur, _device_id) => {
+                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
                 vec![
                     // NoteOn
                     ProtocolMessage {
@@ -159,7 +159,7 @@ impl DeviceMap {
                                 note: note as u8,
                                 velocity: vel as u8,
                             },
-                            channel: chan as u8,
+                            channel: midi_chan, // Use converted channel
                         }
                         .into(),
                         device: Arc::clone(&device),
@@ -172,7 +172,7 @@ impl DeviceMap {
                                 note: note as u8,
                                 velocity: 0,
                             },
-                            channel: chan as u8,
+                            channel: midi_chan, // Use converted channel
                         }
                         .into(),
                         device: Arc::clone(&device),
@@ -181,13 +181,14 @@ impl DeviceMap {
                 ]
             }
             ConcreteEvent::MidiControl(control, value, chan, _device_id) => {
+                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
                 vec![ProtocolMessage {
                     payload: MIDIMessage {
                         payload: MIDIMessageType::ControlChange {
                             control: control as u8,
                             value: value as u8,
                         },
-                        channel: chan as u8,
+                        channel: midi_chan, // Use converted channel
                     }
                     .into(),
                     device: Arc::clone(&device),
@@ -195,12 +196,13 @@ impl DeviceMap {
                 .timed(date)]
             }
             ConcreteEvent::MidiProgram(program, chan, _device_id) => {
+                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
                 vec![ProtocolMessage {
                     payload: MIDIMessage {
                         payload: MIDIMessageType::ProgramChange {
                             program: program as u8,
                         },
-                        channel: chan as u8,
+                        channel: midi_chan, // Use converted channel
                     }
                     .into(),
                     device: Arc::clone(&device),
@@ -208,37 +210,41 @@ impl DeviceMap {
                 .timed(date)]
             }
             ConcreteEvent::MidiAftertouch(note, pressure, chan, _device_id) => {
+                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
                 vec![ProtocolMessage {
                     payload: MIDIMessage {
                         payload: MIDIMessageType::Aftertouch {
                             note: note as u8,
                             value: pressure as u8,
                         },
-                        channel: chan as u8,
+                        channel: midi_chan, // Use converted channel
                     }
                     .into(),
                     device: Arc::clone(&device),
                 }
                 .timed(date)]
             }
-            ConcreteEvent::MidiChannelPressure(pressure, channel, _device_id) => {
+            ConcreteEvent::MidiChannelPressure(pressure, chan, _device_id) => { // Renamed channel to chan for consistency
+                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
                 vec![ProtocolMessage {
                     payload: MIDIMessage {
                         payload: MIDIMessageType::ChannelPressure {
                             value: pressure as u8,
                         },
-                        channel: channel as u8,
+                        channel: midi_chan, // Use converted channel
                     }
                     .into(),
                     device: Arc::clone(&device),
                 }
                 .timed(date)]
             }
+            // System messages (Start, Stop, Continue, Clock, Reset, Sysex) typically don't use a channel,
+            // so no conversion needed here. Keep channel 0 as specified in the original code.
             ConcreteEvent::MidiStart(_device_id) => {
                 vec![ProtocolMessage {
                     payload: MIDIMessage {
                         payload: MIDIMessageType::Start {},
-                        channel: 0,
+                        channel: 0, 
                     }
                     .into(),
                     device: Arc::clone(&device),
@@ -301,7 +307,7 @@ impl DeviceMap {
                 }
                 .timed(date)]
             }
-            _ => Vec::new(),
+            _ => Vec::new(), // Handle Nop or other non-MIDI events
         }
     }
 
