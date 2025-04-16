@@ -215,6 +215,7 @@ fn greeter() {
         println!("{:?}", msg);
     
         time::sleep(Duration::from_secs(10)).await;
+    
         Ok(())
     }
 
