@@ -124,16 +124,6 @@ impl EventHandler {
             .await
             .ok_or_eyre("Impossible de recevoir l'événement : canal fermé.")
     }
-
-    /// Met en file d'attente un événement d'application (`AppEvent`) pour qu'il soit traité.
-    ///
-    /// # Arguments
-    /// 
-    /// * `app_event` - L'événement d'application à envoyer.
-    pub fn send(&mut self, app_event: AppEvent) {
-        // Ignore le résultat car le récepteur ne peut pas être fermé tant que cette structure existe.
-        let _ = self.sender.send(Event::App(app_event));
-    }
 }
 
 /// Tâche asynchrone gérant la lecture des événements `crossterm`

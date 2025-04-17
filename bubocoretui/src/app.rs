@@ -19,8 +19,7 @@ use crate::ui::Flash;
 use crate::disk;
 use bubocorelib::scene::Scene;
 use bubocorelib::server::{ServerMessage, client::ClientMessage};
-use bubocorelib::schedule::ActionTiming;
-use bubocorelib::shared_types::{DeviceInfo, GridSelection};
+use bubocorelib::shared_types::{DeviceInfo, GridSelection, DeviceKind};
 use color_eyre::Result as EyreResult;
 use ratatui::{
     Terminal,
@@ -595,7 +594,53 @@ impl App {
             }
             ServerMessage::DeviceList(devices) => {
                 self.add_log(LogLevel::Info, format!("Received updated device list ({} devices)", devices.len()));
-                self.server.devices = devices;
+                
+                // 1. Update the main device list
+                self.server.devices = devices.clone(); 
+                
+                // 2. Extract and update the slot assignments map in DevicesState
+                let slot_assignments_clone;
+                let midi_selected_index_clone;
+                let osc_selected_index_clone;
+                let tab_index_clone;
+                {
+                    // Scope for the mutable borrow of state
+                    let state = &mut self.interface.components.devices_state;
+                    state.slot_assignments.clear();
+                    for device in devices.iter() {
+                        if device.id != 0 {
+                            state.slot_assignments.insert(device.id, device.name.clone());
+                        }
+                    }
+                    // Clone necessary state before releasing the borrow
+                    slot_assignments_clone = state.slot_assignments.clone();
+                    midi_selected_index_clone = state.midi_selected_index;
+                    osc_selected_index_clone = state.osc_selected_index;
+                    tab_index_clone = state.tab_index;
+                } // state borrow ends here
+
+                // Call add_log without state being borrowed
+                self.add_log(LogLevel::Debug, format!("Updated slot assignments: {:?}", slot_assignments_clone));
+
+                // 3. Clamp selection indices using cloned values
+                let midi_count = devices.iter().filter(|d| d.kind == DeviceKind::Midi).count();
+                let osc_count = devices.iter().filter(|d| d.kind == DeviceKind::Osc).count();
+
+                let new_midi_selected_index = midi_selected_index_clone.min(midi_count.saturating_sub(1));
+                let new_osc_selected_index = osc_selected_index_clone.min(osc_count.saturating_sub(1));
+                
+                // Re-borrow state mutably to update the clamped indices
+                {
+                    let state = &mut self.interface.components.devices_state;
+                    state.midi_selected_index = new_midi_selected_index;
+                    state.osc_selected_index = new_osc_selected_index;
+
+                    if tab_index_clone == 0 {
+                        state.selected_index = state.midi_selected_index;
+                    } else {
+                         state.selected_index = state.osc_selected_index;
+                    }
+                 } // state borrow ends here
             }
             // Re-add ScriptCompiled handler
             ServerMessage::ScriptCompiled { line_idx, frame_idx } => {
@@ -765,13 +810,23 @@ impl App {
                 self.set_status_message(format!("Error loading project: {}", err_msg));
             },
             AppEvent::LoadProject(snapshot, timing) => {
-                self.set_status_message(format!("Loading project ({:?})...", timing));
-                self.add_log(LogLevel::Info, format!("Loading snapshot (Tempo: {}, Scene: {} lines, Timing: {:?})", snapshot.tempo, snapshot.scene.lines.len(), timing));
+                 self.set_status_message(format!("Applying loaded project ({:?})...", timing));
+                 self.add_log(LogLevel::Info, format!("Applying snapshot (Tempo: {}, Scene: {} lines)", snapshot.tempo, snapshot.scene.lines.len()));
 
-                // Send messages with the specified timing
-                self.send_client_message(ClientMessage::SetTempo(snapshot.tempo, timing));
-                self.send_client_message(ClientMessage::SetScene(snapshot.scene, timing));
-                self.add_log(LogLevel::Info, "Project load messages sent.".to_string());
+                 // 1. Update local state IMMEDIATELY
+                 self.editor.scene = Some(snapshot.scene.clone()); // Update local scene data
+                 self.server.link.session_state.set_tempo(snapshot.tempo, self.server.link.link.clock_micros()); // Update local tempo
+                 self.interface.components.grid_selection = GridSelection::single(0, 0); // Reset grid selection
+
+                 // 2. Send messages to server with the specified timing
+                 self.send_client_message(ClientMessage::SetTempo(snapshot.tempo, timing));
+                 self.send_client_message(ClientMessage::SetScene(snapshot.scene, timing)); // Send scene again (server might validate)
+                 self.send_client_message(ClientMessage::UpdateGridSelection(self.interface.components.grid_selection)); // Send reset selection
+                 
+                 self.add_log(LogLevel::Info, "Project load messages sent to server.".to_string());
+                 
+                 // 3. Switch view after applying locally and sending messages
+                 self.interface.screen.mode = Mode::Grid; 
             },
             AppEvent::SwitchToSaveLoad => {
                  self.add_log(LogLevel::Debug, "Handling SwitchToSaveLoad event, triggering refresh.".to_string());
@@ -820,23 +875,6 @@ impl App {
                          }
                      }
                  });
-            },
-            AppEvent::LoadProject(snapshot, timing) => {
-                 self.set_status_message(format!("Loading project ({:?})...", timing));
-                 self.add_log(LogLevel::Info, format!("Sending loaded snapshot to server (Tempo: {}, Scene: {} lines, Timing: {:?})", snapshot.tempo, snapshot.scene.lines.len(), timing));
-
-                 // Send messages to server with the specified timing
-                 self.send_client_message(ClientMessage::SetTempo(snapshot.tempo, timing));
-                 self.send_client_message(ClientMessage::SetScene(snapshot.scene, timing));
-                 self.add_log(LogLevel::Info, "Project load messages sent.".to_string());
-                 // Optionally switch view after load request is sent
-                 self.interface.screen.mode = Mode::Grid; 
-            },
-            AppEvent::ProjectLoadError(err_msg) => {
-                 // Update status in SaveLoadState as well?
-                 self.interface.components.save_load_state.status_message = format!("Load failed: {}", err_msg);
-                 self.set_status_message(format!("Error loading project: {}", err_msg));
-                 self.add_log(LogLevel::Error, format!("Error loading project: {}", err_msg));
             },
         }
         Ok(())
@@ -992,25 +1030,6 @@ impl App {
     pub fn set_status_message(&mut self, message: String) {
         self.interface.components.bottom_message = message;
         self.interface.components.bottom_message_timestamp = Some(Instant::now());
-    }
-
-    /// Parses an optional timing argument string into an ActionTiming enum.
-    /// Defaults to Immediate and logs a warning for unrecognized inputs.
-    pub(crate) fn parse_timing_arg(&mut self, arg: Option<&str>) -> ActionTiming {
-        arg.map_or(ActionTiming::Immediate, |timing_str| {
-            match timing_str.to_lowercase().as_str() {
-                "immediate" | "now" => ActionTiming::Immediate,
-                "end" | "loop" => ActionTiming::EndOfScene,
-                _ => {
-                    if let Ok(beat) = timing_str.parse::<u64>() {
-                        ActionTiming::AtBeat(beat)
-                    } else {
-                        self.add_log(LogLevel::Warn, format!("Unrecognized timing '{}', defaulting to immediate.", timing_str));
-                        ActionTiming::Immediate
-                    }
-                }
-            }
-        })
     }
 }
 
