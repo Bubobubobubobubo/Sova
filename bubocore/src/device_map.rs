@@ -639,35 +639,109 @@ impl DeviceMap {
 
     /// Creates a virtual MIDI output port and registers it.
     pub fn create_virtual_midi_output(&self, device_name: &str) -> Result<(), String> {
-        println!("[✨] Attempting to create Virtual MIDI Output: '{}'", device_name);
+        println!("[✨] **START** Attempting to create Virtual MIDI Output: '{}'", device_name);
 
         // Check if a device (real or virtual) with this name already exists in registered connections
         // OR if the name is already assigned an ID (even if not currently registered)
-        if self.device_name_to_id_map.lock().unwrap().contains_key(device_name) {
-            let err_msg = format!("Device name '{}' is already in use (registered or previously assigned ID).", device_name);
-            eprintln!("[!] create_virtual_midi_output: {}", err_msg);
-            return Err(err_msg);
+        println!("[~] create_virtual: Step 1 - Checking if name is already in use...");
+        println!("[~] create_virtual: Acquiring lock on device_name_to_id_map...");
+        let name_exists_result = self.device_name_to_id_map.lock();
+        match name_exists_result {
+            Ok(name_map) => {
+                println!("[~] create_virtual: Got lock on name map");
+                if name_map.contains_key(device_name) {
+                    let err_msg = format!("Device name '{}' is already in use (registered or previously assigned ID).", device_name);
+                    eprintln!("[!] create_virtual_midi_output: {}", err_msg);
+                    return Err(err_msg);
+                }
+                println!("[~] create_virtual: Name '{}' is not in name_map, continuing...", device_name);
+                // Drop the lock before proceeding
+                drop(name_map);
+            },
+            Err(e) => {
+                let err_msg = format!("Failed to acquire lock on device_name_to_id_map: {:?}", e);
+                eprintln!("[!] create_virtual: {}", err_msg);
+                return Err(err_msg);
+            }
         }
+        
         // Also check if the name exists in the system ports discovered by the main midi_out (avoid conflicts)
+        println!("[~] create_virtual: Step 2 - Checking if name conflicts with system MIDI ports...");
         if let Some(main_midi_out) = &self.midi_out {
-             if main_midi_out.lock().unwrap().ports().iter().any(|p| main_midi_out.lock().unwrap().port_name(p).map_or(false, |n| n == device_name)) {
-                 let err_msg = format!("Device name '{}' already exists as a system MIDI port.", device_name);
-                 eprintln!("[!] create_virtual_midi_output: {}", err_msg);
-                 return Err(err_msg);
-             }
+            println!("[~] create_virtual: Acquiring lock on midi_out...");
+            let midi_out_lock_result = main_midi_out.lock();
+            match midi_out_lock_result {
+                Ok(midi_out_guard) => {
+                    println!("[~] create_virtual: Got lock on midi_out");
+                    
+                    // Get ports while we have the lock
+                    println!("[~] create_virtual: Getting ports from midi_out...");
+                    let ports = midi_out_guard.ports();
+                    println!("[~] create_virtual: Found {} MIDI output ports", ports.len());
+                    
+                    // Drop the lock before checking ports individually
+                    drop(midi_out_guard);
+                    
+                    // Check each port for name match
+                    for (idx, port) in ports.iter().enumerate() {
+                        println!("[~] create_virtual: Checking port #{} for name match...", idx);
+                        
+                        // Re-acquire lock for port_name
+                        let port_name_result = main_midi_out.lock().unwrap().port_name(port);
+                        match port_name_result {
+                            Ok(port_name) => {
+                                if port_name == device_name {
+                                    let err_msg = format!("Device name '{}' already exists as a system MIDI port.", device_name);
+                                    eprintln!("[!] create_virtual_midi_output: {}", err_msg);
+                                    return Err(err_msg);
+                                }
+                            },
+                            Err(e) => {
+                                println!("[~] create_virtual: Could not get name for port #{}: {:?}", idx, e);
+                                // Continue checking other ports even if this one failed
+                            }
+                        }
+                    }
+                    println!("[~] create_virtual: No name conflicts found among system MIDI ports");
+                },
+                Err(e) => {
+                    let err_msg = format!("Failed to acquire lock on midi_out: {:?}", e);
+                    eprintln!("[!] create_virtual: {}", err_msg);
+                    return Err(err_msg);
+                }
+            }
+        } else {
+            println!("[~] create_virtual: No midi_out available, skipping system port conflict check");
         }
 
         // Use a temporary MidiOutput instance just to create the virtual port
-        let temp_midi_out = MidiOutput::new(&format!("BuboCore-Virtual-Creator-{}", device_name))
-            .map_err(|e| format!("Failed to create temporary MIDI output for virtual port: {}", e))?;
+        println!("[~] create_virtual: Step 3 - Creating temporary MidiOutput instance...");
+        let temp_midi_out_result = MidiOutput::new(&format!("BuboCore-Virtual-Creator-{}", device_name));
+        let temp_midi_out = match temp_midi_out_result {
+            Ok(output) => {
+                println!("[~] create_virtual: Successfully created temporary MidiOutput");
+                output
+            },
+            Err(e) => {
+                let err_msg = format!("Failed to create temporary MIDI output for virtual port: {}", e);
+                eprintln!("[!] create_virtual: {}", err_msg);
+                return Err(err_msg);
+            }
+        };
 
+        println!("[~] create_virtual: Step 4 - Creating virtual MIDI port (this might block)...");
+        println!("[~] create_virtual: Calling temp_midi_out.create_virtual(\"{}\")...", device_name);
         match temp_midi_out.create_virtual(device_name) {
             Ok(connection) => {
-                println!("[✅] Successfully created virtual MIDI output: '{}'", device_name);
+                println!("[✅] create_virtual: Successfully created virtual MIDI output: '{}'", device_name);
+                
                 // Ensure ID is assigned *before* registering
+                println!("[~] create_virtual: Step 5 - Assigning device ID...");
                 let new_id = self.ensure_device_id(device_name);
+                println!("[~] create_virtual: Assigned ID {} to '{}'", new_id, device_name);
 
                 // Create the ProtocolDevice variant, wrapping the connection correctly
+                println!("[~] create_virtual: Step 6 - Creating ProtocolDevice wrapper...");
                 let virtual_device = ProtocolDevice::VirtualMIDIOutDevice {
                     name: device_name.to_string(),
                     // Wrap the Option<MidiOutputConnection> in Arc<Mutex<>>
@@ -675,12 +749,13 @@ impl DeviceMap {
                 };
 
                 // Register this new virtual device (will use the name as key)
+                println!("[~] create_virtual: Step 7 - Registering the virtual device...");
                 self.register_output_connection(device_name.to_string(), virtual_device);
-                println!("[✅] Registered virtual MIDI output: '{}' (ID {})", device_name, new_id);
+                println!("[✅] create_virtual: **DONE** Registered virtual MIDI output: '{}' (ID {})", device_name, new_id);
                 Ok(())
             }
             Err(e) => {
-                eprintln!("[!] Failed to create virtual MIDI output '{}': {}", device_name, e);
+                eprintln!("[!] create_virtual: Failed to create virtual MIDI output '{}': {}", device_name, e);
                 Err(format!("Failed to create virtual MIDI output '{}': {}", device_name, e))
             }
         }
