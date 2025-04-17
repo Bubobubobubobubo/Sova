@@ -11,8 +11,6 @@ use ratatui::{
     text::{Line, Span},
     widgets::{Block, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
-use crate::disk; // Needed for execute_load
-
 
 /// Represents a single command available in the command palette.
 #[derive(Clone, Debug)]
@@ -84,17 +82,6 @@ impl CommandPaletteComponent {
             self.is_visible = false;
         }
     }
-
-    /// Shows the command palette.
-     pub fn show(&mut self) {
-         if !self.is_visible {
-            self.is_visible = true;
-            self.input.clear();
-            self.selected_index = 0;
-            self.filter_commands();
-            self.list_state.select(Some(self.selected_index));
-        }
-     }
 
     /// Updates the `filtered_commands` list based on the current `input`.
     fn filter_commands(&mut self) {
@@ -497,15 +484,6 @@ fn execute_toggle_navigation(app: &mut App, _input: &str) -> EyreResult<()> {
     // and handle the mode switching logic within app.rs handle_app_event.
     Ok(())
 }
-
-fn execute_connect(app: &mut App, _input: &str) -> EyreResult<()> {
-     match app.server.network.reconnect() {
-        Ok(_) => app.set_status_message(String::from("Reconnecting...")),
-        Err(e) => app.set_status_message(format!("Failed to reconnect: {}", e)),
-    }
-    Ok(())
-}
-
 
 fn execute_set_name(app: &mut App, input: &str) -> EyreResult<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();

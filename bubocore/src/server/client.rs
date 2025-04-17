@@ -71,12 +71,20 @@ pub enum ClientMessage {
     TransportStop(ActionTiming),
     /// Request the full list of devices from the server.
     RequestDeviceList,
-    /// Request connection to a specific MIDI device by its stable ID.
-    ConnectMidiDevice(usize), // Device ID
-    /// Request disconnection from a specific MIDI device by its stable ID.
-    DisconnectMidiDevice(usize), // Device ID
+    /// Use ConnectMidiDeviceByName. Request connection to a specific MIDI device by its internal ID.
+    ConnectMidiDeviceById(usize), // Internal Device ID
+    /// Use DisconnectMidiDeviceByName. Request disconnection from a specific MIDI device by its internal ID.
+    DisconnectMidiDeviceById(usize), // Internal Device ID
+    /// Request connection to a specific MIDI device by its name.
+    ConnectMidiDeviceByName(String), // Device Name
+    /// Request disconnection from a specific MIDI device by its name.
+    DisconnectMidiDeviceByName(String), // Device Name
     /// Request creation of a new virtual MIDI output device.
     CreateVirtualMidiOutput(String), // Requested device name (server assigns ID)
+    /// Request to assign a device name to a specific slot ID (1-N).
+    AssignDeviceToSlot(usize, String), // Slot ID, Device Name
+    /// Request to unassign whatever device is in a specific slot ID (1-N).
+    UnassignDeviceFromSlot(usize), // Slot ID
 }
 
 /// Represents a client connection to a BuboCore server.
