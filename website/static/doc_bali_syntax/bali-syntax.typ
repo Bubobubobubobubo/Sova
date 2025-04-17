@@ -71,19 +71,23 @@ An #t([Identifier]) is any sequence of one or more letters (ASCII characters 65 
   column-gutter: 7pt,
   row-gutter: 7pt,
   [#nt([Program])], [::=], [#nt([Program]) #nt([Time-Statement]) | #nt([Time-Statement])],
-  [#nt([Time-Statement])], [::=], [(> #nt([Concrete-Fract]) #nt([Program]) ) | (>> #nt([Program]) )],
-  [], [|], [(< #nt([Concrete-Fract]) #nt([Program]) ) | (<< #nt([Program]) )],
-  [], [|], [(loop #t([Number]) #nt([Concrete-Fract]) #nt([Program]) )],
+  [#nt([Context])], [::=], [#nt([Context]) #nt([Context-Element]) | #nt([Context-Element])],
+  [#nt([Context-Element])], [::=], [ch: #nt([Arithmetic-Expr]) | dev: #nt([Arithmetic-Expr]) | dur: #nt([Abstract-Fract]) | v: #nt([Arithmetic-Expr])], 
+  [#nt([Time-Statement])], [::=], [(> #nt([Concrete-Fract]) #nt([Context]) #nt([Program]) ) | (>> #nt([Context]) #nt([Program]) )],
+  [], [|], [(< #nt([Concrete-Fract]) #nt([Context]) #nt([Program]) ) | (<< #nt([Context]) #nt([Program]) )],
+  [], [|], [(loop #t([Number]) #nt([Concrete-Fract]) #nt([Context]) #nt([Program]) )],
+  [], [|], [(with #nt([Context]) #nt([Program]))],
   [], [|], [#nt([Control-Effect])],
-  [#nt([Control-Effect])], [::=], [(seq #nt([Control-List]) ) | (if #nt([Boolean-Expr]) #nt([Control-List]) )],
-  [], [|], [(for #nt([Boolean-Expr]) #nt([Control-List]) ) | #nt([Effect])],
+  [#nt([Control-Effect])], [::=], [(seq #nt([Context]) #nt([Control-List]) ) | (if #nt([Boolean-Expr]) #nt([Context]) #nt([Control-List]) )],
+  [], [|], [(for #nt([Boolean-Expr]) #nt([Context]) #nt([Control-List]) ) | (with #nt([Context]) #nt([Control-List]))],
+  [], [|], [#nt([Effect])],
   [#nt([Control-List])], [::=], [#nt([Control-List]) #nt([Control-Effect]) | #nt([Control-Effect])],
   [#nt([Effect])], [::=], [(def #t([Identifier]) #nt([Arithmetic-Expr]) )],
-  [], [|], [(note #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) #nt([Abstract-Fract]))],
-  [], [|], [(prog #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) )],
-  [], [|], [(control #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) )],
-  [#nt([Concrete-Fract])], [::=], [(/\/ #t([Number]) #t([Number]) ) | #t([Number])],
-  [#nt([Abstract-Fract])], [::=], [(/\/ #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) ) | #nt([Arithmetic-Expr])],
+  [], [|], [(note #nt([Arithmetic-Expr]) #nt([Context]))],
+  [], [|], [(prog #nt([Arithmetic-Expr]) #nt([Context]) )],
+  [], [|], [(control #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) #nt([Context]) )],
+  [#nt([Concrete-Fract])], [::=], [(/\/ #t([Number]) #t([Number]) ) | #t([Number]) | #t([Decimal])],
+  [#nt([Abstract-Fract])], [::=], [(/\/ #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) ) | #nt([Arithmetic-Expr]) | #t([Decimal])],
   [#nt([Boolean-Expr])], [::=], [(and #nt([Boolean-Expr]) #nt([Boolean-Expr]) ) | (or #nt([Boolean-Expr]) #nt([Boolean-Expr]) )],
   [], [|], [(not #nt([Boolean-Expr]) )],
   [], [|], [(lt #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) ) | (leq #nt([Arithmetic-Expr]) #nt([Arithmetic-Expr]) )],
@@ -113,8 +117,7 @@ The identifiers T and R are reserved.
 
 For fractions one can always write (X /\/ Y) instead of ```(// X Y)``` in any bali program.
 
-Moreover, in ``` (note n v c d)```, arguments v and c are optional: one can write ``` (note n v d)``` and ``` (note n d)```.
-In these cases, c and v (if needed) will have default values.
+#nt([Context]) can be empty in all constructions using it, except for ```(with ...)```.
 
 == Comments
 
@@ -123,8 +126,8 @@ This comment ends at the end of the line.
 
 = The semantics
 
-A bali program is associated to a step (and thus a sequence and a pattern) in theTool.
-Each timing information used in bali is relative to this step. 
+A bali program is associated to a frame (and thus a line and a scene) in theTool.
+Each timing information used in bali is relative to this frame. 
 
 == #t([Number]) and #t([Identifier])
 
@@ -175,7 +178,8 @@ A #nt([Concrete-Fract]) or an #nt([Abstract-Fract]) is a fraction used for expre
 The fraction is converted to a floating point value at the last possible moment (that is, when theTool has to compute a timestamp).
 
 In practice ``` (// n d)``` represents a fraction with numerator $n$ and denominator $d$.
-The alternative definition of a fraction — a single number or arithmetic expression $d$ — represents a fraction with a numerator of 1 and a denominator $d$ (except if $d = 0$ in which case the numerator is 0 and the denominator is 1).
+The alternative definition of a fraction as a single number or arithmetic expression $n$ represents a fraction with a numerator of $n$ and a denominator $1$.
+The alternative definition of a fraction as a decimal number $f$ represents a fraction with numerator $n$ and denominator $d$ such that $f = n/d$.
 
 A #nt([Concrete-Fract]) represents a fraction that will be computed at compile time.
 It is defined from numbers only.
@@ -192,28 +196,29 @@ At the moment there are four effects.
 sets the value of variable $v$ to $e$.
 Any variable has value 0 by default.
 
-``` (note n v c d)```
-asks the default Midi device to play the note $n$ with velocity $v$ on channel $c$ for duration $d$.
-The duration is an #nt([Abstract-Fract]).
+``` (note n c)```
+plays the note $n$ with velocity, channel and duration as defined in the context $c$ using the device defined in the context $c$.
 
 ``` (prog p c)```
-sends a program change message to default Midi device.
-With program $p$ on channel $c$.
+sends a program change message to the Midi device defined in the context $c$.
+With program $p$ and channel as defined in context $c$.
 
-``` (control con v c)```
-sends a control change message to default Midi device.
-With control _con_, value $v$, and on channel $c$.
+``` (control con c)```
+sends a control change message to the Midi device defined in the context $c$.
+With control _con_, value $v$, and channel as defined in context $c$.
 
 == #nt([Control-Effect]) and #nt([Control-List])
 
-A #nt([Control-Effect]) allows to perform #nt([Effect]) (or #nt([Control-Effect])) in sequence (seq), in loop (for), or conditionally (if).
+A #nt([Control-Effect]) allows to perform #nt([Effect]) (or #nt([Control-Effect])) in sequence (seq), in loop (for), conditionally (if), or in a given context (with).
 A #nt([Control-List]) is simply an ordered set of #nt([Control-Effect]).
 
-``` (seq s)``` will execute in order the elements of $s$.
+``` (seq c s)``` will execute in order the elements of $s$ in the context $c$.
 
-``` (if cond s)``` will execute the elements of $s$ (not necessarily in order) if the condition _cond_ is evaluated to #true.
+``` (if cond c s)``` will execute the elements of $s$ (not necessarily in order) in the context $c$ if the condition _cond_ is evaluated to #true.
 
-``` (for cond s)``` will execute all the elements in $s$ as long as the condition _cond_ is evaluated to #true. One should avoid making infinite loops as this will mess with the timing requirements (see next section) due to theTool program execution model.
+``` (for cond c s)``` will execute all the elements in $s$ in the context $c$ as long as the condition _cond_ is evaluated to #true. One should avoid making infinite loops as this will mess with the timing requirements (see next section) due to theTool program execution model.
+
+``` (with c s)``` will execute the elements of $s$ (not necessarily in order) in the context $c$.
 
 == #nt([Time-Statement])
 
@@ -223,17 +228,18 @@ The time is relative to the length of the step in which the program is executed.
 It is possible to have nested #nt([Time-Statement]), in which case times are added.
 The default time for executing something, when there is no #nt([Time-Statement]) is 0 (so, right at the beginning of the step).
 
-``` (> frac p)``` executes $p$ at a point in time _frac_ after what was expected.
+``` (> frac c p)``` executes $p$ in context $c$ at a point in time _frac_ after what was expected.
 
-``` (< frac p)``` executes $p$ at a point in time _frac_ before what was expected.
+``` (< frac c p)``` executes $p$ in context $c$ at a point in time _frac_ before what was expected.
 In case $p$ should be executed at a negative time $t$, it will be executed at time 0 but before any other thing that should be be executed at time 0 or at a time negative but larger than $t$.
 
-``` (>> p)``` executes $p$ at the expected time point, but just after everything else that should occur at this time point.
+``` (>> c p)``` executes $p$ in context $c$ at the expected time point, but just after everything else that should occur at this time point.
 
-``` (<< p)``` executes $p$ at the expected time point, but just before everything else that should occur at this time point.
+``` (<< c p)``` executes $p$ in context $c$ at the expected time point, but just before everything else that should occur at this time point.
 
 For example, the program ``` (> 5 p1 (<< p2) (>> p3)``` will execute _p1_, _p2_ and _p3_ all at $1/5$ of the step, but in the following order: _p2_, then _p1_, then _p3_.
 
-Finally ``` (loop n frac p)``` executes $n$ times $p$.
+``` (loop n frac c p)``` executes $n$ times $p$ in context $c$.
 First at the expected time point, then _frac_ after this point, then _frac_ later, and so on.
 
+``` (with c p)``` executes $p$ in context $c$.
