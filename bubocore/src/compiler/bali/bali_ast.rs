@@ -8,8 +8,6 @@ pub type BaliPreparedProgram = Vec<TimeStatement>;
 
 // TODO : définir les noms de variables temporaires ici et les commenter avec leurs types pour éviter les erreurs
 
-// TODO : merger les contexts plutôt que juste remplacer les None
-
 //const MIDIDEVICE: &str = "BuboCoreOut";
 const MIDIDEVICE: &str = "log";
 const DEFAULT_VELOCITY: i64 = 90;
@@ -622,6 +620,29 @@ pub struct ConcreteFraction {
 
 impl ConcreteFraction {
 
+    pub fn from_dec_string(dec: String) -> ConcreteFraction {
+        let parts: Vec<&str> = dec.split('.').collect();
+        let int_part = match parts[0].parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => 0,
+        };
+        let dec_part = match parts[1].parse::<i64>() {
+            Ok(n) => n,
+            Err(_) => 0,
+        };
+        let num_dec = parts[1].len();
+        let mut denominator = 1;
+        for _i in 0..num_dec {
+            denominator = denominator * 10;
+        }
+        let numerator = int_part * denominator + dec_part;
+        ConcreteFraction{
+            signe: 1,
+            numerator,
+            denominator,
+        }.simplify()
+    }
+
     pub fn tof64(&self) -> f64 {
         (self.signe * self.numerator) as f64 / self.denominator as f64
     }
@@ -707,6 +728,14 @@ pub struct Fraction {
 } 
 
 impl Fraction {
+
+    pub fn from_dec_string(dec: String) -> Fraction {
+        let concrete = ConcreteFraction::from_dec_string(dec);
+        Fraction{
+            numerator: Box::new(Expression::Value(Value::Number(concrete.numerator))), 
+            denominator: Box::new(Expression::Value(Value::Number(concrete.denominator)))
+        }
+    }
 
     pub fn as_asm(&self) -> Vec<Instruction> {
         let var_1 = Variable::Instance("_exp1_frac".to_owned());
