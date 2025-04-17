@@ -99,20 +99,19 @@ pub Value: Value = {
 pub AbstractFraction: Fraction = {
     "(//" <numerator: Expression> <denominator: Expression> ")" => Fraction{numerator, denominator},
     "(" <numerator: Expression> "//" <denominator: Expression> ")" => Fraction{numerator, denominator},
-    <denominator: Expression> => Fraction{numerator: Box::new(Expression::Value(Value::Number(1))), denominator},
+    <numerator: Expression> => Fraction{numerator, denominator: Box::new(Expression::Value(Value::Number(1)))},
+    <d: Dec> => Fraction::from_dec_string(d),
+
 };
 
 ConcreteFraction: ConcreteFraction = {
     "(//" <numerator: Number> <denominator: Number> ")" => ConcreteFraction{signe: 1, numerator, denominator},
     "(" <numerator: Number> "//" <denominator: Number> ")" => ConcreteFraction{signe: 1, numerator, denominator},
-    <denominator: Number> => {
-        if denominator == 0 {
-            ConcreteFraction{signe: 1, numerator: 0, denominator: 1}
-        } else {
-            ConcreteFraction{signe: 1, numerator: 1, denominator}
-        }
-    },
+    <numerator: Number> => ConcreteFraction{signe: 1, numerator, denominator: 1},
+    <d: Dec> => ConcreteFraction::from_dec_string(d),
 };
+
+Dec: String = <s:r"[0-9]*\.[0-9]+"> => s.to_string();
 
 Number: i64 = <s:r"[0-9]+"> => { 
     if let Ok(v) = s.parse::<u64>() {
