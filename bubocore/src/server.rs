@@ -233,9 +233,8 @@ async fn on_message(
     state: &ServerState,
     client_name: &mut String,
 ) -> ServerMessage {
-    // Log the incoming request to the server console and broadcast as a server log message.
-    let log_string = format!("[➡️ ] Client '{}' sent: {:?}", client_name, msg);
-    println!("{}", log_string);
+    // Log the incoming request
+    println!("[➡️ ] Client '{}' sent: {:?}", client_name, msg);
 
     match msg {
         ClientMessage::EnableFrames(line_id, frames, timing) => {
@@ -661,8 +660,8 @@ async fn on_message(
             // Send back the current list obtained from device_map
             ServerMessage::DeviceList(state.devices.device_list())
         }
-        ClientMessage::ConnectMidiDevice(device_id) => {
-            match state.devices.connect_midi_output(device_id) {
+        ClientMessage::ConnectMidiDeviceByName(device_name) => {
+            match state.devices.connect_midi_output_by_name(&device_name) {
                 Ok(_) => {
                     // Trigger broadcast update first
                     let updated_list = state.devices.device_list();
@@ -670,11 +669,11 @@ async fn on_message(
                     // Send the updated list directly back to the requester
                     ServerMessage::DeviceList(updated_list)
                 }
-                Err(e) => ServerMessage::InternalError(format!("Failed to connect device ID {}: {}", device_id, e)),
+                Err(e) => ServerMessage::InternalError(format!("Failed to connect device '{}': {}", device_name, e)),
             }
         }
-        ClientMessage::DisconnectMidiDevice(device_id) => {
-            match state.devices.disconnect_midi_output(device_id) {
+        ClientMessage::DisconnectMidiDeviceByName(device_name) => {
+            match state.devices.disconnect_midi_output_by_name(&device_name) {
                  Ok(_) => {
                     // Trigger broadcast update first
                     let updated_list = state.devices.device_list();
@@ -682,7 +681,7 @@ async fn on_message(
                     // Send the updated list directly back to the requester
                     ServerMessage::DeviceList(updated_list)
                 }
-                 Err(e) => ServerMessage::InternalError(format!("Failed to disconnect device ID {}: {}", device_id, e)),
+                 Err(e) => ServerMessage::InternalError(format!("Failed to disconnect device '{}': {}", device_name, e)),
             }
         }
         ClientMessage::CreateVirtualMidiOutput(device_name) => {
@@ -696,6 +695,35 @@ async fn on_message(
                  }
                  Err(e) => ServerMessage::InternalError(format!("Failed to create virtual device '{}': {}", device_name, e)),
              }
+        }
+        ClientMessage::AssignDeviceToSlot(slot_id, device_name) => {
+            match state.devices.assign_slot(slot_id, &device_name) {
+                Ok(_) => {
+                    let updated_list = state.devices.device_list();
+                    let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                    ServerMessage::DeviceList(updated_list) // Send updated list confirming assignment
+                },
+                Err(e) => ServerMessage::InternalError(format!("Failed to assign slot {}: {}", slot_id, e)),
+            }
+        }
+        ClientMessage::UnassignDeviceFromSlot(slot_id) => {
+            match state.devices.unassign_slot(slot_id) {
+                Ok(_) => {
+                     let updated_list = state.devices.device_list();
+                     let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                     ServerMessage::DeviceList(updated_list) // Send updated list confirming unassignment
+                },
+                 Err(e) => ServerMessage::InternalError(format!("Failed to unassign slot {}: {}", slot_id, e)),
+             }
+        }
+        // Handle deprecated messages explicitly
+        ClientMessage::ConnectMidiDeviceById(device_id) => {
+            eprintln!("[!] Received deprecated ConnectMidiDeviceById({}) from '{}'", device_id, client_name);
+            ServerMessage::InternalError("ConnectMidiDeviceById is deprecated. Use ConnectMidiDeviceByName.".to_string())
+        }
+        ClientMessage::DisconnectMidiDeviceById(device_id) => {
+            eprintln!("[!] Received deprecated DisconnectMidiDeviceById({}) from '{}'", device_id, client_name);
+            ServerMessage::InternalError("DisconnectMidiDeviceById is deprecated. Use DisconnectMidiDeviceByName.".to_string())
         }
     }
 }

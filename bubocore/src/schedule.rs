@@ -25,6 +25,7 @@ use crate::{
     protocol::TimedMessage,
     shared_types::GridSelection,
     shared_types::DeviceInfo,
+    lang::event::ConcreteEvent,
 };
 
 pub const SCHEDULED_DRIFT: SyncTime = 30_000;
@@ -745,7 +746,6 @@ impl Scheduler {
         }
 
         let scheduled_date = self.theoretical_date();
-        // TODO: Read MIDI input controller values
         let mut next_timeout = SyncTime::MAX;
 
         self.executions.retain_mut(|exec| {
@@ -753,16 +753,40 @@ impl Scheduler {
                 next_timeout = std::cmp::min(next_timeout, exec.remaining_before(scheduled_date));
                 return true;
             }
+
             next_timeout = 0;
             if let Some((event, date)) = exec.execute_next(&self.clock, &mut self.global_vars, self.scene.mut_lines()) {
-                let messages = self.devices.map_event(event, date);
-                for message in messages {
-                    //let _ = self.update_notifier.send(SchedulerNotification::Log(message.clone()));
-                    let _ = self.world_iface.send(message);
-                }
+                let maybe_slot_id: Option<usize> = match event {
+                    ConcreteEvent::MidiNote(_, _, _, _, id)
+                    | ConcreteEvent::MidiControl(_, _, _, id)
+                    | ConcreteEvent::MidiProgram(_, _, id)
+                    | ConcreteEvent::MidiAftertouch(_, _, _, id)
+                    | ConcreteEvent::MidiChannelPressure(_, _, id)
+                    | ConcreteEvent::MidiSystemExclusive(_, id)
+                    | ConcreteEvent::MidiStart(id)
+                    | ConcreteEvent::MidiStop(id)
+                    | ConcreteEvent::MidiReset(id)
+                    | ConcreteEvent::MidiContinue(id)
+                    | ConcreteEvent::MidiClock(id) => Some(id),
+                    ConcreteEvent::Nop => None,
+                };
+
+                if let Some(slot_id) = maybe_slot_id {
+                    if let Some(device_name) = self.devices.get_name_for_slot(slot_id) {
+                        let messages = self.devices.map_event_for_device_name(&device_name, event, date);
+                        for message in messages {
+                            let _ = self.world_iface.send(message);
+                        }
+                    } else {
+                        // Slot is not assigned, currently ignored silently.
+                        // TODO: Consider adding optional logging or notification here.
+                    }
+                } // Nop events (maybe_slot_id == None) are ignored.
             }
+
             !exec.has_terminated()
         });
+
         next_timeout
     }
 

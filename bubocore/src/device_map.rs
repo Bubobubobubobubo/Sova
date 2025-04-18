@@ -22,19 +22,17 @@ use midir::os::unix::VirtualOutput;
 
 pub type DeviceItem = (String, Arc<ProtocolDevice>);
 
+// Maximum number of user-assignable slots
+const MAX_DEVICE_SLOTS: usize = 16; // Example: 16 slots
+
 pub struct DeviceMap {
     pub input_connections: Mutex<HashMap<String, DeviceItem>>,
     pub output_connections: Mutex<HashMap<String, DeviceItem>>,
+    /// Maps Slot ID (1-N) to the system device name assigned to it.
+    pub slot_assignments: Mutex<HashMap<usize, String>>, 
     midi_in: Option<Arc<Mutex<MidiInput>>>,
     midi_out: Option<Arc<Mutex<MidiOutput>>>,
-    // For assigning stable IDs
-    next_device_id: Mutex<usize>,
-    device_id_map: Mutex<HashMap<usize, String>>, // Maps ID -> Name
-    device_name_to_id_map: Mutex<HashMap<String, usize>>, // Maps Name -> ID 
 }
-
-pub const LOG_NAME: &str = "log";
-const LOG_DEVICE_ID: usize = 0; // Assign a fixed ID for the log device
 
 impl DeviceMap {
     pub fn new() -> Self {
@@ -64,49 +62,16 @@ impl DeviceMap {
         let devices = DeviceMap {
             input_connections: Default::default(),
             output_connections: Default::default(),
+            slot_assignments: Default::default(), // Initialize empty slot map
             midi_in,
             midi_out,
-            next_device_id: Mutex::new(LOG_DEVICE_ID + 1), // Start IDs after LOG
-            device_id_map: Mutex::new(HashMap::new()),
-            device_name_to_id_map: Mutex::new(HashMap::new()),
         };
-        // Register Log device with its fixed ID
-        let mut id_map = devices.device_id_map.lock().unwrap();
-        let mut name_map = devices.device_name_to_id_map.lock().unwrap();
-        id_map.insert(LOG_DEVICE_ID, LOG_NAME.to_string());
-        name_map.insert(LOG_NAME.to_string(), LOG_DEVICE_ID);
-        drop(id_map);
-        drop(name_map);
-        devices.register_output_connection(LOG_NAME.to_owned(), ProtocolDevice::Log);
+        
+        // Register Log device directly without assigning a slot ID
+        // Its name "log" will be its identifier in the connections map.
+        // devices.register_output_connection(LOG_NAME.to_owned(), ProtocolDevice::Log);
+        // Let's not register log here, handle log messages specifically if needed
         devices
-    }
-
-    /// Assigns a stable ID to a device name if it doesn't already have one.
-    fn ensure_device_id(&self, name: &str) -> usize {
-        let mut name_map = self.device_name_to_id_map.lock().unwrap();
-        if let Some(id) = name_map.get(name) {
-            return *id;
-        }
-        // Name not found, assign a new ID
-        let mut next_id_guard = self.next_device_id.lock().unwrap();
-        let new_id = *next_id_guard;
-        *next_id_guard += 1;
-        drop(next_id_guard);
-
-        name_map.insert(name.to_string(), new_id);
-        drop(name_map);
-
-        let mut id_map = self.device_id_map.lock().unwrap();
-        id_map.insert(new_id, name.to_string());
-        drop(id_map);
-
-        println!("[~] Assigned new device ID {} to '{}'", new_id, name);
-        new_id
-    }
-
-    /// Gets the name associated with a device ID.
-    fn get_device_name_by_id(&self, id: usize) -> Option<String> {
-        self.device_id_map.lock().unwrap().get(&id).cloned()
     }
 
     pub fn register_input_connection(&self, name: String, device: ProtocolDevice) {
@@ -116,8 +81,8 @@ impl DeviceMap {
     }
 
     pub fn register_output_connection(&self, name: String, device: ProtocolDevice) {
-        // Ensure the device has an ID when registered
-        self.ensure_device_id(&name);
+        // Just register the connection by name (address)
+        // Slot assignment is separate
         let address = device.address().to_owned();
         let item = (name, Arc::new(device));
         self.output_connections
@@ -126,20 +91,67 @@ impl DeviceMap {
             .insert(address, item);
     }
 
-    /// Finds a registered output device Arc by its assigned ID.
-    fn find_device_by_id(&self, id: usize) -> Option<Arc<ProtocolDevice>> {
-        // 1. Get the name from the ID map within a limited scope for the lock
-        let device_name = {
-            let id_map = self.device_id_map.lock().unwrap();
-            id_map.get(&id).cloned() // Clone the String if found, returns Option<String>
-        }?; // Propagate None if the ID wasn't found; lock is released here
+    /// Assigns a device (by name) to a specific slot ID (1-N).
+    /// Removes any previous assignment for this slot or this device name.
+    pub fn assign_slot(&self, slot_id: usize, device_name: &str) -> Result<(), String> {
+        if !(1..=MAX_DEVICE_SLOTS).contains(&slot_id) {
+            return Err(format!("Invalid slot ID: {}. Must be between 1 and {}.", slot_id, MAX_DEVICE_SLOTS));
+        }
 
-        // 2. Find the device in output_connections by matching the cloned name
-        let connections = self.output_connections.lock().unwrap();
-        connections.values()
-            .find(|(name, _device)| name == &device_name) // Compare with the cloned name
-            .map(|(_name, device_arc)| Arc::clone(device_arc))
-        // Lock on connections is released here
+        let mut assignments = self.slot_assignments.lock().unwrap();
+
+        // Remove any existing assignment for the target slot_id
+        assignments.remove(&slot_id);
+        
+        // Remove any existing assignment for the target device_name (a device can only be in one slot)
+        assignments.retain(|_s_id, assigned_name| assigned_name != device_name);
+
+        // Create the new assignment
+        assignments.insert(slot_id, device_name.to_string());
+        println!("[+] Assigned device '{}' to Slot {}", device_name, slot_id);
+        Ok(())
+    }
+
+    /// Unassigns whatever device is currently in the specified slot ID (1-N).
+    pub fn unassign_slot(&self, slot_id: usize) -> Result<(), String> {
+         if !(1..=MAX_DEVICE_SLOTS).contains(&slot_id) {
+             return Err(format!("Invalid slot ID: {}. Must be between 1 and {}.", slot_id, MAX_DEVICE_SLOTS));
+         }
+         let mut assignments = self.slot_assignments.lock().unwrap();
+         if let Some(removed_name) = assignments.remove(&slot_id) {
+             println!("[-] Unassigned device '{}' from Slot {}", removed_name, slot_id);
+         } else {
+             println!("[~] Slot {} was already empty.", slot_id);
+         }
+         Ok(())
+    }
+    
+    /// Unassigns a specific device name from whichever slot it might be in.
+    pub fn unassign_device_by_name(&self, device_name: &str) {
+        let mut assignments = self.slot_assignments.lock().unwrap();
+        let mut found_slot = None;
+        assignments.retain(|slot, name| {
+            if name == device_name {
+                found_slot = Some(*slot);
+                false // Remove the entry
+            } else {
+                true // Keep other entries
+            }
+        });
+        if let Some(slot) = found_slot {
+             println!("[-] Unassigned device '{}' from Slot {}", device_name, slot);
+        }
+    }
+
+    /// Finds the device name assigned to a specific slot ID.
+    pub fn get_name_for_slot(&self, slot_id: usize) -> Option<String> {
+        self.slot_assignments.lock().unwrap().get(&slot_id).cloned()
+    }
+
+    /// Finds the slot ID assigned to a specific device name.
+    pub fn get_slot_for_name(&self, device_name: &str) -> Option<usize> {
+         self.slot_assignments.lock().unwrap().iter()
+            .find_map(|(slot, name)| if name == device_name { Some(*slot) } else { None })
     }
 
     fn generate_midi_message(
@@ -328,240 +340,163 @@ impl DeviceMap {
         .timed(date)]
     }
 
-    pub fn map_event(
+    /// Maps a ConcreteEvent to ProtocolMessages for a target device specified by NAME.
+    /// The resolution of Slot ID -> Name must happen *before* calling this.
+    pub fn map_event_for_device_name(
         &self,
-        event: ConcreteEvent,
+        target_device_name: &str,
+        event: ConcreteEvent, // Event now contains slot_id, but we ignore it here
         date: SyncTime,
     ) -> Vec<TimedMessage> {
-        let opt_device: Option<Arc<ProtocolDevice>>;
-        let error_dev_identifier: String;
+        
+        // Find the ProtocolDevice using the name.
+        // Search in output_connections first.
+        let device_opt = self.output_connections.lock().unwrap().values()
+            .find(|(name, _)| name == target_device_name)
+            .map(|(_, device_arc)| Arc::clone(device_arc));
+            
+        // TODO: Also check input_connections if necessary?
 
-        // Extract device ID from *any* Midi* event
-        match &event {
-            ConcreteEvent::Nop => {
-                 // Nop doesn't target a device, handle separately or default to log
-                 opt_device = self.find_device_by_id(LOG_DEVICE_ID); // Target Log device
-                 error_dev_identifier = format!("Nop event");
-            }
-            ConcreteEvent::MidiNote(_, _, _, _, device_id)
-            | ConcreteEvent::MidiControl(_, _, _, device_id)
-            | ConcreteEvent::MidiProgram(_, _, device_id)
-            | ConcreteEvent::MidiAftertouch(_, _, _, device_id)
-            | ConcreteEvent::MidiChannelPressure(_, _, device_id)
-            | ConcreteEvent::MidiSystemExclusive(_, device_id)
-            | ConcreteEvent::MidiStart(device_id)
-            | ConcreteEvent::MidiStop(device_id)
-            | ConcreteEvent::MidiReset(device_id)
-            | ConcreteEvent::MidiContinue(device_id)
-            | ConcreteEvent::MidiClock(device_id) => {
-                opt_device = self.find_device_by_id(*device_id);
-                error_dev_identifier = format!("ID {}", device_id);
-            }
-        }
-
-        // Handle device not found (same as before)
-        let Some(device) = opt_device else {
+        let Some(device) = device_opt else {
+            // Log error if device name is not found in active connections
             return vec![ProtocolMessage {
                 payload: LogMessage {
                     level: Severity::Error,
-                    msg: format!("Unable to find target device {}", error_dev_identifier),
+                    msg: format!("Device name '{}' not found or not connected.", target_device_name),
                 }
                 .into(),
+                // Need a default log device reference if not using the map for it
                 device: Arc::new(ProtocolDevice::Log),
             }
             .timed(date)];
         };
 
-        // Dispatch based on the *type* of the found device Arc (same as before)
+        // Dispatch based on the *type* of the found device Arc
         match &*device {
             ProtocolDevice::OSCOutDevice => todo!("OSC output not implemented in map_event"),
             ProtocolDevice::MIDIOutDevice(_) | ProtocolDevice::VirtualMIDIOutDevice {..} => {
                 self.generate_midi_message(event, date, device)
             }
-            ProtocolDevice::Log => {
+            ProtocolDevice::Log => { // Handle explicit logging if needed
                 self.generate_log_message(event, date, device)
             }
             _ => {
-                eprintln!("[!] map_event: Unhandled ProtocolDevice type for {}", error_dev_identifier);
+                eprintln!("[!] map_event_for_device_name: Unhandled ProtocolDevice type for {}", target_device_name);
                  vec![]
             }
         }
     }
 
     pub fn device_list(&self) -> Vec<DeviceInfo> {
-        println!("[~] Générant la liste des périphériques...");
-        let mut discovered_devices_info: HashMap<String, DeviceInfo> = HashMap::new();
+        println!("[~] Generating device list with slot assignments...");
+        let mut discovered_devices_map: HashMap<String, DeviceInfo> = HashMap::new();
+        let slot_map = self.slot_assignments.lock().unwrap();
+        let connected_map = self.output_connections.lock().unwrap(); // Lock once
 
-        // --- Discover system ports (MIDI Out) ---
-        if let Some(midi_out) = &self.midi_out {
-            let ports_result = midi_out.lock().map(|guard| guard.ports());
+        // Helper to create DeviceInfo, checking slot assignment and connection status
+        let create_device_info = |name: String, kind: DeviceKind| -> DeviceInfo {
+            let assigned_slot_id = slot_map.iter()
+                .find_map(|(slot, assigned_name)| if assigned_name == &name { Some(*slot) } else { None })
+                .unwrap_or(0); // 0 if not assigned
+                
+            // Check connection status based on the locked connected_map
+            let is_connected = connected_map.values().any(|(conn_name, _)| conn_name == &name);
             
-            match ports_result {
-                Ok(ports) => {
-                    if !ports.is_empty() {
-                        println!("[~] Découverte de {} ports MIDI output", ports.len());
-                    }
-                    
-                    let mut output_port_names = Vec::new();
-                    for port in &ports {
-                        if let Ok(port_name) = midi_out.lock().unwrap().port_name(port) {
-                            output_port_names.push(port_name);
-                        } else {
-                            output_port_names.push("<Error getting name>".to_string());
-                        }
-                    }
-                    
-                    // Process each port
-                    for port in &ports {
-                        if let Ok(name) = midi_out.lock().unwrap().port_name(port) {
-                            if !discovered_devices_info.contains_key(&name) {
-                                let id = self.ensure_device_id(&name); // Assign ID if new
-                                discovered_devices_info.insert(name.clone(), DeviceInfo {
-                                     id,
-                                     name,
-                                     kind: DeviceKind::Midi,
-                                     is_connected: false,
-                                });
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    eprintln!("[!] Échec de verrouillage midi_out: {:?}", e);
-                }
+            DeviceInfo {
+                id: assigned_slot_id, // Slot ID (0 if unassigned)
+                name,
+                kind,
+                is_connected,
             }
-        } else {
-             eprintln!("[!] Interface MIDI Output (self.midi_out) est None!");
+        };
+
+        // --- Discover system MIDI ports (Out) ---
+        if let Some(midi_out_arc) = &self.midi_out {
+            if let Ok(midi_out) = midi_out_arc.lock() {
+                for port in midi_out.ports() {
+                    if let Ok(name) = midi_out.port_name(&port) {
+                        // Only add if not already processed (e.g., virtual port already added)
+                        if !discovered_devices_map.contains_key(&name) {
+                             discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+                        }
+                    }
+                }
+            } // midi_out lock dropped here
         }
 
-        // --- Discover system ports (MIDI In) ---
-        if let Some(midi_in) = &self.midi_in {
-            let ports_result = midi_in.lock().map(|guard| guard.ports());
-            
-            match ports_result {
-                Ok(ports) => {
-                    if !ports.is_empty() {
-                        println!("[~] Découverte de {} ports MIDI input", ports.len());
-                    }
-                    
-                    let mut input_port_names = Vec::new();
-                    for port in &ports {
-                        if let Ok(port_name) = midi_in.lock().unwrap().port_name(port) {
-                            input_port_names.push(port_name);
-                        } else {
-                            input_port_names.push("<Error getting name>".to_string());
-                        }
-                    }
-                    
-                    // Process each port
-                    for port in &ports {
-                        if let Ok(name) = midi_in.lock().unwrap().port_name(port) {
-                            if !discovered_devices_info.contains_key(&name) {
-                                let id = self.ensure_device_id(&name); // Assign ID if new
-                                discovered_devices_info.insert(name.clone(), DeviceInfo {
-                                    id,
-                                    name,
-                                    kind: DeviceKind::Midi,
-                                    is_connected: false,
-                                });
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    eprintln!("[!] Échec de verrouillage midi_in: {:?}", e);
+        // --- Discover system MIDI ports (In) --- 
+        if let Some(midi_in_arc) = &self.midi_in {
+            if let Ok(midi_in) = midi_in_arc.lock() {
+                for port in midi_in.ports() {
+                     if let Ok(name) = midi_in.port_name(&port) {
+                         if !discovered_devices_map.contains_key(&name) {
+                              discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+                         }
+                     }
                 }
-            }
-        } else {
-            eprintln!("[!] Interface MIDI Input (self.midi_in) est None!");
+            } // midi_in lock dropped here
+        }
+        
+        // --- Add currently connected devices that might not have been discovered (e.g., just created virtual) ---
+        // Clone names *while holding the lock* to avoid borrow error
+        let connected_names: Vec<String> = connected_map.values().map(|(name, _)| name.clone()).collect();
+        // Lock is dropped here automatically when connected_map goes out of scope
+        // drop(connected_map); // No longer needed explicitly
+        
+        for name in connected_names {
+             if !discovered_devices_map.contains_key(&name) {
+                 // Assume MIDI for now if we only know it from connections
+                 // Might need more info in ProtocolDevice later
+                 discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+             }
         }
 
-        // --- Add Log device ---
-        discovered_devices_info.insert(LOG_NAME.to_string(), DeviceInfo {
-            id: LOG_DEVICE_ID,
-            name: LOG_NAME.to_string(),
-            kind: DeviceKind::Log,
-            is_connected: true,
+        // Don't add Log device to the user list unless explicitly assigned to a slot
+        // Add OSC devices later if needed
+
+        let mut final_list: Vec<DeviceInfo> = discovered_devices_map.into_values().collect();
+        
+        // Sort: Assigned devices first (by Slot ID), then unassigned devices (alphabetically)
+        final_list.sort_by(|a, b| {
+            match (a.id, b.id) {
+                (0, 0) => a.name.cmp(&b.name), // Both unassigned: sort by name
+                (0, _) => std::cmp::Ordering::Greater, // Unassigned goes after assigned
+                (_, 0) => std::cmp::Ordering::Less, // Assigned goes before unassigned
+                (id_a, id_b) => id_a.cmp(&id_b), // Both assigned: sort by slot ID
+            }
         });
-
-        // --- Mark connected status based on registered connections ---
-        let connections_result = self.output_connections.lock();
-        match connections_result {
-            Ok(connections) => {
-                for (registered_name, _device_arc) in connections.values() {
-                    // Ensure the registered device also exists in our discovered list (could be virtual)
-                    if !discovered_devices_info.contains_key(registered_name) {
-                        // This happens for virtual devices which aren't discoverable by midir::ports()
-                        // We need to add them to the list now.
-                        let id = self.ensure_device_id(registered_name);
-                        discovered_devices_info.insert(registered_name.clone(), DeviceInfo {
-                            id, 
-                            name: registered_name.clone(),
-                            kind: DeviceKind::Midi, // Assume MIDI for now
-                            is_connected: false, // Will be marked true below
-                        });
-                    }
-                    
-                    if let Some(device_info) = discovered_devices_info.get_mut(registered_name) {
-                        // Mark as connected
-                        device_info.is_connected = true;
-                    }
-                }
-            },
-            Err(e) => {
-                eprintln!("[!] Échec de verrouillage output_connections: {:?}", e);
-                return Vec::new(); // Return empty list on error
-            }
-        }
-
-        let mut final_list: Vec<DeviceInfo> = discovered_devices_info.into_values().collect();
-        // Sort by ID for stable ordering
-        final_list.sort_by_key(|d| d.id);
-        println!("[~] Liste de {} périphériques générée", final_list.len());
+        
+        println!("[~] Device list generated. Count: {}", final_list.len());
         final_list
     }
 
-    /// Attempts to connect to the specified MIDI output device by ID.
-    pub fn connect_midi_output(&self, device_id: usize) -> Result<(), String> {
-        println!("[🔌] Attempting to connect MIDI Output device ID: {}", device_id);
+    /// Connects to a MIDI output device by NAME.
+    pub fn connect_midi_output_by_name(&self, device_name: &str) -> Result<(), String> {
+        println!("[🔌] Attempting to connect MIDI Output device: {}", device_name);
 
-        let Some(device_name) = self.get_device_name_by_id(device_id) else {
-             return Err(format!("Cannot connect: Invalid device ID {}", device_id));
-        };
-
-        // Create a temporary MidiOutput instance to find the port and connect
-        // This avoids moving out of the shared MutexGuard
+        // Check if already connected (i.e., in output_connections)
+        if self.output_connections.lock().unwrap().values().any(|(name, _)| name == device_name) {
+             return Err(format!("Device '{}' is already connected.", device_name));
+        }
+        
+        // Find the midir port using a temporary instance
         let temp_midi_out = MidiOutput::new(&format!("BuboCore-Temp-Connector-{}", device_name))
             .map_err(|e| format!("Failed to create temporary MidiOutput: {}", e))?;
-
-        // Find the midir port using the temporary instance
         let port_opt: Option<MidiOutputPort> = temp_midi_out.ports().into_iter().find(|p| {
-            // Need to handle potential error from port_name
             temp_midi_out.port_name(p).map_or(false, |name| name == device_name)
         });
-        let port = port_opt.ok_or(format!("MIDI Output port '{}' not found by midir.", device_name))?;
-        println!("   Found midir port using temporary instance.");
+        let port = port_opt.ok_or_else(|| format!("MIDI Output port '{}' not found by midir.", device_name))?;
 
-        // Perform the connection using the temporary instance (which consumes it)
         match temp_midi_out.connect(&port, &format!("BuboCore-Connection-{}", device_name)) {
             Ok(connection) => {
                 println!("[✅] Successfully connected to MIDI Output: {}", device_name);
-
-                // Create the MidiOut struct for storage, wrapping the actual connection
                 let midi_out_handler = MidiOut {
-                    name: device_name.clone(),
+                    name: device_name.to_string(),
                     active_notes: Default::default(),
-                    // Store the actual connection obtained from the temporary MidiOutput
                     connection: Arc::new(Mutex::new(Some(connection))),
                 };
-
-                // Wrap the handler in Arc<Mutex<>> for ProtocolDevice
                 let device = ProtocolDevice::MIDIOutDevice(Arc::new(Mutex::new(midi_out_handler)));
-
-                // Register/update the connection in the map
-                self.register_output_connection(device_name.clone(), device);
-
-                println!("[✅] Registered/Updated connection for MIDI Output '{}' (ID {})", device_name, device_id);
+                self.register_output_connection(device_name.to_string(), device);
                 Ok(())
             },
             Err(e) => {
@@ -569,138 +504,66 @@ impl DeviceMap {
                 Err(format!("Failed to connect MIDI Output '{}': {}", device_name, e))
             }
         }
-        // No MutexGuard lock to release here as we used a temporary instance
     }
 
-    /// Disconnects the specified MIDI output device by ID.
-    pub fn disconnect_midi_output(&self, device_id: usize) -> Result<(), String> {
-        let Some(device_name) = self.get_device_name_by_id(device_id) else {
-             return Err(format!("Cannot disconnect: Invalid device ID {}", device_id));
-        };
-         println!("[🔌] Attempting to disconnect MIDI Output device ID: {}", device_id);
-
+    /// Disconnects a MIDI output device by NAME.
+    pub fn disconnect_midi_output_by_name(&self, device_name: &str) -> Result<(), String> {
+         println!("[🔌] Attempting to disconnect MIDI Output device: {}", device_name);
         let mut connections = self.output_connections.lock().unwrap();
-        
         let key_to_remove = connections.iter()
-            .find(|(_address, (name, _device))| name == &device_name)
+             .find(|(_address, (name, _device))| name == device_name)
             .map(|(address, _item)| address.clone());
 
         match key_to_remove {
             Some(key) => {
                 if connections.remove(&key).is_some() {
-                    // Note: We don't remove the ID from the id_map or name_map, 
-                    // so it remains stable if the device reappears.
-                    println!("[✅] Disconnected and removed registration for MIDI Output '{}' (ID {})", device_name, device_id);
+                     println!("[✅] Disconnected and removed registration for MIDI Output '{}'", device_name);
+                     // Also unassign from any slot it might be in
+                     drop(connections); // Release lock before calling another method
+                     self.unassign_device_by_name(device_name);
                     Ok(())
                 } else {
-                     eprintln!("[!] Failed to remove connection for key '{}' (name: '{}') even though it was found.", key, device_name);
+                      eprintln!("[!] Failed to remove connection for key '{}' (name: '{}').", key, device_name);
                      Err(format!("Internal error removing connection for {}", device_name))
                 }
             }
             None => {
-                eprintln!("[!] Cannot disconnect MIDI Output '{}' (ID {}): Not found in registered connections.", device_name, device_id);
-                Err(format!("Device '{}' (ID {}) not registered/connected.", device_name, device_id))
-            }
-        }
+                 eprintln!("[!] Cannot disconnect MIDI Output '{}': Not connected.", device_name);
+                 Err(format!("Device '{}' not connected.", device_name))
+             }
+         }
     }
 
-    /// Creates a virtual MIDI output port and registers it.
-    pub fn create_virtual_midi_output(&self, device_name: &str) -> Result<(), String> {
-        println!("[✨] Création du port MIDI virtuel: '{}'", device_name);
-
-        // Check if a device (real or virtual) with this name already exists in registered connections
-        // OR if the name is already assigned an ID (even if not currently registered)
-        let name_exists_result = self.device_name_to_id_map.lock();
-        match name_exists_result {
-            Ok(name_map) => {
-                if name_map.contains_key(device_name) {
-                    let err_msg = format!("Le nom '{}' est déjà utilisé (enregistré ou avec un ID précédemment assigné).", device_name);
-                    eprintln!("[!] {}", err_msg);
-                    return Err(err_msg);
-                }
-                // Drop the lock before proceeding
-                drop(name_map);
-            },
-            Err(e) => {
-                let err_msg = format!("Échec de verrouillage device_name_to_id_map: {:?}", e);
-                eprintln!("[!] {}", err_msg);
-                return Err(err_msg);
-            }
-        }
+    /// Creates a virtual MIDI output port and returns its name on success.
+    /// Does NOT assign it to a slot automatically.
+    pub fn create_virtual_midi_output(&self, desired_name: &str) -> Result<String, String> {
+        println!("[✨] Creating virtual MIDI port: '{}'", desired_name);
         
-        // Also check if the name exists in the system ports discovered by the main midi_out (avoid conflicts)
-        if let Some(main_midi_out) = &self.midi_out {
-            let midi_out_lock_result = main_midi_out.lock();
-            match midi_out_lock_result {
-                Ok(midi_out_guard) => {
-                    // Get ports while we have the lock
-                    let ports = midi_out_guard.ports();
-                    
-                    // Drop the lock before checking ports individually
-                    drop(midi_out_guard);
-                    
-                    // Check each port for name match
-                    for port in ports.iter() {
-                        // Re-acquire lock for port_name
-                        let port_name_result = main_midi_out.lock().unwrap().port_name(port);
-                        match port_name_result {
-                            Ok(port_name) => {
-                                if port_name == device_name {
-                                    let err_msg = format!("Le nom '{}' existe déjà comme port MIDI système.", device_name);
-                                    eprintln!("[!] {}", err_msg);
-                                    return Err(err_msg);
-                                }
-                            },
-                            Err(_) => {
-                                // Continue checking other ports even if this one failed
-                            }
-                        }
-                    }
-                },
-                Err(e) => {
-                    let err_msg = format!("Échec de verrouillage midi_out: {:?}", e);
-                    eprintln!("[!] {}", err_msg);
-                    return Err(err_msg);
-                }
-            }
+        // Check if name is already used by any known device (system or virtual)
+        let known_devices = self.device_list(); // Get current list including assignments
+        if known_devices.iter().any(|d| d.name == desired_name) {
+             return Err(format!("Device name '{}' already exists.", desired_name));
         }
 
-        // Use a temporary MidiOutput instance just to create the virtual port
-        let temp_midi_out_result = MidiOutput::new(&format!("BuboCore-Virtual-Creator-{}", device_name));
-        let temp_midi_out = match temp_midi_out_result {
-            Ok(output) => {
-                output
-            },
-            Err(e) => {
-                let err_msg = format!("Échec de création du MidiOutput temporaire: {}", e);
-                eprintln!("[!] {}", err_msg);
-                return Err(err_msg);
-            }
-        };
+        // Use temporary MidiOutput to create the port
+        let temp_midi_out = MidiOutput::new(&format!("BuboCore-Virtual-Creator-{}", desired_name))
+            .map_err(|e| format!("Failed to create temporary MidiOutput: {}", e))?;
 
-        println!("[~] Création du port MIDI virtuel (peut prendre du temps)...");
-        match temp_midi_out.create_virtual(device_name) {
+        match temp_midi_out.create_virtual(desired_name) {
             Ok(connection) => {
-                println!("[✅] Port MIDI virtuel créé: '{}'", device_name);
-                
-                // Ensure ID is assigned *before* registering
-                let new_id = self.ensure_device_id(device_name);
-
-                // Create the ProtocolDevice variant, wrapping the connection correctly
+                println!("[✅] Virtual MIDI port created: '{}'", desired_name);
                 let virtual_device = ProtocolDevice::VirtualMIDIOutDevice {
-                    name: device_name.to_string(),
-                    // Wrap the Option<MidiOutputConnection> in Arc<Mutex<>>
+                    name: desired_name.to_string(),
                     connection: Arc::new(Mutex::new(Some(connection))),
                 };
-
-                // Register this new virtual device (will use the name as key)
-                self.register_output_connection(device_name.to_string(), virtual_device);
-                println!("[✅] Port MIDI virtuel '{}' (ID {}) enregistré", device_name, new_id);
-                Ok(())
+                // Register the connection so it can be found immediately
+                self.register_output_connection(desired_name.to_string(), virtual_device);
+                println!("[✅] Virtual MIDI port '{}' registered.", desired_name);
+                Ok(desired_name.to_string()) // Return the name
             }
             Err(e) => {
-                eprintln!("[!] Échec de création du port MIDI virtuel '{}': {}", device_name, e);
-                Err(format!("Échec de création du port MIDI virtuel '{}': {}", device_name, e))
+                eprintln!("[!] Failed to create virtual MIDI port '{}': {}", desired_name, e);
+                Err(format!("Failed to create virtual MIDI port '{}': {}", desired_name, e))
             }
         }
     }
