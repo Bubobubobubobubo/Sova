@@ -207,7 +207,7 @@ impl Scheduler {
         Scheduler {
             world_iface,
             scene: Default::default(),
-            global_vars: HashMap::new(),
+            global_vars: VariableStore::new(),
             executions: Vec::new(),
             devices,
             clock,
