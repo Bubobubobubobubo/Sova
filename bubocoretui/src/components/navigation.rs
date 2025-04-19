@@ -340,7 +340,6 @@ impl Component for NavigationComponent {
 
         let info_text = match current_tile {
             NavigationTile::Editor => {
-                let mut lines = Vec::<Line>::new();
                 let label_style = Style::default().fg(Color::Yellow);
                 let value_style = Style::default().fg(Color::White);
 
