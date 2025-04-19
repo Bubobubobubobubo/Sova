@@ -68,6 +68,7 @@ impl GridComponent {
         col_idx: usize,
         line: Option<&SceneLine>,
         app: &App,
+        col_width: u16, // Accept column width
     ) -> Cell<'static> {
         let styles = Self::cell_styles();
         let bar_char_active = "▌";
@@ -76,9 +77,7 @@ impl GridComponent {
         if let Some(line) = line {
             if frame_idx < line.frames.len() {
                 let frame_val = line.frames[frame_idx];
-                // --- Use line.frame_names --- 
                 let frame_name = line.frame_names.get(frame_idx).cloned().flatten();
-                // -----------------------------
                 let is_enabled = line.is_frame_enabled(frame_idx);
                 let base_style = if is_enabled { styles.enabled } else { styles.disabled };
                 let current_frame_for_line = app.server.current_frame_positions.as_ref()
@@ -96,13 +95,11 @@ impl GridComponent {
                 let content_spans = if is_this_the_last_frame && is_head_past_last_frame {
                     vec![Span::raw("⏳")]
                 } else {
-                    let len_str = format!("[{:.2}]", frame_val);
                     if let Some(name) = frame_name {
-                        let name_span = Span::raw(format!("{} ", name));
-                        let len_span = Span::raw(len_str);
-                        vec![name_span, len_span]
+                        let name_span = Span::raw(name);
+                        vec![name_span]
                     } else {
-                        vec![Span::raw(len_str)]
+                        vec![]
                     }
                 };
                 let cell_base_style = if is_this_the_last_frame && is_head_past_last_frame {
@@ -144,13 +141,40 @@ impl GridComponent {
                 } else { if let Some(end) = line.end_frame { frame_idx <= end } else { false } };
                 let bar_char = if should_draw_bar { bar_char_active } else { bar_char_inactive };
                 let bar_span = Span::styled(bar_char, if should_draw_bar { styles.start_end_marker } else { Style::default() });
-                let mut cell_line_spans = vec![bar_span, play_marker_span, Span::raw(" ")];
-                cell_line_spans.extend(final_content_spans);
+
+                // --- Build left part (Bar, Play, Space, Name) --- 
+                let mut left_spans = vec![bar_span, play_marker_span, Span::raw(" ")];
+                left_spans.extend(final_content_spans); // final_content_spans has name or end marker
+                let left_width = left_spans.iter().map(|s| s.width()).sum::<usize>();
+
+                // --- Build right part (duration) ---
+                let duration_span;
+                let duration_width;
+                if !(is_this_the_last_frame && is_head_past_last_frame) {
+                    let duration_str = format!(" {:.1} ", frame_val);
+                    let duration_style = Style::default().fg(Color::White).bg(Color::DarkGray);
+                    duration_span = Span::styled(duration_str.clone(), duration_style);
+                    duration_width = duration_span.width();
+                } else {
+                    duration_span = Span::raw(""); // Empty span if no duration shown
+                    duration_width = 0;
+                }
+
+                // --- Calculate padding ---
+                // Use full col_width directly
+                let available_width = col_width;
+                let padding_needed = available_width
+                    .saturating_sub(left_width as u16)
+                    .saturating_sub(duration_width as u16);
+                let padding_span = Span::raw(" ".repeat(padding_needed as usize));
+
+                // --- Assemble final spans ---
+                let mut cell_line_spans = left_spans;
+                cell_line_spans.push(padding_span);
+                cell_line_spans.push(duration_span);
 
                 // --- Alignment ---
-                // Change alignment to Right
-                let cell_content = Line::from(cell_line_spans).alignment(ratatui::layout::Alignment::Right);
-                // --- ---
+                let cell_content = Line::from(cell_line_spans).alignment(ratatui::layout::Alignment::Left);
 
                 Cell::from(cell_content).style(final_style)
             } else {
@@ -195,7 +219,8 @@ impl GridComponent {
             let animated_fg = if phase < 250 { current_fg } else { Color::Red };
             final_style = final_style.fg(animated_fg);
         }
-        let cell_content = Line::from(cell_content_span).alignment(ratatui::layout::Alignment::Center);
+        // Align empty cell content to Left as well for consistency
+        let cell_content = Line::from(cell_content_span).alignment(ratatui::layout::Alignment::Left);
         Cell::from(cell_content).style(final_style)
     }
 
@@ -1155,7 +1180,7 @@ impl GridComponent {
         let data_rows = (start_row..end_row.min(max_frames)) // Use calculated range
             .map(|frame_idx| {
                 let cells = lines.iter().enumerate()
-                   .map(|(col_idx, line)| self.render_grid_cell(frame_idx, col_idx, Some(line), app));
+                   .map(|(col_idx, line)| self.render_grid_cell(frame_idx, col_idx, Some(line), app, layout.table_area.width / num_lines as u16));
                 Row::new(cells).height(1)
             });
 
