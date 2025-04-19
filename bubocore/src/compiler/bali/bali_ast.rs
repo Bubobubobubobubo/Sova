@@ -14,6 +14,13 @@ const DEFAULT_DEVICE: i64 = 1;
 const DEFAULT_DURATION: i64 = 2;
 
 pub fn bali_as_asm(prog: BaliProgram) -> Program {
+
+    let mut res: Program = Vec::new();
+    
+    if prog.len() == 0 {
+        return res
+    }
+
     //print!("Original prog {:?}\n", prog);
     //let prog = expend_loop(prog);
     //print!("Loopless prog {:?}\n", prog);
@@ -38,7 +45,6 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
     } else {
         0.0
     };
-    let mut res: Program = Vec::new();
     let time_var = Variable::Instance("_time".to_owned());
 
     if total_delay > 0.0 {
@@ -970,7 +976,7 @@ impl Fraction {
         let mut e1 = vec![
             Instruction::Control(ControlASM::Mov(0.0.into(), var_1.clone())),
             Instruction::Control(ControlASM::Mov(0.0.into(), var_2.clone())),
-            Instruction::Control(ControlASM::Mov(0.0.into(), _res_frac.clone())),
+            Instruction::Control(ControlASM::Mov(0.0.into(), var_out.clone())),
         ];
         e1.extend(self.numerator.as_asm());
         e1.extend(self.denominator.as_asm());
