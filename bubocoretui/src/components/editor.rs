@@ -822,28 +822,13 @@ impl Component for EditorComponent {
                 Span::styled(" ^P/↑ ", key_style), Span::styled("Prev Match", help_style),
             ])
         } else {
-            // Adjust help based on editor mode
-            match app.settings.editor_keymap_mode {
-                EditorKeymapMode::Vim => Line::from(vec![
-                    Span::styled(format!("[{}] ", app.editor.vim_state.mode), Style::default().fg(Color::LightBlue).add_modifier(Modifier::BOLD)),
-                    Span::styled("Esc", key_style), Span::styled(": Normal | ", help_style),
-                    Span::styled("i/a/o", key_style), Span::styled(": Insert | ", help_style),
-                    Span::styled("v/V", key_style), Span::styled(": Visual | ", help_style),
-                    Span::styled("y/d/c/p", key_style), Span::styled(": Yank/Del/Change/Paste | ", help_style),
-                    Span::styled("hjkl/arrows", key_style), Span::styled(": Move | ", help_style),
-                    Span::styled("^S", key_style), Span::styled(": Send | ", help_style),
-                    Span::styled("^G", key_style), Span::styled(": Search", help_style),
-                 ]),
-                 EditorKeymapMode::Normal => Line::from(vec![
-                    Span::styled("Ctrl+S", key_style), Span::styled(": Send | ", help_style),
-                    Span::styled("Ctrl+E", key_style), Span::styled(": Toggle | ", help_style),
-                    Span::styled("Ctrl+G", key_style), Span::styled(": Search | ", help_style),
-                    Span::styled("Ctrl+Arrows", key_style), Span::styled(": Navigate Script | ", help_style),
-                    Span::styled("Esc", key_style), Span::styled(": Exit | ", help_style),
-                    // Add Emacs hints?
-                    Span::styled("^F/^B/^N/^P", key_style), Span::styled(": Move", help_style),
-                ]),
-            }
+            // Simplified help text - only show app-level bindings
+            Line::from(vec![
+                Span::styled("Ctrl+S", key_style), Span::styled(": Send | ", help_style),
+                Span::styled("Ctrl+E", key_style), Span::styled(": Toggle | ", help_style),
+                Span::styled("Ctrl+G", key_style), Span::styled(": Search | ", help_style),
+                Span::styled("Ctrl+←↑↓→", key_style), Span::styled(": Navigate Script", help_style),
+            ])
         };
 
         let help = Paragraph::new(help_line)
