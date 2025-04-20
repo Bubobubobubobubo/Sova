@@ -86,6 +86,10 @@ pub enum AppEvent {
     // --- Contrôle de l'application --- 
     /// Quitter l'application.
     Quit,
+
+    // Editor Mode Events
+    SetEditorModeNormal,
+    SetEditorModeVim,
 }
 
 /// Gestionnaire d'événements pour le terminal.

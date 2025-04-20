@@ -1,4 +1,10 @@
-The Grid provides a matrix interface for creating and manipulating lines and scripts that compose the scene loaded on the server.
+The grid is the central view of BuboCoreTUI. It provides ways to organize and manipulate the scripts that compose a scene loaded on the server.
+
+## Organization
+
+- `Scene` - The scene represents everything that is currently playing. It is composed of one or more `lines`, itself composed of one or more `frames`.
+- `Line` - A line is a linear sequence of `frames`. One or more line can be played at the same time.
+- `Frame` - A frame is a single unit of execution. It is the smallest unit that can be manipulated in the grid. It is essentially a script that can be enabled or disabled. Each frame has a length (in beats).
 
 ## Navigation & Selection
 

@@ -990,6 +990,15 @@ impl App {
                      }
                  });
             },
+            // --- Handle Editor Mode Changes ---
+            AppEvent::SetEditorModeNormal => {
+                self.settings.editor_keymap_mode = EditorKeymapMode::Normal;
+                self.set_status_message("Editor set to Normal mode".to_string());
+            },
+            AppEvent::SetEditorModeVim => {
+                self.settings.editor_keymap_mode = EditorKeymapMode::Vim;
+                self.set_status_message("Editor set to Vim mode".to_string());
+            },
         }
         Ok(())
     }

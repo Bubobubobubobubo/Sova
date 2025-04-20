@@ -1,4 +1,4 @@
-`BuboCore` is a free and open source project. It is developed by a small team of contributors with love and care! 
+`BuboCore` is a free and open source project. It is developed by a small team of contributors with love, care and a lot of coffee.
 
 ## Contributors
 
