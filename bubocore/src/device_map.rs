@@ -15,6 +15,7 @@ use crate::{
         ProtocolDevice, ProtocolMessage, TimedMessage,
     },
     shared_types::{DeviceInfo, DeviceKind},
+    lang::variable::VariableValue,
 };
 
 use midir::{MidiInput, MidiOutput, Ignore};
@@ -379,26 +380,48 @@ impl DeviceMap {
         match &*device {
             ProtocolDevice::OSCOutputDevice {..} => {
                 // Map ConcreteEvent to OSCMessage
-                let osc_payload_opt = match event {
+                let osc_payload_opt: Option<OSCMessage> = match event {
                     // --- Handle Generic OSC Event --- 
                     ConcreteEvent::Osc { message, device_id: _ } => {
                          // The message is already constructed, just pass it through
                          Some(message)
-                     }
+                    }
                     // --- Handle Dirt Event --- 
-                    ConcreteEvent::Dirt { data, device_id: _ } => {
-                        // Construct args: [key1, val1, key2, val2, ...]
-                        let mut args: Vec<OscArgument> = Vec::with_capacity(data.len() * 2);
-                        for (key, value) in data {
-                            args.push(OscArgument::String(key));
-                            args.push(value); // Value is already OscArgument
+                    ConcreteEvent::Dirt { sound, params, device_id: _ } => {
+                        // Construct args: ["s", sound_value, key1, val1, key2, val2, ...]
+                        let mut args: Vec<OscArgument> = Vec::with_capacity(params.len() * 2 + 2);
+                        
+                        // Add sound first
+                        args.push(OscArgument::String("s".to_string()));
+                        let sound_arg = match sound {
+                            VariableValue::Integer(i) => OscArgument::Int(i as i32),
+                            VariableValue::Float(f) => OscArgument::Float(f as f32),
+                            VariableValue::Str(s) => OscArgument::String(s),
+                            // Default/Fallback if sound isn't a string/int/float?
+                            _ => OscArgument::String("default".to_string()), 
+                        };
+                        args.push(sound_arg);
+
+                        // Add other parameters
+                        for (key, value) in params {
+                            args.push(OscArgument::String(key.clone()));
+                            let param_arg = match value {
+                                VariableValue::Integer(i) => OscArgument::Int(i as i32),
+                                VariableValue::Float(f) => OscArgument::Float(f as f32),
+                                VariableValue::Str(s) => OscArgument::String(s),
+                                _ => { // Handle unsupported types gracefully
+                                     eprintln!("[WARN] Dirt to OSC: Unsupported param type {:?} for key '{}'. Sending Int 0.", value, key);
+                                     OscArgument::Int(0) 
+                                }
+                            };
+                            args.push(param_arg);
                         }
                         Some(OSCMessage {
                             addr: "/dirt/play".to_string(), // Standard SuperDirt address
                             args,
                         })
                     }
-                    // --- Handle other generic OSC mappings (from previous step) ---
+                    // --- Handle other generic OSC mappings (legacy - might remove later) ---
                     ConcreteEvent::MidiNote(note, vel, chan, _dur, _device_id) => {
                         Some(OSCMessage {
                             addr: "/midi/noteon".to_string(),

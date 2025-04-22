@@ -490,8 +490,8 @@ impl VariableStore {
                 VariableValue::Bool(_) => value = value.cast_as_bool(clock, frame_len),
                 VariableValue::Str(_) => value = value.cast_as_str(clock, frame_len),
                 VariableValue::Dur(_) => value = value.cast_as_dur(),
-                VariableValue::Func(_) => todo!(),
-                VariableValue::Map(_) => todo!(),
+                VariableValue::Func(_) => { /* Do nothing, allow overwrite */ }, 
+                VariableValue::Map(_) => { /* Do nothing, allow overwrite */ }, 
             }
         }
         self.content.insert(key, value)

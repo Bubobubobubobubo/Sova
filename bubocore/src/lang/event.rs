@@ -2,13 +2,12 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::clock::SyncTime;
-use crate::protocol::osc::Argument as OscArgument;
-use crate::protocol::osc::{OSCMessage};
+use crate::protocol::osc::OSCMessage;
 
 use super::variable::VariableValue;
 use super::{evaluation_context::EvaluationContext, variable::Variable};
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConcreteEvent {
     Nop,
@@ -25,7 +24,8 @@ pub enum ConcreteEvent {
     MidiContinue(usize),
     MidiClock(usize),
     Dirt {
-        data: HashMap<String, OscArgument>,
+        sound: VariableValue,
+        params: HashMap<String, VariableValue>,
         device_id: usize,
     },
     Osc { message: OSCMessage, device_id: usize },
@@ -123,31 +123,43 @@ impl Event {
             Event::Dirt { data, device_id } => {
                 let dev_id = ctx.evaluate(device_id).as_integer(ctx.clock, ctx.frame_len()) as usize;
                 let evaluated_data_var = ctx.evaluate(data);
-                let concrete_data = match evaluated_data_var.as_map() {
+                
+                // Initialize default sound and empty params
+                let mut concrete_sound = VariableValue::Str("default".to_string()); // Default sound
+                let mut concrete_params = HashMap::new();
+
+                match evaluated_data_var.as_map() {
                     Some(map_var) => {
-                        let mut concrete_map = HashMap::new();
                         for (key, value_var) in map_var {
+                            // Convert VariableValue to OscArgument
                             let concrete_value = match value_var { 
-                                VariableValue::Integer(i) => OscArgument::Int(*i as i32),
-                                VariableValue::Float(f) => OscArgument::Float(*f as f32),
-                                VariableValue::Str(s) => OscArgument::String(s.clone()),
+                                VariableValue::Integer(i) => VariableValue::Integer(*i),
+                                VariableValue::Float(f) => VariableValue::Float(*f),
+                                VariableValue::Str(s) => VariableValue::Str(s.clone()),
+                                // Add other necessary conversions if Map can hold more types
                                 _ => {
-                                    eprintln!("[!] Warning: Unsupported value type ({:?}) in Dirt event data for key '{}'. Skipping.", value_var, key);
+                                    eprintln!("[!] Warning: Unsupported value type ({:?}) in Dirt event data map for key '{}'. Skipping.", value_var, key);
                                     continue;
                                 }
                             };
-                            concrete_map.insert(key.clone(), concrete_value);
+                            
+                            // Separate sound ('s') from other params
+                            if key == "s" {
+                                concrete_sound = concrete_value;
+                            } else {
+                                concrete_params.insert(key.clone(), concrete_value);
+                            }
                         }
-                        concrete_map
                     }
                     None => {
-                        eprintln!("[!] Warning: Dirt event data did not evaluate to a Map. Using empty data. Evaluated to: {:?}", evaluated_data_var);
-                        HashMap::new()
+                        eprintln!("[!] Warning: Dirt event data did not evaluate to a Map. Using default sound and empty params. Evaluated to: {:?}", evaluated_data_var);
+                        // Keep default sound and empty params
                     }
                 };
 
                 ConcreteEvent::Dirt {
-                    data: concrete_data,
+                    sound: concrete_sound, // Use the separated sound value
+                    params: concrete_params, // Use the separated params map
                     device_id: dev_id,
                 }
             }

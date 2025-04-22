@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
-
+use std::fmt::Debug;
 use super::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Instruction, Program};
 
 use crate::scene::script::ReturnInfo;
 use crate::clock::TimeSpan;
 
 use std::f64::consts::PI;
+use std::collections::HashMap;
 
 // Import state keys
 use crate::lang::environment_func::{SINE_PHASE_KEY, SINE_LAST_BEAT_KEY, SAW_PHASE_KEY, SAW_LAST_BEAT_KEY, TRI_PHASE_KEY, TRI_LAST_BEAT_KEY, ISAW_PHASE_KEY, ISAW_LAST_BEAT_KEY, RANDSTEP_PHASE_KEY, RANDSTEP_LAST_BEAT_KEY, RANDSTEP_VALUE_KEY};
@@ -62,6 +63,8 @@ pub enum ControlASM {
     // Stack operations
     Push(Variable),
     Pop(Variable),
+    MapEmpty(Variable),
+    MapInsert(Variable, VariableValue, Variable, Variable),
     // Jumps
     Jump(usize),
     JumpIf(Variable, usize),
@@ -260,8 +263,33 @@ impl ControlASM {
                 ReturnInfo::None
             },
             ControlASM::Pop(x) => {
-                let value = ctx.stack.pop().unwrap_or(false.into());
-                ctx.set_var(x, value);
+                if let Some(value) = ctx.stack.pop() {
+                    ctx.set_var(x, value);
+                } else {
+                    eprintln!("[!] Runtime Error: Pop from empty stack into Var {:?}", x);
+                }
+                ReturnInfo::None
+            },
+            ControlASM::MapEmpty(v) => {
+                let map = VariableValue::Map(HashMap::new());
+                ctx.set_var(v, map);
+                ReturnInfo::None
+            },
+            ControlASM::MapInsert(map, key, val, res) => {
+                let map_value = ctx.evaluate(map);
+                let val_value = ctx.evaluate(val);
+
+                if let VariableValue::Map(mut hash_map) = map_value {
+                    let key_as_string = match key {
+                        VariableValue::Str(s) => s.clone(),
+                        _ => format!("{:?}", key),
+                    };
+                    hash_map.insert(key_as_string, val_value);
+                    ctx.set_var(res, VariableValue::Map(hash_map));
+                } else {
+                    eprintln!("[!] Runtime Error: MapInsert expected a Map variable for {:?}, got {:?}", map, map_value);
+                    ctx.set_var(res, VariableValue::Map(HashMap::new()));
+                }
                 ReturnInfo::None
             },
             // Jumps

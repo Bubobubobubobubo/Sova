@@ -18,7 +18,7 @@ pub mod osc;
 pub mod log;
 
 /// Charge utile unifiée pour transmettre n'importe quel message supporté par un protocole
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Hash, Serialize, Deserialize)]
 pub enum ProtocolPayload {
     OSC(OSCMessage),
     MIDI(MIDIMessage),
@@ -36,7 +36,7 @@ impl Display for ProtocolPayload {
 }
 
 /// Message de protocole avec une cible (dispositif) et une charge utile
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ProtocolMessage {
     pub device: Arc<ProtocolDevice>,
     pub payload: ProtocolPayload
@@ -351,7 +351,7 @@ impl From<MidiIn> for ProtocolDevice {
 }
 
 /// Message de protocole avec information temporelle
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TimedMessage {
     pub message: ProtocolMessage,
     pub time: SyncTime
@@ -379,6 +379,9 @@ impl TimedMessage {
         (self.message, self.time)
     }
 }
+
+impl Eq for TimedMessage {}
+
 
 /// Un TimedMessage est ordonné plus grand si son horodatage est inférieur (ordre inversé sur le temps)
 impl Ord for TimedMessage {
