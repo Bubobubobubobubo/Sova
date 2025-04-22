@@ -957,8 +957,8 @@ impl Scheduler {
                     | ConcreteEvent::MidiReset(id)
                     | ConcreteEvent::MidiContinue(id)
                     | ConcreteEvent::MidiClock(id) => Some(id),
-                    | ConcreteEvent::Dirt { device_id: id, .. } => Some(id), // Extract id for Dirt
-                    | ConcreteEvent::Osc { device_id: id, .. } => Some(id), // Extract id for Osc
+                    | ConcreteEvent::Dirt { device_id: id, .. } => Some(id),
+                    | ConcreteEvent::Osc { device_id: id, .. } => Some(id),
                     ConcreteEvent::Nop => None,
                 };
 

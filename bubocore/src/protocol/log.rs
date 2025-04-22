@@ -27,7 +27,7 @@ impl Display for Severity {
 
 pub const LOG_NAME: &str = "log";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogMessage {
     pub level: Severity,
     pub event: Option<ConcreteEvent>,
