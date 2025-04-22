@@ -723,6 +723,28 @@ async fn on_message(
                  Err(e) => ServerMessage::InternalError(format!("Failed to unassign slot {}: {}", slot_id, e)),
              }
         }
+        // --- Add handlers for OSC device messages ---
+        ClientMessage::CreateOscDevice(name, ip, port) => {
+            match state.devices.create_osc_output_device(&name, &ip, port) {
+                Ok(_) => {
+                    let updated_list = state.devices.device_list();
+                    let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                    ServerMessage::DeviceList(updated_list)
+                }
+                Err(e) => ServerMessage::InternalError(format!("Failed to create OSC device '{}': {}", name, e)),
+            }
+        }
+        ClientMessage::RemoveOscDevice(name) => {
+            match state.devices.remove_osc_output_device(&name) {
+                Ok(_) => {
+                    let updated_list = state.devices.device_list();
+                    let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                    ServerMessage::DeviceList(updated_list)
+                }
+                Err(e) => ServerMessage::InternalError(format!("Failed to remove OSC device '{}': {}", name, e)),
+            }
+        }
+        // ----------------------------------------
         // Handle deprecated messages explicitly
         ClientMessage::ConnectMidiDeviceById(device_id) => {
             eprintln!("[!] Received deprecated ConnectMidiDeviceById({}) from '{}'", device_id, client_name);

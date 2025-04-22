@@ -1,12 +1,17 @@
 use std::{cmp::Ordering, fmt::{self, Debug, Display}, sync::{Arc, Mutex}};
+use std::net::{SocketAddr, UdpSocket};
 
 use log::LogMessage;
 use osc::OSCMessage;
 use midi::{MIDIMessage, MidiError, MidiIn, MidiInterface, MidiOut, midi_constants::*, MIDIMessageType};
 use midir::MidiOutputConnection;
+use rosc::{OscPacket, OscMessage as RoscOscMessage, OscType, OscBundle, OscTime};
 
 use crate::clock::SyncTime;
 use serde::{Deserialize, Serialize};
+
+// Correctly import our Argument type
+use crate::protocol::osc::Argument as BuboArgument;
 
 pub mod midi;
 pub mod osc;
@@ -55,12 +60,16 @@ impl Display for ProtocolMessage {
 pub enum ProtocolDevice {
     Log,
     OSCInDevice,
-    OSCOutDevice,
     MIDIInDevice(Arc<Mutex<MidiIn>>),
     MIDIOutDevice(Arc<Mutex<MidiOut>>),
     VirtualMIDIOutDevice { 
         name: String, 
         #[serde(skip)] connection: Arc<Mutex<Option<MidiOutputConnection>>> 
+    },
+    OSCOutputDevice {
+        name: String,
+        address: SocketAddr,
+        #[serde(skip)] socket: Option<Arc<UdpSocket>>,
     },
 }
 
@@ -69,7 +78,6 @@ impl Debug for ProtocolDevice {
         match self {
             ProtocolDevice::Log => write!(f, "Log"),
             ProtocolDevice::OSCInDevice => write!(f, "OSCInDevice"),
-            ProtocolDevice::OSCOutDevice => write!(f, "OSCOutDevice"),
             ProtocolDevice::MIDIInDevice(arg0_mutex) => {
                 let guard = arg0_mutex.lock().map_err(|_| fmt::Error)?;
                 f.debug_tuple("MIDIInDevice").field(&*guard).finish()
@@ -88,6 +96,14 @@ impl Debug for ProtocolDevice {
                     .field("connection", &connection_status)
                     .finish()
             }
+            ProtocolDevice::OSCOutputDevice { name, address, socket } => {
+                let socket_status = socket.as_ref().map(|_| "<UdpSocket>");
+                f.debug_struct("OSCOutputDevice")
+                    .field("name", name)
+                    .field("address", address)
+                    .field("socket", &socket_status)
+                    .finish()
+            }
         }
     }
 }
@@ -97,7 +113,6 @@ impl Display for ProtocolDevice {
         match self {
             ProtocolDevice::Log => write!(f, "Log"),
             ProtocolDevice::OSCInDevice => write!(f, "OSCInDevice"),
-            ProtocolDevice::OSCOutDevice => write!(f, "OSCOutDevice"),
             ProtocolDevice::MIDIInDevice(midi_in_arc_mutex) => {
                 midi_in_arc_mutex.lock()
                     .map_err(|_| fmt::Error)
@@ -110,6 +125,8 @@ impl Display for ProtocolDevice {
             },
             ProtocolDevice::VirtualMIDIOutDevice { name, connection: _ } => 
                 write!(f, "VirtualMIDIOutDevice({})", name),
+            ProtocolDevice::OSCOutputDevice { name, address, .. } =>
+                write!(f, "OSCOutputDevice({} @ {})", name, address),
         }
     }
 }
@@ -132,6 +149,18 @@ impl From<MidiError> for ProtocolError {
     }
 }
 
+impl From<std::io::Error> for ProtocolError {
+    fn from(e: std::io::Error) -> Self {
+        ProtocolError(format!("IO Error: {}", e))
+    }
+}
+
+impl From<rosc::OscError> for ProtocolError {
+    fn from(e: rosc::OscError) -> Self {
+        ProtocolError(format!("OSC Error: {}", e))
+    }
+}
+
 impl ProtocolDevice {
     /// Connecte le dispositif à son port par défaut
     pub fn connect(&mut self) -> Result<(), ProtocolError> {
@@ -142,7 +171,6 @@ impl ProtocolDevice {
 
         match self {
             ProtocolDevice::OSCInDevice => todo!(),
-            ProtocolDevice::OSCOutDevice => todo!(),
             ProtocolDevice::MIDIInDevice(midi_in_arc_mutex) => {
                 println!("[~] ProtocolDevice::connect() called for MIDIInDevice '{}'. Connection is handled elsewhere.", midi_in_arc_mutex.lock().unwrap().name);
                 Ok(())
@@ -165,6 +193,19 @@ impl ProtocolDevice {
                     Ok(())
                 }
             }
+            ProtocolDevice::OSCOutputDevice { name, address, socket } => {
+                println!("[~] ProtocolDevice::connect() called for OSCOutputDevice '{}' @ {}", name, address);
+                if socket.is_some() {
+                    println!("    Already connected.");
+                    Ok(())
+                } else {
+                    let local_addr: SocketAddr = "0.0.0.0:0".parse().expect("Failed to parse local address");
+                    let udp_socket = UdpSocket::bind(local_addr)?;
+                    println!("    Created UDP socket bound to {}", udp_socket.local_addr()?);
+                    *socket = Some(Arc::new(udp_socket));
+                    Ok(())
+                }
+            }
             _ => Ok(())
         }
     }
@@ -172,7 +213,6 @@ impl ProtocolDevice {
     /// Envoie un message via le dispositif
     pub fn send(&self, message: ProtocolPayload) -> Result<(), ProtocolError> {
         match self {
-            ProtocolDevice::OSCOutDevice => todo!(),
             ProtocolDevice::MIDIOutDevice(midi_out_arc_mutex) => {
                 let ProtocolPayload::MIDI(midi_msg) = message else {
                     return Err(ProtocolError("Format de message invalide pour dispositif MIDI !".to_owned()));
@@ -196,6 +236,36 @@ impl ProtocolDevice {
                         .map_err(|e| ProtocolError(format!("Échec d'envoi au MIDI virtuel : {}", e)))
                 } else {
                     Err(ProtocolError("Dispositif MIDI virtuel non connecté.".to_string()))
+                }
+            }
+            ProtocolDevice::OSCOutputDevice { name: _, address, socket } => {
+                let ProtocolPayload::OSC(crate_osc_msg) = message else {
+                     return Err(ProtocolError("Invalid message format for OSC device!".to_owned()));
+                 };
+
+                if let Some(sock) = socket {
+                    let rosc_msg = RoscOscMessage {
+                        addr: crate_osc_msg.addr,
+                        args: crate_osc_msg.args.into_iter().map(|arg| {
+                            match arg {
+                                BuboArgument::Int(i) => OscType::Int(i),
+                                BuboArgument::Float(f) => OscType::Float(f),
+                                BuboArgument::String(s) => OscType::String(s),
+                            }
+                        }).collect(),
+                    };
+
+                    let timetag = OscTime { seconds: 0, fractional: 1 };
+                    let bundle = OscBundle {
+                        timetag,
+                        content: vec![OscPacket::Message(rosc_msg)],
+                    };
+
+                    let buf = rosc::encoder::encode(&OscPacket::Bundle(bundle))?;
+                    sock.send_to(&buf, address)?;
+                    Ok(())
+                } else {
+                    Err(ProtocolError("OSC output device not connected.".to_string()))
                 }
             }
             _ => Ok(())
@@ -222,6 +292,15 @@ impl ProtocolDevice {
                              self.address());
                 }
             }
+            ProtocolDevice::OSCOutputDevice { name, address, socket } => {
+                if socket.is_some() {
+                    println!("[~] Flush called on connected OSCOutputDevice '{}' @ {} (no-op for UDP)",
+                             name, address);
+                } else {
+                    println!("[~] Flush called on disconnected OSCOutputDevice '{}' @ {}",
+                             name, address);
+                }
+            }
             _ => ()
         }
     }
@@ -231,7 +310,6 @@ impl ProtocolDevice {
         match self {
             ProtocolDevice::Log => "log".to_string(),
             ProtocolDevice::OSCInDevice => todo!(),
-            ProtocolDevice::OSCOutDevice => todo!(),
             ProtocolDevice::MIDIInDevice(midi_in_arc_mutex) => {
                 midi_in_arc_mutex.lock().map_or_else(
                     |_| "<MIDIIn Mutex Poisoned>".to_string(),
@@ -245,6 +323,7 @@ impl ProtocolDevice {
                 )
             },
             ProtocolDevice::VirtualMIDIOutDevice { name, connection: _ } => name.clone(),
+            ProtocolDevice::OSCOutputDevice { name, address, .. } => name.clone(),
         }
     }
 }

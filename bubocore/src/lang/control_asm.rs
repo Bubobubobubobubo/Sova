@@ -300,7 +300,9 @@ impl ControlASM {
                     VariableValue::Float(_) => y_value = y_value.cast_as_float(ctx.clock, ctx.frame_len()),
                     VariableValue::Str(_) => y_value = y_value.cast_as_str(ctx.clock, ctx.frame_len()),
                     VariableValue::Dur(_) => y_value = y_value.cast_as_dur(),
+                    VariableValue::Map(_) => todo!(),
                     VariableValue::Func(_) => todo!(),
+
                 }
 
                 match self {

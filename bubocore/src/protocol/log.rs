@@ -1,5 +1,6 @@
 use std::fmt::Display;
 use serde::{Deserialize, Serialize};
+use std::hash::{Hash, Hasher};
 
 use crate::lang::event::ConcreteEvent;
 
@@ -26,11 +27,18 @@ impl Display for Severity {
 
 pub const LOG_NAME: &str = "log";
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LogMessage {
     pub level: Severity,
     pub event: Option<ConcreteEvent>,
     pub msg : String
+}
+
+impl Hash for LogMessage {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.level.hash(state);
+        self.msg.hash(state);
+    }
 }
 
 impl Display for LogMessage {
