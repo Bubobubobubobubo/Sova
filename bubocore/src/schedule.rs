@@ -957,6 +957,7 @@ impl Scheduler {
                     | ConcreteEvent::MidiReset(id)
                     | ConcreteEvent::MidiContinue(id)
                     | ConcreteEvent::MidiClock(id) => Some(id),
+                    | ConcreteEvent::Dirt {..} => None,
                     ConcreteEvent::Nop => None,
                 };
 

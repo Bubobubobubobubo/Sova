@@ -1,6 +1,8 @@
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex},
+    net::{SocketAddr, IpAddr, Ipv4Addr},
+    str::FromStr,
 };
 
 use crate::{
@@ -9,6 +11,7 @@ use crate::{
     protocol::{
         log::{LogMessage, Severity, LOG_NAME},
         midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiOut, MidiInterface},
+        osc::{OSCMessage, Argument as OscArgument},
         ProtocolDevice, ProtocolMessage, TimedMessage,
     },
     shared_types::{DeviceInfo, DeviceKind},
@@ -374,7 +377,69 @@ impl DeviceMap {
 
         // --- Dispatch for FOUND devices (MIDI, OSC, etc.) --- (Existing logic)
         match &*device {
-            ProtocolDevice::OSCOutDevice => todo!("OSC output not implemented in map_event"),
+            ProtocolDevice::OSCOutputDevice {..} => {
+                // Map ConcreteEvent to OSCMessage
+                let osc_payload_opt = match event {
+                    // --- Handle Dirt Event --- 
+                    ConcreteEvent::Dirt { data, device_id: _ } => {
+                        // Construct args: [key1, val1, key2, val2, ...]
+                        let mut args: Vec<OscArgument> = Vec::with_capacity(data.len() * 2);
+                        for (key, value) in data {
+                            args.push(OscArgument::String(key));
+                            args.push(value); // Value is already OscArgument
+                        }
+                        Some(OSCMessage {
+                            addr: "/dirt/play".to_string(), // Standard SuperDirt address
+                            args,
+                        })
+                    }
+                    // --- Handle other generic OSC mappings (from previous step) ---
+                    ConcreteEvent::MidiNote(note, vel, chan, _dur, _device_id) => {
+                        Some(OSCMessage {
+                            addr: "/midi/noteon".to_string(),
+                            args: vec![
+                                OscArgument::Int(note as i32),
+                                OscArgument::Int(vel as i32),
+                                OscArgument::Int(chan as i32),
+                            ],
+                        })
+                    }
+                    ConcreteEvent::MidiControl(control, value, chan, _device_id) => {
+                        Some(OSCMessage {
+                            addr: "/midi/cc".to_string(),
+                            args: vec![
+                                OscArgument::Int(control as i32),
+                                OscArgument::Int(value as i32),
+                                OscArgument::Int(chan as i32),
+                            ],
+                        })
+                    }
+                     ConcreteEvent::MidiProgram(program, chan, _device_id) => {
+                         Some(OSCMessage {
+                             addr: "/midi/program".to_string(),
+                             args: vec![
+                                 OscArgument::Int(program as i32),
+                                 OscArgument::Int(chan as i32),
+                             ],
+                         })
+                     }
+                    // Add mappings for other relevant events here
+                    // e.g., PitchBend, Aftertouch, maybe custom events?
+                    _ => None, // Ignore other events for OSC for now
+                };
+
+                // If a mapping exists, create the TimedMessage
+                if let Some(osc_payload) = osc_payload_opt {
+                    vec![ProtocolMessage {
+                        payload: osc_payload.into(), // Convert OSCMessage to ProtocolPayload::OSC
+                        device: Arc::clone(&device),
+                    }
+                    .timed(date)]
+                } else {
+                    // No mapping for this event type to OSC
+                    vec![]
+                }
+            },
             ProtocolDevice::MIDIOutDevice(_) | ProtocolDevice::VirtualMIDIOutDevice {..} => {
                 self.generate_midi_message(event, date, device)
             }
@@ -432,25 +497,46 @@ impl DeviceMap {
     }
 
     pub fn device_list(&self) -> Vec<DeviceInfo> {
-        println!("[~] Generating device list (excluding implicit log)..."); // Updated log message
+        println!("[~] Generating device list (excluding implicit log)...");
         let mut discovered_devices_map: HashMap<String, DeviceInfo> = HashMap::new();
         let slot_map = self.slot_assignments.lock().unwrap();
-        let connected_map = self.output_connections.lock().unwrap(); // Lock once
+        let connected_map = self.output_connections.lock().unwrap(); // Lock output connections once
 
         // Helper to create DeviceInfo, checking slot assignment and connection status
-        let create_device_info = |name: String, kind: DeviceKind| -> DeviceInfo {
+        // Updated to handle address for OSC devices
+        let create_device_info = |name: String, kind: DeviceKind, device_ref_opt: Option<&ProtocolDevice>| -> DeviceInfo {
             let assigned_slot_id = slot_map.iter()
                 .find_map(|(slot, assigned_name)| if assigned_name == &name { Some(*slot) } else { None })
                 .unwrap_or(0); // 0 if not assigned
-                
+
             // Check connection status based on the locked connected_map
-            let is_connected = connected_map.values().any(|(conn_name, _)| conn_name == &name);
+            // For OSC, connection is always true if it exists in the map
+            let is_connected = match kind {
+                 DeviceKind::Osc => device_ref_opt.is_some(), // Connected if found
+                 DeviceKind::Midi => {
+                      // Check actual MIDI connection state if possible, or just presence in map
+                      // For simplicity, let's check presence for now.
+                      connected_map.values().any(|(conn_name, _)| conn_name == &name)
+                 }
+                _ => false, // Log, Other are not 'connected' in the same way
+            };
             
+            // Extract address for OSC devices
+            let address = if kind == DeviceKind::Osc {
+                 device_ref_opt.and_then(|device| match device {
+                     ProtocolDevice::OSCOutputDevice { address, .. } => Some(address.to_string()),
+                     _ => None, // Should not happen if kind is Osc
+                 })
+            } else {
+                 None
+            };
+
             DeviceInfo {
-                id: assigned_slot_id, // Slot ID (0 if unassigned)
+                id: assigned_slot_id,
                 name,
                 kind,
                 is_connected,
+                address, // Add the address field
             }
         };
 
@@ -459,13 +545,13 @@ impl DeviceMap {
             if let Ok(midi_out) = midi_out_arc.lock() {
                 for port in midi_out.ports() {
                     if let Ok(name) = midi_out.port_name(&port) {
-                        // Only add if not already processed (e.g., virtual port already added)
                         if !discovered_devices_map.contains_key(&name) {
-                             discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+                             // Pass None for device_ref_opt as this is just discovery
+                             discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi, None));
                         }
                     }
                 }
-            } // midi_out lock dropped here
+            }
         }
 
         // --- Discover system MIDI ports (In) --- 
@@ -474,29 +560,39 @@ impl DeviceMap {
                 for port in midi_in.ports() {
                      if let Ok(name) = midi_in.port_name(&port) {
                          if !discovered_devices_map.contains_key(&name) {
-                              discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+                            // Pass None for device_ref_opt
+                              discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi, None));
                          }
                      }
                 }
-            } // midi_in lock dropped here
+            }
         }
         
-        // --- Add currently connected devices that might not have been discovered (e.g., just created virtual) ---
-        // Clone names *while holding the lock* to avoid borrow error
-        let connected_names: Vec<String> = connected_map.values().map(|(name, _)| name.clone()).collect();
-        // Lock is dropped here automatically when connected_map goes out of scope
-        // drop(connected_map); // No longer needed explicitly
-        
-        for name in connected_names {
-             if !discovered_devices_map.contains_key(&name) {
-                 // Assume MIDI for now if we only know it from connections
-                 // Might need more info in ProtocolDevice later
-                 discovered_devices_map.insert(name.clone(), create_device_info(name, DeviceKind::Midi));
+        // --- Add currently connected devices (MIDI & OSC) from output_connections --- 
+        // Iterate through the locked connected_map directly
+        for (device_addr, (name, device_arc)) in connected_map.iter() {
+            if !discovered_devices_map.contains_key(name) {
+                 // Determine kind and pass device reference to helper
+                 let (kind, address_str) = match &**device_arc {
+                    ProtocolDevice::MIDIOutDevice { .. } => (DeviceKind::Midi, None), // MIDI device
+                     ProtocolDevice::VirtualMIDIOutDevice { .. } => (DeviceKind::Midi, None), // Also MIDI
+                     ProtocolDevice::OSCOutputDevice { address, .. } => (DeviceKind::Osc, Some(address.to_string())), // OSC device
+                     _ => (DeviceKind::Other, None), // Skip Log, In, etc.
+                 };
+                 
+                 // Only add MIDI or OSC types found here
+                 if kind == DeviceKind::Midi || kind == DeviceKind::Osc {
+                     // Pass the actual device reference to create_device_info
+                     discovered_devices_map.insert(name.clone(), create_device_info(name.clone(), kind, Some(&**device_arc)));
+                 }
              }
+             // If already discovered (e.g., MIDI system port), update its info if needed?
+             // For now, discovery takes precedence.
         }
+        // Drop the lock explicitly after use if needed, though it drops at end of scope
+        drop(connected_map);
 
         // Don't add Log device to the user list unless explicitly assigned to a slot
-        // Add OSC devices later if needed
 
         let mut final_list: Vec<DeviceInfo> = discovered_devices_map.into_values().collect();
         
@@ -654,6 +750,90 @@ impl DeviceMap {
                 // Virtual output source creation failed
                 eprintln!("[!] Failed to create Virtual MIDI Output source '{}': {:?}", desired_name, e);
                 Err(format!("Failed to create Virtual MIDI Output source '{}': {:?}", desired_name, e))
+            }
+        }
+    }
+
+    /// Creates and registers a new OSC Output device.
+    pub fn create_osc_output_device(&self, name: &str, ip_str: &str, port: u16) -> Result<(), String> {
+        println!("[✨] Creating OSC Output device: '{}' @ {}:{}", name, ip_str, port);
+
+        // 1. Parse target IP and create SocketAddr *first*
+        let target_ip_addr = IpAddr::from_str(ip_str)
+            .map_err(|e| format!("Invalid IP address format '{}': {}", ip_str, e))?;
+        let target_socket_addr = SocketAddr::new(target_ip_addr, port);
+
+        // 2. Check for existing name or address collision within the lock
+        let output_connections = self.output_connections.lock().unwrap();
+        for (existing_name, device_arc) in output_connections.values() {
+            // Check for name collision
+            if existing_name == name {
+                let err_msg = format!("Cannot create OSC device: Name '{}' already exists.", name);
+                eprintln!("[!]	{}", err_msg);
+                return Err(err_msg);
+            }
+            // Check for address collision *specifically for OSC outputs*
+            if let ProtocolDevice::OSCOutputDevice { address: existing_addr, .. } = &**device_arc {
+                if *existing_addr == target_socket_addr {
+                     let err_msg = format!("Cannot create OSC device '{}': Another OSC device already targets address '{}'.", name, target_socket_addr);
+                     eprintln!("[!]	{}", err_msg);
+                    return Err(err_msg);
+                }
+            }
+        }
+        drop(output_connections); // Release lock
+
+        // 3. Create the OSCOutputDevice instance (address already parsed)
+        let mut osc_device = ProtocolDevice::OSCOutputDevice {
+            name: name.to_string(),
+            address: target_socket_addr, // Use the already parsed address
+            socket: None, 
+        };
+
+        // 4. Attempt to connect (create the socket)
+        match osc_device.connect() {
+            Ok(_) => {
+                println!("[✅] OSC Output device '{}' socket created successfully.", name);
+                // 5. Register the connected device
+                self.register_output_connection(name.to_string(), osc_device);
+                println!("[✅] Registered OSC Output device: '{}'", name);
+                Ok(())
+            }
+            Err(e) => {
+                let err_msg = format!("Failed to connect/bind socket for OSC device '{}': {:?}", name, e);
+                 eprintln!("[!]	{}", err_msg);
+                 Err(err_msg)
+            }
+        }
+    }
+
+    /// Removes an OSC Output device by its name.
+    pub fn remove_osc_output_device(&self, name: &str) -> Result<(), String> {
+        println!("[🗑️] Removing OSC Output device: '{}'", name);
+        let mut output_connections = self.output_connections.lock().unwrap();
+        
+        let key_to_remove = output_connections.iter()
+            .find(|(_address, (n, device))| n == name && matches!(**device, ProtocolDevice::OSCOutputDevice{..}))
+            .map(|(address, _item)| address.clone());
+            
+        match key_to_remove {
+            Some(key) => {
+                if output_connections.remove(&key).is_some() {
+                    println!("[✅] Removed OSC Output device registration: '{}'", name);
+                    drop(output_connections); // Release lock before calling other method
+                    self.unassign_device_by_name(name); // Unassign from any slot
+                    Ok(())
+                } else {
+                    // Should not happen if key was found
+                    let err_msg = format!("Internal error removing OSC device '{}'", name);
+                    eprintln!("[!]	{}", err_msg);
+                    Err(err_msg)
+                }
+            }
+            None => {
+                let err_msg = format!("Cannot remove OSC device '{}': Not found or not an OSC device.", name);
+                eprintln!("[!]	{}", err_msg);
+                Err(err_msg)
             }
         }
     }
