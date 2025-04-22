@@ -91,11 +91,6 @@ pub enum ClientMessage {
     CreateOscDevice(String, String, u16), // name, ip_address, port
     /// Request removal of an OSC output device by its name.
     RemoveOscDevice(String), // name
-
-    /// Deprecated: Use ConnectMidiDeviceByName
-    #[deprecated(note = "Use ConnectMidiDeviceByName")]
-    /// Request to duplicate a frame and insert it after the source.
-    DuplicateFrame(usize, usize, usize, usize, ActionTiming), // src_line_idx, src_frame_idx, target_line_idx, target_insert_idx
     /// Request to duplicate a range of frames on a line and insert them.
     DuplicateFrameRange { 
         src_line_idx: usize,
