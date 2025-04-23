@@ -51,6 +51,8 @@ pub struct DeviceInfo {
     pub name: String,
     pub kind: DeviceKind,
     pub is_connected: bool,
+    // Add field for OSC address (IP:Port)
+    pub address: Option<String>, 
     // Consider adding is_input/is_output flags or refining DeviceKind
 }
 

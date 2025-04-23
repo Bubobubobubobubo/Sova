@@ -665,7 +665,8 @@ async fn on_message(
             ServerMessage::DeviceList(state.devices.device_list())
         }
         ClientMessage::ConnectMidiDeviceByName(device_name) => {
-            match state.devices.connect_midi_output_by_name(&device_name) {
+            // Use the new bidirectional connect method
+            match state.devices.connect_midi_by_name(&device_name) {
                 Ok(_) => {
                     // Trigger broadcast update first
                     let updated_list = state.devices.device_list();
@@ -677,7 +678,8 @@ async fn on_message(
             }
         }
         ClientMessage::DisconnectMidiDeviceByName(device_name) => {
-            match state.devices.disconnect_midi_output_by_name(&device_name) {
+            // Use the new bidirectional disconnect method
+            match state.devices.disconnect_midi_by_name(&device_name) {
                  Ok(_) => {
                     // Trigger broadcast update first
                     let updated_list = state.devices.device_list();
@@ -689,7 +691,8 @@ async fn on_message(
             }
         }
         ClientMessage::CreateVirtualMidiOutput(device_name) => {
-             match state.devices.create_virtual_midi_output(&device_name) {
+             // Use the new bidirectional virtual port creation method
+             match state.devices.create_virtual_midi_port(&device_name) {
                  Ok(_) => {
                      // Trigger broadcast update first
                      let updated_list = state.devices.device_list();
@@ -720,6 +723,28 @@ async fn on_message(
                  Err(e) => ServerMessage::InternalError(format!("Failed to unassign slot {}: {}", slot_id, e)),
              }
         }
+        // --- Add handlers for OSC device messages ---
+        ClientMessage::CreateOscDevice(name, ip, port) => {
+            match state.devices.create_osc_output_device(&name, &ip, port) {
+                Ok(_) => {
+                    let updated_list = state.devices.device_list();
+                    let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                    ServerMessage::DeviceList(updated_list)
+                }
+                Err(e) => ServerMessage::InternalError(format!("Failed to create OSC device '{}': {}", name, e)),
+            }
+        }
+        ClientMessage::RemoveOscDevice(name) => {
+            match state.devices.remove_osc_output_device(&name) {
+                Ok(_) => {
+                    let updated_list = state.devices.device_list();
+                    let _ = state.update_sender.send(SchedulerNotification::DeviceListChanged(updated_list.clone()));
+                    ServerMessage::DeviceList(updated_list)
+                }
+                Err(e) => ServerMessage::InternalError(format!("Failed to remove OSC device '{}': {}", name, e)),
+            }
+        }
+        // ----------------------------------------
         // Handle deprecated messages explicitly
         ClientMessage::ConnectMidiDeviceById(device_id) => {
             eprintln!("[!] Received deprecated ConnectMidiDeviceById({}) from '{}'", device_id, client_name);
@@ -728,41 +753,6 @@ async fn on_message(
         ClientMessage::DisconnectMidiDeviceById(device_id) => {
             eprintln!("[!] Received deprecated DisconnectMidiDeviceById({}) from '{}'", device_id, client_name);
             ServerMessage::InternalError("DisconnectMidiDeviceById is deprecated. Use DisconnectMidiDeviceByName.".to_string())
-        }
-        ClientMessage::DuplicateFrame(src_line_idx, src_frame_idx, target_line_idx, target_insert_idx, timing) => {
-            let scene = state.scene_image.lock().await;
-            // Find the source line
-            if let Some(src_line) = scene.lines.get(src_line_idx) {
-                // Find the source frame length
-                if let Some(&src_frame_length) = src_line.frames.get(src_frame_idx) {
-                    let is_enabled = src_line.is_frame_enabled(src_frame_idx);
-                    // Find the corresponding script Arc
-                    let src_script_arc = src_line.scripts.iter()
-                        .find(|script_arc| script_arc.index == src_frame_idx)
-                        .cloned(); // Clone the Arc, not the Script itself
-
-                    // TODO: Confirm SchedulerMessage variant name. Assuming InternalDuplicateFrame for now.
-                    if state.sched_iface.send(SchedulerMessage::InternalDuplicateFrame {
-                        target_line_idx,
-                        target_insert_idx,
-                        frame_length: src_frame_length,
-                        is_enabled,
-                        script: src_script_arc, // Send the Option<Arc<Script>>
-                        timing,
-                    }).is_ok() {
-                        ServerMessage::Success
-                    } else {
-                        eprintln!("[!] Failed to send InternalDuplicateFrame to scheduler.");
-                        ServerMessage::InternalError("Failed to send duplicate frame command to scheduler.".to_string())
-                    }
-                } else {
-                    eprintln!("[!] DuplicateFrame failed: Invalid source frame index {} for line {}.", src_frame_idx, src_line_idx);
-                    ServerMessage::InternalError("Invalid source frame index for duplication.".to_string())
-                }
-            } else {
-                eprintln!("[!] DuplicateFrame failed: Invalid source line index {}.", src_line_idx);
-                ServerMessage::InternalError("Invalid source line index for duplication.".to_string())
-            }
         }
         ClientMessage::DuplicateFrameRange { src_line_idx, src_frame_start_idx, src_frame_end_idx, target_insert_idx, timing } => {
             let scene = state.scene_image.lock().await;
@@ -823,7 +813,7 @@ async fn on_message(
                 }
             } else {
                 eprintln!("[!] DuplicateFrameRange failed: Invalid source line index {}.", src_line_idx);
-                ServerMessage::InternalError("Invalid source line index for range duplication.".to_string())
+                ServerMessage::InternalError("Invalid source line index for duplication.".to_string())
             }
         }
         ClientMessage::RemoveFramesMultiLine { lines_and_indices, timing } => {

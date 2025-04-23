@@ -1,8 +1,8 @@
-use crate::app::{App, Mode}; // Assuming App and Mode will be needed
-use crate::event::{AppEvent, Event}; // Assuming Event might be needed
-use crate::components::logs::LogLevel; // Needed for execute_chat
-use bubocorelib::server::client::ClientMessage; // Needed for execution functions
-use bubocorelib::schedule::ActionTiming; // Needed for execution functions
+use crate::app::{App, Mode};
+use crate::event::{AppEvent, Event}; 
+use crate::components::logs::LogLevel; 
+use bubocorelib::server::client::ClientMessage;
+use bubocorelib::schedule::ActionTiming;
 use color_eyre::Result as EyreResult;
 use ratatui::{
     Frame,
@@ -41,7 +41,7 @@ pub struct CommandPaletteComponent {
     /// Whether the palette is currently visible.
     pub is_visible: bool,
     /// The current text entered by the user for filtering.
-    pub input: String, // Using String directly for simplicity, could use TextArea
+    pub input: String, 
     /// The list of commands matching the current input filter.
     pub filtered_commands: Vec<PaletteCommand>,
     /// The index of the currently selected command in the filtered list.
@@ -59,8 +59,8 @@ impl CommandPaletteComponent {
             list_state: ListState::default(),
             ..Default::default()
         };
-        palette.filter_commands(); // Initialize filtered list
-        palette.list_state.select(Some(palette.selected_index)); // Initialize selection
+        palette.filter_commands(); 
+        palette.list_state.select(Some(palette.selected_index)); 
         palette
     }
 
@@ -68,10 +68,9 @@ impl CommandPaletteComponent {
     pub fn toggle(&mut self) {
         self.is_visible = !self.is_visible;
         if self.is_visible {
-            // Reset state when opening
             self.input.clear();
             self.selected_index = 0;
-            self.filter_commands(); // This should reset selection index too
+            self.filter_commands(); 
             self.list_state.select(Some(self.selected_index));
         }
     }
@@ -101,28 +100,23 @@ impl CommandPaletteComponent {
                     let description_lower = cmd.description.to_lowercase();
                     let mut score = 0;
 
-                    // --- Refined Scoring Logic ---
-                    if keyword_lower == query { // Prio 1: Exact keyword match for the whole query
+                    if keyword_lower == query { 
                         score = 5;
-                    } else if aliases_lower.iter().any(|a| a == &query) { // Prio 2: Exact alias match for the whole query
+                    } else if aliases_lower.iter().any(|a| a == &query) { 
                         score = 4;
-                    } else if keyword_lower == query_command && query.starts_with(&keyword_lower) { // Check if starts with keyword
-                        // Prio 3: Starts with keyword and is exactly keyword or keyword + space (allows args)
+                    } else if keyword_lower == query_command && query.starts_with(&keyword_lower) { 
                         if query == keyword_lower || query.starts_with(&(keyword_lower.clone() + " ")) {
                             score = 3;
                         }
-                        // If it starts but not followed by space, treat as contains match below
-                    } else if let Some(matching_alias) = aliases_lower.iter().find(|a| *a == query_command) { // Check if starts with an alias
+                    } else if let Some(matching_alias) = aliases_lower.iter().find(|a| *a == query_command) { 
                         if query.starts_with(matching_alias) {
-                             // Prio 4: Starts with alias and is exactly alias or alias + space (allows args)
+                             score = 2;
                              if query == *matching_alias || query.starts_with(&(matching_alias.clone() + " ")) {
                                 score = 2;
                             }
-                            // If it starts but not followed by space, treat as contains match below
                         }
                     }
                     
-                    // Prio 5: Contains match (only if no higher score assigned yet)
                     if score == 0 { 
                         if keyword_lower.contains(&query) || aliases_lower.iter().any(|a| a.contains(&query)) || description_lower.contains(&query) {
                             score = 1;
@@ -137,12 +131,11 @@ impl CommandPaletteComponent {
                 })
                 .collect();
 
-            // Sort by score (descending)
             scored_commands.sort_by(|a, b| b.0.cmp(&a.0));
 
             self.filtered_commands = scored_commands.into_iter().map(|(_, cmd)| cmd).collect();
         }
-        // Reset selection logic remains the same
+
         if self.filtered_commands.is_empty() {
             self.selected_index = 0;
             self.list_state.select(None);
@@ -180,18 +173,19 @@ impl CommandPaletteComponent {
     }
 
     /// Handles key events when the command palette is active.
-    /// Returns `Ok(Some(action))` to execute, `Ok(None)` if handled locally (input, navigation), or `Err`.
+    /// Returns `Ok(Some(action))` to execute, `Ok(None)` if 
+    /// handled locally (input, navigation), or `Err`.
     pub fn handle_key_event(&mut self, key_event: crossterm::event::KeyEvent) -> EyreResult<Option<PaletteAction>> {
         use crossterm::event::{KeyCode, KeyEventKind};
 
         if key_event.kind != KeyEventKind::Press {
-            return Ok(None); // Ignore key releases, but mark as handled
+            return Ok(None); 
         }
 
         match key_event.code {
             KeyCode::Esc => {
                 self.hide();
-                Ok(None) // Handled, no action to execute
+                Ok(None) 
             }
             KeyCode::Enter => {
                 let action_to_execute = if let Some(command) = self.get_selected_command() {
@@ -199,31 +193,29 @@ impl CommandPaletteComponent {
                 } else {
                     None
                 };
-                self.hide(); // Hide after selecting
-                Ok(action_to_execute) // Return the action (or None if nothing selected)
+                self.hide(); 
+                Ok(action_to_execute) 
             }
             KeyCode::Up => {
                 self.select_previous();
-                Ok(None) // Handled, no action
+                Ok(None) 
             }
             KeyCode::Down => {
                 self.select_next();
-                Ok(None) // Handled, no action
+                Ok(None) 
             }
             KeyCode::Char(c) => {
                 self.input.push(c);
                 self.filter_commands();
-                Ok(None) // Handled, no action
+                Ok(None) 
             }
             KeyCode::Backspace => {
                 if !self.input.is_empty() {
                     self.input.pop();
                     self.filter_commands();
                 }
-                Ok(None) // Handled, no action
+                Ok(None) 
             }
-            // Handle any other key press as "handled, no action" to prevent
-            // it falling through to the underlying view while the palette is open.
             _ => Ok(None),
         }
     }
@@ -236,16 +228,14 @@ impl CommandPaletteComponent {
 
         let area = frame.area();
 
-        // Define minimum inner height (e.g., input line + 3 list items)
         const MIN_LIST_HEIGHT: u16 = 3;
-        let min_inner_height = 1 + MIN_LIST_HEIGHT; // 1 for input line
+        let min_inner_height = 1 + MIN_LIST_HEIGHT; 
 
-        // Calculate desired height based on content, but enforce minimum
         let desired_list_height = self.filtered_commands.len() as u16;
         let inner_height = (1 + desired_list_height).max(min_inner_height);
 
         // Calculate final popup dimensions
-        let width = (area.width as f32 * 0.8).min(area.width as f32) as u16; // Ensure width <= area width
+        let width = (area.width as f32 * 0.8).min(area.width as f32) as u16;
         let height = (inner_height + 2) // +2 for top/bottom borders
                      .min(15) // Max overall height
                      .min(area.height); // Cannot exceed screen height
@@ -273,13 +263,13 @@ impl CommandPaletteComponent {
         frame.render_widget(outer_block, popup_area);
 
         // Check if inner_area has any height before splitting
-        if inner_area.height == 0 { return; } // Avoid panic if popup is too small
+        if inner_area.height == 0 { return; }
 
         let chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(1), // Input line
-                Constraint::Min(0),    // Results list (will get remaining space)
+                Constraint::Length(1),
+                Constraint::Min(0),
             ].as_ref())
             .split(inner_area);
 
@@ -379,7 +369,7 @@ impl CommandPaletteComponent {
                 action: PaletteAction::Dispatch(AppEvent::Quit),
             },
 
-            // --- Gestion de Projet ---
+            // --- Project Management ---
             PaletteCommand {
                 keyword: "save".to_string(),
                 aliases: vec![],
@@ -393,7 +383,7 @@ impl CommandPaletteComponent {
                 action: PaletteAction::ParseArgs(execute_load),
             },
 
-            // --- Server/Scene Actions (Examples needing arg parsing) ---
+            // --- Server/Scene Actions ---
              PaletteCommand {
                 keyword: "setname".to_string(),
                  aliases: vec!["name".to_string()],
@@ -487,8 +477,6 @@ fn execute_toggle_navigation(app: &mut App, _input: &str) -> EyreResult<()> {
         app.interface.screen.previous_mode = Some(app.interface.screen.mode);
         app.interface.screen.mode = Mode::Navigation;
     }
-     // It might be cleaner to send an AppEvent like AppEvent::ToggleNavigation
-    // and handle the mode switching logic within app.rs handle_app_event.
     Ok(())
 }
 
@@ -497,7 +485,7 @@ fn execute_set_name(app: &mut App, input: &str) -> EyreResult<()> {
     if parts.len() > 1 {
         let name = parts[1..].join(" ");
         app.send_client_message(ClientMessage::SetName(name.clone()));
-        app.server.username = name; // Update local state immediately
+        app.server.username = name;
         app.set_status_message(format!("Set name to '{}'", app.server.username));
     } else {
         app.set_status_message("Usage: setname <your_name>".to_string());
@@ -510,7 +498,7 @@ fn execute_chat(app: &mut App, input: &str) -> EyreResult<()> {
     if parts.len() > 1 {
         let message = parts[1..].join(" ");
         app.send_client_message(ClientMessage::Chat(message.clone()));
-        app.add_log(LogLevel::Info, format!("Sent: {}", message)); // Also log locally
+        app.add_log(LogLevel::Info, format!("Sent: {}", message));
     } else {
          app.set_status_message("Usage: chat <message>".to_string());
     }
@@ -547,7 +535,6 @@ fn execute_set_quantum(app: &mut App, input: &str) -> EyreResult<()> {
         if let Ok(quantum) = quantum_str.parse::<f64>() {
              if quantum > 0.0 && quantum <= 16.0 {
                  let _ = app.events.sender.send(Event::App(AppEvent::UpdateQuantum(quantum)));
-                 // Link quantum is local, no server message needed unless server logic changes
                 app.set_status_message(format!("Set quantum to {}", quantum));
             } else {
                  app.set_status_message("Quantum must be > 0 and <= 16".to_string());
@@ -680,7 +667,6 @@ fn execute_save(app: &mut App, input: &str) -> EyreResult<()> {
     Ok(())
 }
 
-// Add execute_load
 fn execute_load(app: &mut App, input: &str) -> EyreResult<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     if let Some(project_name) = parts.get(1) {
@@ -693,7 +679,6 @@ fn execute_load(app: &mut App, input: &str) -> EyreResult<()> {
     Ok(())
 }
 
-// Add execute_set_editor_mode
 fn execute_set_editor_mode(app: &mut App, input: &str) -> EyreResult<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     if let Some(mode_arg) = parts.get(1) {
