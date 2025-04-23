@@ -14,10 +14,11 @@ use ratatui::{
     style::{Color, Style},
 
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, BorderType},
+    widgets::{Block, Borders, Paragraph, BorderType, List, ListItem},
 };
 use std::{cmp::min, fmt};
 use tui_textarea::{TextArea, Input, Key, CursorMove, Scrolling};
+use unicode_width::UnicodeWidthStr; // Needed for calculating display width
 
 // --- Vim Mode Definitions ---
 
@@ -246,7 +247,7 @@ impl EditorComponent {
                         };
 
                         // Assuming delete_next_char deletes the char AT the cursor position
-                        let deleted = textarea.delete_next_char(); 
+                        let deleted = textarea.delete_next_char();
 
                         if deleted && is_on_last_char {
                             // If we deleted the exact last character, move cursor back
@@ -446,6 +447,121 @@ impl EditorComponent {
             }
         }
     }
+
+    fn render_single_line_view(
+        &self,
+        app: &App,
+        frame: &mut Frame,
+        area: Rect,
+        line_idx: usize,
+        current_edit_frame_idx: usize,
+        playhead_pos_opt: Option<usize>,
+    ) {
+        let line_view_block = Block::default()
+            .title(" Line ")
+            .borders(Borders::ALL)
+            .style(Style::default().fg(Color::White));
+
+        let inner_area = line_view_block.inner(area);
+        frame.render_widget(line_view_block, area);
+
+        if inner_area.width == 0 || inner_area.height == 0 {
+            return;
+        }
+
+        if let Some(scene) = app.editor.scene.as_ref() {
+            if let Some(line) = scene.lines.get(line_idx) {
+                if line.frames.is_empty() {
+                    frame.render_widget(
+                        Paragraph::new("Line is empty")
+                            .centered()
+                            .style(Style::default().fg(Color::DarkGray)),
+                        inner_area,
+                    );
+                    return;
+                }
+
+                let items: Vec<ListItem> = line.frames.iter().enumerate().map(|(i, _frame_val)| {
+                    let is_enabled = line.is_frame_enabled(i);
+                    let is_playhead = playhead_pos_opt == Some(i);
+                    let is_start = line.start_frame == Some(i);
+                    let is_end = line.end_frame == Some(i);
+                    let is_current_edit = i == current_edit_frame_idx;
+
+                    // Fixed elements width calculation
+                    let playhead_width = 1;
+                    let marker_width = 1;
+                    let block_width = 1; // UnicodeWidthStr::width("█") is 1
+                    let index_width = 3; // " {:<2}" -> " 1", " 10", "100" might need adjustment
+                    let fixed_spacers_width = 3; // Between playhead/marker, marker/name, block/index
+                    let total_fixed_width = playhead_width + marker_width + block_width + index_width + fixed_spacers_width;
+                    let max_name_width = (inner_area.width as usize).saturating_sub(total_fixed_width);
+
+                    // Fetch and truncate name
+                    let frame_name = line.frame_names.get(i).cloned().flatten();
+                    let name_str = frame_name.unwrap_or_default();
+                    let truncated_name: String = if name_str.width() > max_name_width {
+                        name_str.chars().take(max_name_width.saturating_sub(1)).collect::<String>() + "…"
+                    } else {
+                        name_str
+                    };
+                    let name_span = Span::raw(format!("{:<width$}", truncated_name, width = max_name_width));
+
+
+                    // Build Spans
+                    let playhead_span = Span::raw(if is_playhead { "▶" } else { " " });
+                    let marker_span = Span::raw(
+                        if is_start { "b" } else if is_end { "e" } else { " " }
+                    );
+                    let frame_block_char = "█";
+                    let frame_block_span = Span::styled(
+                        frame_block_char,
+                        Style::default().fg(if is_enabled { Color::Green } else { Color::Red })
+                    );
+                    let index_span = Span::raw(format!(" {:<2}", i));
+
+                    // Build Style
+                    let mut item_style = Style::default();
+                    if is_current_edit {
+                        item_style = item_style.add_modifier(Modifier::REVERSED).fg(Color::White);
+                    } else {
+                        item_style = item_style.fg(Color::Gray);
+                    }
+
+                    ListItem::new(Line::from(vec![
+                        playhead_span,
+                        marker_span,
+                        Span::raw(" "), // Spacer 1
+                        name_span,      // Truncated Name
+                        Span::raw(" "), // Spacer 2
+                        frame_block_span,
+                        Span::raw(" "), // Spacer 3
+                        index_span,
+                    ]))
+                    .style(item_style)
+                }).collect();
+
+                let list = List::new(items);
+
+                frame.render_widget(list, inner_area);
+
+            } else {
+                frame.render_widget(
+                    Paragraph::new("Invalid Line")
+                        .centered()
+                        .style(Style::default().fg(Color::Red)),
+                    inner_area,
+                );
+            }
+        } else {
+            frame.render_widget(
+                Paragraph::new("No Scene")
+                    .centered()
+                    .style(Style::default().fg(Color::DarkGray)),
+                inner_area,
+            );
+        }
+    }
 }
 
 
@@ -472,7 +588,11 @@ impl Component for EditorComponent {
                     search_state.error_message = None;
                     tui_textarea::TextArea::set_search_pattern(main_textarea, "").expect("Empty pattern should be valid");
                     search_state.query_textarea.move_cursor(CursorMove::End);
-                    search_state.query_textarea.delete_line_by_head();
+                    // Clear the search text area content
+                    if !search_state.query_textarea.is_empty() {
+                        search_state.query_textarea.move_cursor(CursorMove::Head); // Go to start
+                        search_state.query_textarea.delete_line_by_end(); // Delete everything
+                    }
                     app.set_status_message("Search cancelled.".to_string());
                     return Ok(true);
                 }
@@ -482,9 +602,13 @@ impl Component for EditorComponent {
                     } else {
                         search_state.error_message = None;
                     }
-                    search_state.is_active = false;
-                    search_state.query_textarea.move_cursor(CursorMove::End);
-                    search_state.query_textarea.delete_line_by_head();
+                    search_state.is_active = false; // Deactivate search after Enter
+                     // Clear the search text area content
+                    if !search_state.query_textarea.is_empty() {
+                         search_state.query_textarea.move_cursor(CursorMove::Head);
+                         search_state.query_textarea.delete_line_by_end();
+                    }
+                    tui_textarea::TextArea::set_search_pattern(main_textarea, "").ok(); // Clear highlight
                     app.set_status_message("Search closed.".to_string());
                     return Ok(true);
                 }
@@ -511,9 +635,16 @@ impl Component for EditorComponent {
                      }
                      let modified = search_state.query_textarea.input(input);
                      if modified {
+                         // Handle empty query correctly - should clear pattern
                          let query = search_state.query_textarea.lines().get(0).map_or("", |s| s.as_str());
                          match tui_textarea::TextArea::set_search_pattern(main_textarea, query) {
-                             Ok(_) => search_state.error_message = None,
+                             Ok(_) => {
+                                 search_state.error_message = None;
+                                 // Try to find first match immediately if pattern is valid and not empty
+                                 if !query.is_empty() {
+                                      tui_textarea::TextArea::search_forward(main_textarea, true);
+                                 }
+                             },
                              Err(e) => search_state.error_message = Some(e.to_string()),
                          }
                      }
@@ -524,20 +655,28 @@ impl Component for EditorComponent {
         } // End Search Mode block
 
         // 2. Handle Editor Exit (Esc) - ONLY if not searching
-        if key_event.code == KeyCode::Esc && app.settings.editor_keymap_mode == EditorKeymapMode::Normal {
-            // In Vim mode, Esc is handled by the Vim input handler to switch modes.
-            // It should only exit the editor if pressed while already in Vim Normal mode.
-            // This will be handled inside handle_vim_input later if needed.
-            app.send_client_message(ClientMessage::StoppedEditingFrame(
-                app.editor.active_line.line_index,
-                app.editor.active_line.frame_index
-            ));
-            app.editor.compilation_error = None;
-            app.events.sender.send(crate::event::Event::App(crate::event::AppEvent::SwitchToGrid))?;
-            app.set_status_message("Exited editor (Esc).".to_string());
-            return Ok(true);
+        if key_event.code == KeyCode::Esc {
+            match app.settings.editor_keymap_mode {
+                EditorKeymapMode::Normal => {
+                    // Normal mode: Esc always exits editor
+                    app.send_client_message(ClientMessage::StoppedEditingFrame(
+                        app.editor.active_line.line_index,
+                        app.editor.active_line.frame_index
+                    ));
+                    app.editor.compilation_error = None;
+                    app.events.sender.send(crate::event::Event::App(crate::event::AppEvent::SwitchToGrid))?;
+                    app.set_status_message("Exited editor (Esc).".to_string());
+                    return Ok(true);
+                }
+                EditorKeymapMode::Vim => {
+                    // Vim mode: Esc is handled by handle_vim_input.
+                    // Let it fall through to the mode-specific handler below.
+                    // handle_vim_input will return false if Esc was pressed in Normal mode,
+                    // signaling that it didn't consume the event for mode switching.
+                    // We'll handle the exit *after* the mode-specific handlers are called.
+                }
+            }
         }
-        // Note: Vim Esc handling is inside handle_vim_input
 
         // 3. Handle Global Editor Actions (Ctrl+S, Ctrl+G, Ctrl+E, Ctrl+Arrows)
         // These should work regardless of Normal/Vim mode (unless Vim mode rebinds them, which we avoid here)
@@ -561,9 +700,17 @@ impl Component for EditorComponent {
                 KeyCode::Char('g') => {
                     app.editor.search_state.is_active = true;
                     app.editor.search_state.error_message = None;
+                    // Clear previous search query visually
+                    if !app.editor.search_state.query_textarea.is_empty() {
+                         app.editor.search_state.query_textarea.move_cursor(CursorMove::Head);
+                         app.editor.search_state.query_textarea.delete_line_by_end();
+                    }
                     // Reset Vim mode to Normal if activating search from Vim mode? Optional.
                     // if app.settings.editor_keymap_mode == EditorKeymapMode::Vim {
-                    //    self.set_vim_mode(app, VimMode::Normal);
+                    //    // Need mutable self here, cannot call set_vim_mode directly
+                    //    // Maybe reset vim_state directly?
+                    //    app.editor.vim_state.set_mode(VimMode::Normal);
+                    //    app.editor.textarea.set_cursor_style(VimMode::Normal.cursor_style());
                     // }
                     app.set_status_message("Search activated. Type query...".to_string());
                     return Ok(true);
@@ -599,45 +746,44 @@ impl Component for EditorComponent {
                           let current_frame_idx = app.editor.active_line.frame_index;
                           let num_lines = scene.lines.len();
                           if num_lines == 0 { app.set_status_message("No lines to navigate.".to_string()); return Ok(true); }
-                          match key_event.code {
+                          let (target_line_idx, target_frame_idx) = match key_event.code {
                               KeyCode::Up => {
                                   if current_frame_idx == 0 { app.set_status_message("Already at first frame.".to_string()); return Ok(true); }
-                                  let target_line_idx = current_line_idx; let target_frame_idx = current_frame_idx - 1;
-                                  app.editor.compilation_error = None;
-                                  app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
-                                  app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
+                                  (current_line_idx, current_frame_idx - 1)
                               }
                               KeyCode::Down => {
                                   if let Some(line) = scene.lines.get(current_line_idx) {
                                       if current_frame_idx + 1 >= line.frames.len() { app.set_status_message("Already at last frame.".to_string()); return Ok(true); }
-                                      let target_line_idx = current_line_idx; let target_frame_idx = current_frame_idx + 1;
-                                      app.editor.compilation_error = None;
-                                      app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
-                                      app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
-                                  } else { return Ok(true); }
+                                      (current_line_idx, current_frame_idx + 1)
+                                  } else { return Ok(true); } // Should not happen if line exists
                               }
                               KeyCode::Left => {
                                   if current_line_idx == 0 { app.set_status_message("Already at first line.".to_string()); return Ok(true); }
-                                  let target_line_idx = current_line_idx - 1;
-                                  let target_line_len = scene.lines[target_line_idx].frames.len();
-                                  if target_line_len == 0 { app.set_status_message(format!("Line {} is empty.", target_line_idx)); return Ok(true); }
-                                  let target_frame_idx = min(current_frame_idx, target_line_len - 1);
-                                  app.editor.compilation_error = None;
-                                  app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
-                                  app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
+                                  let target_line = current_line_idx - 1;
+                                  let target_line_len = scene.lines.get(target_line).map_or(0, |l| l.frames.len());
+                                  if target_line_len == 0 { app.set_status_message(format!("Line {} is empty.", target_line)); return Ok(true); }
+                                  (target_line, min(current_frame_idx, target_line_len - 1))
                               }
                               KeyCode::Right => {
                                   if current_line_idx + 1 >= num_lines { app.set_status_message("Already at last line.".to_string()); return Ok(true); }
-                                  let target_line_idx = current_line_idx + 1;
-                                  let target_line_len = scene.lines[target_line_idx].frames.len();
-                                  if target_line_len == 0 { app.set_status_message(format!("Line {} is empty.", target_line_idx)); return Ok(true); }
-                                  let target_frame_idx = min(current_frame_idx, target_line_len - 1);
-                                  app.editor.compilation_error = None;
-                                  app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
-                                  app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
+                                  let target_line = current_line_idx + 1;
+                                  let target_line_len = scene.lines.get(target_line).map_or(0, |l| l.frames.len());
+                                  if target_line_len == 0 { app.set_status_message(format!("Line {} is empty.", target_line)); return Ok(true); }
+                                  (target_line, min(current_frame_idx, target_line_len - 1))
                               }
                               _ => unreachable!(),
-                          }
+                          };
+                          // Stop editing current frame before requesting new one
+                          app.send_client_message(ClientMessage::StoppedEditingFrame(
+                             app.editor.active_line.line_index,
+                             app.editor.active_line.frame_index
+                          ));
+                          app.editor.compilation_error = None;
+                          // Request new script
+                          app.send_client_message(ClientMessage::GetScript(target_line_idx, target_frame_idx));
+                          // Immediately request *starting* editing the new frame
+                          app.send_client_message(ClientMessage::StartedEditingFrame(target_line_idx, target_frame_idx));
+                          app.set_status_message(format!("Requested script Line {}, Frame {}", target_line_idx, target_frame_idx));
                           return Ok(true);
                       } else { app.set_status_message("scene not loaded, cannot navigate.".to_string()); return Ok(true); }
                   } // End Ctrl + Arrow case
@@ -647,19 +793,32 @@ impl Component for EditorComponent {
           } // End Ctrl modifier check
 
           // --- Mode-Specific Input Handling ---
-          let handled = match app.settings.editor_keymap_mode {
+          let mut consumed_in_mode = false;
+          match app.settings.editor_keymap_mode {
               EditorKeymapMode::Vim => {
                   let input: Input = key_event.into();
-                  // Delegate ALL keys (including Esc) to Vim handler when Vim mode is active
-                  self.handle_vim_input(app, input)
+                  consumed_in_mode = self.handle_vim_input(app, input);
+                  // If Esc was pressed AND vim handler didn't consume it (meaning it was in Normal mode)
+                  if key_event.code == KeyCode::Esc && !consumed_in_mode && app.editor.vim_state.mode == VimMode::Normal {
+                      // Then exit the editor
+                      app.send_client_message(ClientMessage::StoppedEditingFrame(
+                          app.editor.active_line.line_index,
+                          app.editor.active_line.frame_index
+                      ));
+                      app.editor.compilation_error = None;
+                      app.events.sender.send(crate::event::Event::App(crate::event::AppEvent::SwitchToGrid))?;
+                      app.set_status_message("Exited editor (Esc in Normal Mode).".to_string());
+                      return Ok(true); // Exit handled
+                  }
               }
               EditorKeymapMode::Normal => {
-                  // Delegate to Normal (Emacs-like) handler
-                  self.handle_normal_input(app, key_event)
+                  consumed_in_mode = self.handle_normal_input(app, key_event);
+                  // In Normal mode, Esc exit is handled earlier (before mode-specific block)
               }
           };
 
-          Ok(handled)
+          // If the mode-specific handler consumed the input, we are done.
+          Ok(consumed_in_mode)
     }
 
 
@@ -667,172 +826,234 @@ impl Component for EditorComponent {
         let line_idx = app.editor.active_line.line_index;
         let frame_idx = app.editor.active_line.frame_index;
 
-        // Get frame status and length, with default values if not found
-        let (status_str, length_str, is_enabled) = 
-            if let Some(scene) = &app.editor.scene {
-                if let Some(line) = scene.lines.get(line_idx) {
-                    if frame_idx < line.frames.len() {
-                        let enabled = line.is_frame_enabled(frame_idx);
-                        let length = line.frames[frame_idx];
-                        ( if enabled { "Enabled" } else { "Disabled" },
-                          format!("Len: {:.2}", length),
-                          enabled
-                        )
-                    } else {
-                        ("Invalid Frame", "Len: N/A".to_string(), true) // Default to enabled appearance if invalid
-                    }
+        let scene_opt = app.editor.scene.as_ref();
+        let line_opt = scene_opt.and_then(|s| s.lines.get(line_idx));
+        let frame_name_opt = line_opt.and_then(|l| l.frame_names.get(frame_idx).cloned().flatten());
+        let playhead_pos_opt = app.server.current_frame_positions.as_ref().and_then(|p| p.get(line_idx)).copied();
+
+
+        let (status_str, length_str, is_enabled) =
+            if let Some(line) = line_opt {
+                if frame_idx < line.frames.len() {
+                    let enabled = line.is_frame_enabled(frame_idx);
+                    let length = line.frames[frame_idx];
+                    ( if enabled { "Enabled" } else { "Disabled" },
+                      format!("Len: {:.2}", length),
+                      enabled
+                    )
                 } else {
-                    ("Invalid Line", "Len: N/A".to_string(), true) // Default to enabled appearance if invalid
+                    ("Invalid Frame", "Len: N/A".to_string(), true)
                 }
             } else {
-                ("No scene", "Len: N/A".to_string(), true) // Default to enabled appearance if no scene
+                ("Invalid Line/Scene", "Len: N/A".to_string(), true)
             };
 
-        // Determine border color based on frame status
         let border_color = if is_enabled { Color::White } else { Color::DarkGray };
 
-        // --- Adjust Title based on Vim Mode ---
         let vim_mode_indicator = if app.settings.editor_keymap_mode == EditorKeymapMode::Vim {
-            format!(" [{}]", app.editor.vim_state.mode.title_string()) // Use helper
+            format!(" [{}]", app.editor.vim_state.mode.title_string())
         } else {
-            String::new() // No indicator for Normal mode
+            String::new()
         };
+        let frame_name_indicator = frame_name_opt.map_or(String::new(), |name| format!(" ({})", name));
 
         let editor_block = Block::default()
             .title(format!(
-                " Editor (Line: {}, Frame: {} | {} | {}){} ", // Add vim_mode_indicator here
+                " Editor (L: {}, F: {}{}{} | {} | {}) ",
                 line_idx,
                 frame_idx,
-                status_str, // Show enabled/disabled status
-                length_str,  // Show length
-                vim_mode_indicator
+                frame_name_indicator,
+                vim_mode_indicator,
+                status_str,
+                length_str
             ))
             .borders(Borders::ALL)
             .border_type(BorderType::Thick)
             .style(Style::default().fg(border_color));
 
         frame.render_widget(editor_block.clone(), area);
-        let inner_editor_area = editor_block.inner(area);
+        let inner_area = editor_block.inner(area);
 
-        // Layout Definition 
-        let editor_text_area: Rect; 
-        let help_area: Rect;
-
-        let search_active = app.editor.search_state.is_active;
-        let compilation_error_present = app.editor.compilation_error.is_some();
-
-        // Define constraints based on active panels
-        let mut constraints = vec![Constraint::Min(0)]; // Editor content always present
-        if search_active {
-            constraints.push(Constraint::Length(3)); // Search box takes priority
-        } else if compilation_error_present {
-            constraints.push(Constraint::Length(5)); // Error panel if search not active
+        if inner_area.width == 0 || inner_area.height == 0 {
+             return;
         }
-        constraints.push(Constraint::Length(1)); // Help text always present
 
-        let editor_chunks = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(constraints)
-            .split(inner_editor_area);
+        let line_view_width = 18; // Increased width
+        let actual_line_view_width = min(line_view_width, inner_area.width);
 
-        // Assign areas based on layout
-        editor_text_area = editor_chunks[0];
-        let mut current_index = 1;
-        if search_active || compilation_error_present { 
-            let panel_area = editor_chunks[current_index];
-            current_index += 1;
+        let horizontal_chunks = Layout::default()
+            .direction(Direction::Horizontal)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(actual_line_view_width),
+            ])
+            .split(inner_area);
 
+        let main_editor_area = horizontal_chunks[0];
+        let line_view_area = horizontal_chunks[1];
+
+
+        if main_editor_area.width > 0 && main_editor_area.height > 0 {
+            let editor_text_area: Rect;
+            let help_area: Rect;
+            let mut bottom_panel_area: Option<Rect> = None;
+
+            let search_active = app.editor.search_state.is_active;
+            let compilation_error_present = app.editor.compilation_error.is_some();
+
+            let mut constraints = vec![Constraint::Min(0)];
+            let mut bottom_panel_height = 0;
             if search_active {
-                // --- Render Search Box --- 
-                let search_state = &app.editor.search_state;
-                let mut query_textarea = search_state.query_textarea.clone(); 
-                if let Some(err_msg) = &search_state.error_message {
-                    let block = Block::default()
-                        .borders(Borders::ALL)
-                        .title(format!(
-                            " Search Query (Error: {}) (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) ",
-                            err_msg
-                        ))
-                        .style(Style::default().fg(Color::Red));
-                    query_textarea.set_block(block);
-                } // No need for else, default block is set in SearchState::new
+                bottom_panel_height = 3;
+            } else if compilation_error_present {
+                bottom_panel_height = 5;
+            }
+             bottom_panel_height = min(bottom_panel_height, main_editor_area.height.saturating_sub(1));
 
-                frame.render_widget(&query_textarea, panel_area); 
+            if bottom_panel_height > 0 {
+                constraints.push(Constraint::Length(bottom_panel_height));
+            }
+            let help_height = if main_editor_area.height > bottom_panel_height { 1 } else { 0 };
+            if help_height > 0 {
+                constraints.push(Constraint::Length(help_height));
+            }
+
+            let vertical_chunks = Layout::default()
+                .direction(Direction::Vertical)
+                .constraints(constraints)
+                .split(main_editor_area);
+
+            editor_text_area = vertical_chunks[0];
+            let mut current_index = 1;
+            if bottom_panel_height > 0 {
+                bottom_panel_area = Some(vertical_chunks[current_index]);
+                current_index += 1;
+            }
+            if current_index < vertical_chunks.len() {
+                 help_area = vertical_chunks[current_index];
             } else {
-                // --- Render Compilation Error Panel (only if search is not active) ---
-                if let Some(error_msg) = &app.editor.compilation_error {
-                    // Calculate line and column from character index
-                    let mut error_line_num = 0;
-                    let mut error_col_num = 0;
-                    let mut char_idx_count = 0;
-                    let editor_lines = app.editor.textarea.lines();
+                 help_area = Rect::new(main_editor_area.x, main_editor_area.y + main_editor_area.height, main_editor_area.width, 0);
+            }
 
-                    for (i, line) in editor_lines.iter().enumerate() {
-                        let line_char_count = line.chars().count();
-                        // Check if the 'from' index falls within this line (char indices)
-                        if error_msg.from >= char_idx_count && error_msg.from < char_idx_count + line_char_count {
-                            error_line_num = i;
-                            error_col_num = error_msg.from - char_idx_count;
-                            break;
+
+            if let Some(panel_area) = bottom_panel_area {
+                if panel_area.width > 0 && panel_area.height > 0 {
+                    if search_active {
+                        let search_state = &app.editor.search_state;
+                        let mut query_textarea = search_state.query_textarea.clone();
+                        let search_block_title = if let Some(err_msg) = &search_state.error_message {
+                            format!(" Search (Error: {}) (Esc:Cancel Enter:Find ^N/↓:Next ^P/↑:Prev) ", err_msg)
+                        } else {
+                            " Search Query (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) ".to_string()
+                        };
+                        let search_block_style = if search_state.error_message.is_some() {
+                            Style::default().fg(Color::Red)
+                        } else {
+                            Style::default().fg(Color::Yellow)
+                        };
+
+                        query_textarea.set_block(
+                            Block::default()
+                                .borders(Borders::ALL)
+                                .title(search_block_title)
+                                .style(search_block_style)
+                        );
+
+                        frame.render_widget(&query_textarea, panel_area);
+                    } else if let Some(error_msg) = &app.editor.compilation_error {
+                        let mut error_line_num = 0;
+                        let mut error_col_num = 0;
+                        let mut char_idx_count = 0;
+                        let editor_lines = app.editor.textarea.lines();
+
+                        for (i, line) in editor_lines.iter().enumerate() {
+                            let line_len = line.chars().count();
+                            let line_end_idx = char_idx_count + line_len;
+
+                            if error_msg.from >= char_idx_count && error_msg.from < line_end_idx {
+                                error_line_num = i;
+                                error_col_num = error_msg.from - char_idx_count;
+                                break;
+                            }
+                            let newline_offset = if i < editor_lines.len() - 1 { 1 } else { 0 };
+                            char_idx_count = line_end_idx + newline_offset;
+
+                            if error_msg.from == char_idx_count && i + 1 < editor_lines.len() {
+                                 error_line_num = i + 1;
+                                 error_col_num = 0;
+                                 break;
+                            }
                         }
-                        // Add line length + 1 (for newline char) to cumulative count
-                        char_idx_count += line_char_count + 1;
-                        // If error index is exactly after the last char + newline, it's start of next line
-                        if error_msg.from == char_idx_count {
-                            error_line_num = i + 1;
-                            error_col_num = 0;
-                            break;
-                        }
+
+                        let error_block = Block::default()
+                            .title(format!(
+                                " Compilation Error ({}: Line {}, Col {}) ",
+                                error_msg.lang, error_line_num + 1, error_col_num + 1
+                            ))
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Plain)
+                            .style(Style::default().fg(Color::Red));
+                        let error_paragraph = Paragraph::new(error_msg.info.as_str())
+                            .wrap(ratatui::widgets::Wrap { trim: true })
+                            .block(error_block.clone());
+                        frame.render_widget(error_paragraph, panel_area);
                     }
-
-                    let error_block = Block::default()
-                        .title(format!(
-                            " Compilation Error ({}: Line {}, Col {}) ",
-                            error_msg.lang, error_line_num + 1, error_col_num + 1
-                        ))
-                        .borders(Borders::ALL)
-                        .border_type(BorderType::Plain)
-                        .style(Style::default().fg(Color::Red));
-                    let error_paragraph = Paragraph::new(error_msg.info.as_str())
-                        .wrap(ratatui::widgets::Wrap { trim: true })
-                        .block(error_block.clone());
-                    frame.render_widget(error_paragraph, panel_area);
-                    frame.render_widget(error_block, panel_area); // Render border over content
                 }
             }
-        }
-        help_area = editor_chunks[current_index];
- 
-        let mut text_area = app.editor.textarea.clone();
-        text_area.set_line_number_style(Style::default().fg(Color::DarkGray));
 
-        // --- Render Main Editor --- 
-        frame.render_widget(&text_area, editor_text_area);
- 
-        // Indication des touches
-        let help_style = Style::default().fg(Color::DarkGray);
-        let key_style = Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD);
+             if editor_text_area.width > 0 && editor_text_area.height > 0 {
+                let mut text_area = app.editor.textarea.clone();
+                text_area.set_line_number_style(Style::default().fg(Color::DarkGray));
+                frame.render_widget(&text_area, editor_text_area);
+            }
 
-        // --- Render Help Text --- 
-        let help_line = if search_active {
-            Line::from(vec![
-                Span::styled(" Esc ", key_style), Span::styled("Cancel | ", help_style),
-                Span::styled(" Enter ", key_style), Span::styled("Find First & Close | ", help_style),
-                Span::styled(" ^N/↓ ", key_style), Span::styled("Next Match | ", help_style),
-                Span::styled(" ^P/↑ ", key_style), Span::styled("Prev Match", help_style),
-            ])
+             if help_area.width > 0 && help_area.height > 0 {
+                let help_style = Style::default().fg(Color::DarkGray);
+                let key_style = Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD);
+
+                let help_line = if search_active {
+                    Line::from(vec![
+                        Span::styled(" Esc ", key_style), Span::styled("Cancel | ", help_style),
+                        Span::styled(" Enter ", key_style), Span::styled("Find & Close | ", help_style),
+                        Span::styled(" ^N/↓ ", key_style), Span::styled("Next | ", help_style),
+                        Span::styled(" ^P/↑ ", key_style), Span::styled("Prev", help_style),
+                    ])
+                } else {
+                    Line::from(vec![
+                        Span::styled("Ctrl+S", key_style), Span::styled(": Send | ", help_style),
+                        Span::styled("Ctrl+E", key_style), Span::styled(": Toggle | ", help_style),
+                        Span::styled("Ctrl+G", key_style), Span::styled(": Search | ", help_style),
+                        Span::styled("Ctrl+←↑↓→", key_style), Span::styled(": Navigate | ", help_style),
+                        Span::styled("Esc", key_style), Span::styled(": Exit", help_style),
+                    ])
+                };
+
+                let help = Paragraph::new(help_line)
+                    .alignment(ratatui::layout::Alignment::Center);
+                frame.render_widget(help, help_area);
+            }
         } else {
-            // Simplified help text - only show app-level bindings
-            Line::from(vec![
-                Span::styled("Ctrl+S", key_style), Span::styled(": Send | ", help_style),
-                Span::styled("Ctrl+E", key_style), Span::styled(": Toggle | ", help_style),
-                Span::styled("Ctrl+G", key_style), Span::styled(": Search | ", help_style),
-                Span::styled("Ctrl+←↑↓→", key_style), Span::styled(": Navigate Script", help_style),
-            ])
-        };
+             frame.render_widget(
+                 Paragraph::new("Editor Area Too Small")
+                    .centered()
+                    .style(Style::default().fg(Color::Red)),
+                 main_editor_area
+             );
+        }
 
-        let help = Paragraph::new(help_line)
-            .alignment(ratatui::layout::Alignment::Center);
-        frame.render_widget(help, help_area);
+        if line_view_area.width > 0 && line_view_area.height > 0 {
+            self.render_single_line_view(app, frame, line_view_area, line_idx, frame_idx, playhead_pos_opt);
+        } else {
+             if inner_area.width > 0 && inner_area.height > 0 {
+                 let indicator_area = Rect {
+                     x: inner_area.right() - 1,
+                     y: inner_area.top(),
+                     width: 1,
+                     height: 1,
+                 };
+                 frame.render_widget(Span::styled("…", Style::default().fg(Color::White)), indicator_area);
+             }
+        }
+
     }
 }
