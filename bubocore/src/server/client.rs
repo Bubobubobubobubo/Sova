@@ -81,12 +81,16 @@ pub enum ClientMessage {
     DisconnectMidiDeviceByName(String), // Device Name
     /// Request creation of a new virtual MIDI output device.
     CreateVirtualMidiOutput(String), // Requested device name (server assigns ID)
-    /// Request to assign a device name to a specific slot ID (1-N).
+    /// Request assignment of a device (by name) to a specific slot ID (1-N).
     AssignDeviceToSlot(usize, String), // Slot ID, Device Name
-    /// Request to unassign whatever device is in a specific slot ID (1-N).
+    /// Request unassignment of whatever device is in a specific slot ID (1-N).
     UnassignDeviceFromSlot(usize), // Slot ID
-    /// Request to duplicate a frame and insert it after the source.
-    DuplicateFrame(usize, usize, usize, usize, ActionTiming), // src_line_idx, src_frame_idx, target_line_idx, target_insert_idx
+
+    // --- New OSC Messages ---
+    /// Request creation of a new OSC output device.
+    CreateOscDevice(String, String, u16), // name, ip_address, port
+    /// Request removal of an OSC output device by its name.
+    RemoveOscDevice(String), // name
     /// Request to duplicate a range of frames on a line and insert them.
     DuplicateFrameRange { 
         src_line_idx: usize,

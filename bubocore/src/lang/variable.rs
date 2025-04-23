@@ -18,6 +18,7 @@ pub enum VariableValue {
     Str(String),
     Dur(TimeSpan),
     Func(Program),
+    Map(HashMap<String, VariableValue>),
 }
 
 impl BitAnd for VariableValue {
@@ -153,6 +154,7 @@ impl VariableValue {
             VariableValue::Str(_) => Self::Str("".to_owned()),
             VariableValue::Dur(_) => Self::Dur(TimeSpan::Micros(0)),
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(_) => Self::Map(HashMap::new()),
         }
     }
 
@@ -331,23 +333,38 @@ impl VariableValue {
     }
 
     pub fn cast_as_integer(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        VariableValue::Integer(self.as_integer(clock, frame_len))
+        match self {
+            VariableValue::Map(_) => VariableValue::Integer(0),
+            _ => VariableValue::Integer(self.as_integer(clock, frame_len)),
+        }
     }
 
     pub fn cast_as_float(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        VariableValue::Float(self.as_float(clock, frame_len))
+        match self {
+            VariableValue::Map(_) => VariableValue::Float(0.0),
+            _ => VariableValue::Float(self.as_float(clock, frame_len)),
+        }
     }
 
     pub fn cast_as_bool(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        VariableValue::Bool(self.as_bool(clock, frame_len))
+        match self {
+            VariableValue::Map(map) => VariableValue::Bool(!map.is_empty()),
+            _ => VariableValue::Bool(self.as_bool(clock, frame_len)),
+        }
     }
 
     pub fn cast_as_str(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        VariableValue::Str(self.as_str(clock, frame_len))
+        match self {
+            VariableValue::Map(_) => VariableValue::Str("[map]".to_string()),
+            _ => VariableValue::Str(self.as_str(clock, frame_len)),
+        }
     }
 
     pub fn cast_as_dur(&self) -> VariableValue {
-        VariableValue::Dur(self.as_dur())
+        match self {
+            VariableValue::Map(_) => VariableValue::Dur(TimeSpan::Micros(0)),
+            _ => VariableValue::Dur(self.as_dur()),
+        }
     }
 
     pub fn as_integer(&self, clock: &Clock, frame_len: f64) -> i64 {
@@ -367,6 +384,7 @@ impl VariableValue {
             },
             VariableValue::Dur(d) => d.as_micros(clock, frame_len).try_into().unwrap(),
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(_) => 0,
         }
     }
 
@@ -387,6 +405,7 @@ impl VariableValue {
             },
             VariableValue::Dur(d) => d.as_micros(clock, frame_len) as f64,
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(_) => 0.0,
         }
     }
 
@@ -398,6 +417,7 @@ impl VariableValue {
             VariableValue::Str(s) => s.len() > 0,
             VariableValue::Dur(d) => d.as_micros(clock, frame_len) != 0,
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(map) => !map.is_empty(),
         }
     }
 
@@ -415,6 +435,7 @@ impl VariableValue {
             VariableValue::Str(s) => s.to_string(),
             VariableValue::Dur(d) => d.as_micros(clock, frame_len).to_string(),
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(_) => "[map]".to_string(),
         }
     }
 
@@ -426,6 +447,14 @@ impl VariableValue {
             VariableValue::Str(_) => TimeSpan::Micros(0),  // TODO parser la chaîne de caractères
             VariableValue::Dur(d) => *d,
             VariableValue::Func(_) => todo!(),
+            VariableValue::Map(_) => TimeSpan::Micros(0),
+        }
+    }
+
+    pub fn as_map(&self) -> Option<&HashMap<String, VariableValue>> {
+        match self {
+            VariableValue::Map(map) => Some(map),
+            _ => None,
         }
     }
 }
@@ -461,7 +490,8 @@ impl VariableStore {
                 VariableValue::Bool(_) => value = value.cast_as_bool(clock, frame_len),
                 VariableValue::Str(_) => value = value.cast_as_str(clock, frame_len),
                 VariableValue::Dur(_) => value = value.cast_as_dur(),
-                VariableValue::Func(_) => todo!(),
+                VariableValue::Func(_) => { /* Do nothing, allow overwrite */ }, 
+                VariableValue::Map(_) => { /* Do nothing, allow overwrite */ }, 
             }
         }
         self.content.insert(key, value)

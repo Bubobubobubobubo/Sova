@@ -1,10 +1,13 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 
 use crate::clock::SyncTime;
+use crate::protocol::osc::OSCMessage;
 
+use super::variable::VariableValue;
 use super::{evaluation_context::EvaluationContext, variable::Variable};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ConcreteEvent {
     Nop,
@@ -20,6 +23,12 @@ pub enum ConcreteEvent {
     MidiReset(usize),
     MidiContinue(usize),
     MidiClock(usize),
+    Dirt {
+        sound: VariableValue,
+        params: HashMap<String, VariableValue>,
+        device_id: usize,
+    },
+    Osc { message: OSCMessage, device_id: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -38,6 +47,11 @@ pub enum Event {
     MidiReset(Variable),
     MidiContinue(Variable),
     MidiClock(Variable),
+    Dirt {
+        data: Variable,
+        device_id: Variable,
+    },
+    Osc { message: OSCMessage, device_id: Variable },
 }
 
 impl Event {
@@ -105,6 +119,53 @@ impl Event {
             Event::MidiClock(dev) => {
                 let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
                 ConcreteEvent::MidiClock(dev_id)
+            }
+            Event::Dirt { data, device_id } => {
+                let dev_id = ctx.evaluate(device_id).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let evaluated_data_var = ctx.evaluate(data);
+                
+                // Initialize default sound and empty params
+                let mut concrete_sound = VariableValue::Str("default".to_string()); // Default sound
+                let mut concrete_params = HashMap::new();
+
+                match evaluated_data_var.as_map() {
+                    Some(map_var) => {
+                        for (key, value_var) in map_var {
+                            // Convert VariableValue to OscArgument
+                            let concrete_value = match value_var { 
+                                VariableValue::Integer(i) => VariableValue::Integer(*i),
+                                VariableValue::Float(f) => VariableValue::Float(*f),
+                                VariableValue::Str(s) => VariableValue::Str(s.clone()),
+                                // Add other necessary conversions if Map can hold more types
+                                _ => {
+                                    eprintln!("[!] Warning: Unsupported value type ({:?}) in Dirt event data map for key '{}'. Skipping.", value_var, key);
+                                    continue;
+                                }
+                            };
+                            
+                            // Separate sound ('s') from other params
+                            if key == "s" {
+                                concrete_sound = concrete_value;
+                            } else {
+                                concrete_params.insert(key.clone(), concrete_value);
+                            }
+                        }
+                    }
+                    None => {
+                        eprintln!("[!] Warning: Dirt event data did not evaluate to a Map. Using default sound and empty params. Evaluated to: {:?}", evaluated_data_var);
+                        // Keep default sound and empty params
+                    }
+                };
+
+                ConcreteEvent::Dirt {
+                    sound: concrete_sound, // Use the separated sound value
+                    params: concrete_params, // Use the separated params map
+                    device_id: dev_id,
+                }
+            }
+            Event::Osc { message, device_id } => {
+                let dev_id = ctx.evaluate(device_id).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                ConcreteEvent::Osc { message: message.clone(), device_id: dev_id }
             }
         }
     }

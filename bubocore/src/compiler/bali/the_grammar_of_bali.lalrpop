@@ -1,4 +1,4 @@
-use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression, set_context_effect_set};
+use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, LoopContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression, set_context_effect_set};
 
 grammar;
 
@@ -9,6 +9,28 @@ pub Program: BaliProgram = {
 startWith = "(with";
 endWith = ")";
 
+startChoice = "(?";
+endChoice = ")";
+
+pub loopContext: LoopContext = {
+    <c: loopContextContent?> => {
+        match c {
+            Some(c) => c,
+            None => LoopContext::new(),
+        }
+    }
+}
+
+pub loopContextContent: LoopContext = {
+    <mut c: loopContextContent> <ce: loopContextElement> => ce.update(c),
+    <ce: loopContextElement> => ce,
+}
+
+pub loopContextElement: LoopContext = {
+    "-n" => {let mut c = LoopContext::new(); c.negate = true; c},
+    "-r" => {let mut c = LoopContext::new(); c.reverse = true; c},
+    "sh:" <n: Number> => {let mut c = LoopContext::new(); c.shift = Some(n); c},
+}
 
 pub OptionalWithContext: BaliContext = {
     <c: WithContext?> => {
@@ -39,36 +61,38 @@ pub StatementSet: Vec<Statement> = {
 }
 
 pub Statement: Statement = {
-    "(?" <num_choices: Number?> <c: OptionalWithContext> <s: StatementSet> ")" => {
-        let num_choices = num_choices.unwrap_or(1);
-        Statement::Choice(num_choices, s.len() as i64, s, c)
-    },
     "(>" <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::AfterFrac(n, s, c),
     "(<" <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::BeforeFrac(n, s, c),
     "(loop" <it: Number> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Loop(it, n, s, c),
-    "(eucloop" <beats: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, shift, false, false, n, s, c),
-    "(binloop" <it: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, shift, false, false, n, s, c),
-    "(eucrloop" <beats: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, shift, true, false, n, s, c),
-    "(binrloop" <it: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, shift, true, false, n, s, c),
-    "(neucloop" <beats: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, shift, false, true, n, s, c),
-    "(nbinloop" <it: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, shift, false, true, n, s, c),
-    "(neucrloop" <beats: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, shift, true, true, n, s, c),
-    "(nbinrloop" <it: Number> <steps: Number> <shift: Number?> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, shift, true, true, n, s, c),
+    "(eucloop" <beats: Number> <steps: Number> <n: ConcreteFraction> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, lc, n, s, c),
+    "(binloop" <it: Number> <steps: Number> <n: ConcreteFraction> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, lc, n, s, c),
     "(>>" <c: OptionalWithContext> <s: TopLevelEffectSet> ")" => Statement::After(s, c),
     "(<<" <c: OptionalWithContext> <s: TopLevelEffectSet> ")" => Statement::Before(s, c),
     startWith <c: WithContext> <s: StatementSet> endWith => Statement::With(s, c),
-    <e: TopLevelEffect> => Statement::Effect(e, BaliContext::new()),
+    startChoice <num_choices: Number?> <c: OptionalWithContext> <s: StatementSet> endChoice => {
+        let num_choices = num_choices.unwrap_or(1);
+        Statement::Choice(num_choices, s.len() as i64, s, c)
+    },
+    <e: FirstTopLevelEffect> => Statement::Effect(e, BaliContext::new()),
 };
 
-pub TopLevelEffect: TopLevelEffect = {
+pub FirstTopLevelEffect: TopLevelEffect = {
     "(seq" <c: OptionalWithContext> <es: TopLevelEffectSet> ")" => TopLevelEffect::Seq(es, c),
     "(for" <cond: BooleanExpression> <c: OptionalWithContext> <es: TopLevelEffectSet> ")" => TopLevelEffect::For(cond, es, c),
     "(if" <cond: BooleanExpression> <c: OptionalWithContext> <th: TopLevelEffectSet>")" => TopLevelEffect::If(cond, th, c),
     <e: Effect> => TopLevelEffect::Effect(e, BaliContext::new()),
 }
 
-pub TopLevelEffectSet: Vec<TopLevelEffect> = {
-    startWith <c: WithContext> <es: TopLevelEffectSet> endWith => set_context_effect_set(es, c),
+pub TopLevelEffect: TopLevelEffect = {
+    <first: FirstTopLevelEffect> => first,
+    startChoice <num_choices: Number?> <c: OptionalWithContext> <es: TopLevelEffectSet> endChoice => {
+        let num_choices = num_choices.unwrap_or(1);
+        TopLevelEffect::Choice(num_choices, es.len() as i64, es, c)
+    },
+    startWith <c: WithContext> <es: TopLevelEffectSet> endWith => TopLevelEffect::Seq(es, c),
+}
+
+pub TopLevelEffectSet: Vec<TopLevelEffect> = { 
     <mut es: TopLevelEffectSet> <e: TopLevelEffect> => { es.push(e); es },
     <e: TopLevelEffect> => vec![e],
 };
@@ -78,6 +102,8 @@ pub Effect: Effect = {
     "(note" <n: Expression> <c: OptionalWithContext> ")" => Effect::Note(n, c),
     "(prog" <v: Expression> <c: OptionalWithContext> ")" => Effect::ProgramChange(v, c),
     "(control" <v1: Expression> <v2: Expression> <c: OptionalWithContext> ")" => Effect::ControlChange(v1, v2, c),
+    "(osc" <addr: StringLiteral> <args: Expression*> <c: OptionalWithContext> ")" => Effect::Osc(addr.trim_matches('"').to_string(), args.into_iter().map(|e| *e).collect(), c),
+    "(dirt" <sound: Expression> <params: DirtParam*> <c: OptionalWithContext> ")" => Effect::Dirt(sound, params, c),
 };
 
 pub BooleanExpression: Box<BooleanExpression> = {
@@ -109,12 +135,17 @@ pub Expression: Box<Expression> = {
     "(triangle" <speed: Expression> ")" => Box::new(Expression::Triangle(speed)),
     "(isaw" <speed: Expression> ")" => Box::new(Expression::ISaw(speed)),
     "(randstep" <speed: Expression> ")" => Box::new(Expression::RandStep(speed)),
+    "(ccin" <ctrl: Expression> <ctx: OptionalCcinContext> ")" => {
+        let (dev_opt, chan_opt) = ctx;
+        Box::new(Expression::MidiCC(ctrl, dev_opt, chan_opt))
+    },
     <v: Value> => Box::new(Expression::Value(v)),
 };
 
 pub Value: Value = {
     <n: Number> => Value::Number(n),
     <v: Name> => v,
+    <s: StringLiteral> => Value::String(s.trim_matches('"').to_string()),
 };
 
 #[inline]
@@ -145,3 +176,42 @@ Number: i64 = <s:r"[0-9]+"> => {
 Name: Value = <s:r"[a-zA-Z][-a-zA-Z0-9#]*"> => Value::Variable(s.to_string());
 
 Comment = r";.*";
+
+StringLiteral: String = <s:r#""([^"\\]|\\.)*""#> => s.to_string();
+
+// Rule for parsing Dirt parameters: :keyword Expression
+DirtParam: (String, Box<Expression>) = {
+    <key: Keyword> <val: Expression> => (key.trim_start_matches(':').to_string(), val),
+};
+
+// Add Keyword terminal (starts with :, followed by identifier characters)
+Keyword: String = <s:r":[a-zA-Z_][a-zA-Z0-9_]*"> => s.to_string();
+
+// Define elements allowed inside ccin context specifier
+// Returns (dev_expr_option, chan_expr_option) tuple
+CcinContextElement: (Option<Box<Expression>>, Option<Box<Expression>>) = {
+    "dev:" <e: Expression> => (Some(e), None),
+    "ch:" <e: Expression> => (None, Some(e)),
+};
+
+// Define the optional context for ccin, accumulating dev/chan options
+// Takes the last specified value for dev/chan if duplicated.
+// Returns (final_dev_option, final_chan_option)
+OptionalCcinContext: (Option<Box<Expression>>, Option<Box<Expression>>) = {
+    // Base case: no context elements provided
+    => (None, None),
+
+    // Recursive case: process one element and merge with the rest of the context
+    // The grammar will parse elements left-to-right. We update the tuple `ctx`
+    // as we go, overwriting previous dev/chan if encountered again.
+    <mut ctx: OptionalCcinContext> <elem: CcinContextElement> => {
+        let (elem_dev, elem_chan) = elem;
+        if elem_dev.is_some() {
+            ctx.0 = elem_dev; // Update device if this element has one
+        }
+        if elem_chan.is_some() {
+            ctx.1 = elem_chan; // Update channel if this element has one
+        }
+        ctx // Return the updated context tuple
+    }
+};

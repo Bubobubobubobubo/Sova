@@ -1,14 +1,17 @@
 use serde::{Deserialize, Serialize};
-
+use std::fmt::Debug;
 use super::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Instruction, Program};
 
 use crate::scene::script::ReturnInfo;
 use crate::clock::TimeSpan;
 
 use std::f64::consts::PI;
+use std::collections::HashMap;
 
 // Import state keys
 use crate::lang::environment_func::{SINE_PHASE_KEY, SINE_LAST_BEAT_KEY, SAW_PHASE_KEY, SAW_LAST_BEAT_KEY, TRI_PHASE_KEY, TRI_LAST_BEAT_KEY, ISAW_PHASE_KEY, ISAW_LAST_BEAT_KEY, RANDSTEP_PHASE_KEY, RANDSTEP_LAST_BEAT_KEY, RANDSTEP_VALUE_KEY};
+use crate::compiler::bali::bali_ast::{DEFAULT_CHAN, DEFAULT_DEVICE};
+use crate::protocol::ProtocolDevice;
 
 #[cfg(test)]
 mod tests;
@@ -62,6 +65,8 @@ pub enum ControlASM {
     // Stack operations
     Push(Variable),
     Pop(Variable),
+    MapEmpty(Variable),
+    MapInsert(Variable, VariableValue, Variable, Variable),
     // Jumps
     Jump(usize),
     JumpIf(Variable, usize),
@@ -80,10 +85,20 @@ pub enum ControlASM {
     GetTriangle(Variable, Variable),
     GetISaw(Variable, Variable),
     GetRandStep(Variable, Variable),
+    GetMidiCC(Variable, Variable, Variable, Variable), // device_var | _use_context_device, channel_var | _use_context_channel, ctrl_var, result_dest_var
 }
 
 
 impl ControlASM {
+
+    fn evaluate_var_as_int_or(&self, ctx: &mut EvaluationContext, var: &Variable, default: i64) -> i64 {
+        let value = ctx.evaluate(var); // Pass mutable borrow to evaluate
+        match value {
+            VariableValue::Integer(i) => i,
+            VariableValue::Float(f) => f.round() as i64,
+            _ => default,
+        }
+    }
 
     pub fn execute(&self, ctx : &mut EvaluationContext, return_stack: &mut Vec<ReturnInfo>, instruction_position: usize, current_prog: &Program) -> ReturnInfo {
         match self {
@@ -260,8 +275,33 @@ impl ControlASM {
                 ReturnInfo::None
             },
             ControlASM::Pop(x) => {
-                let value = ctx.stack.pop().unwrap_or(false.into());
-                ctx.set_var(x, value);
+                if let Some(value) = ctx.stack.pop() {
+                    ctx.set_var(x, value);
+                } else {
+                    eprintln!("[!] Runtime Error: Pop from empty stack into Var {:?}", x);
+                }
+                ReturnInfo::None
+            },
+            ControlASM::MapEmpty(v) => {
+                let map = VariableValue::Map(HashMap::new());
+                ctx.set_var(v, map);
+                ReturnInfo::None
+            },
+            ControlASM::MapInsert(map, key, val, res) => {
+                let map_value = ctx.evaluate(map);
+                let val_value = ctx.evaluate(val);
+
+                if let VariableValue::Map(mut hash_map) = map_value {
+                    let key_as_string = match key {
+                        VariableValue::Str(s) => s.clone(),
+                        _ => format!("{:?}", key),
+                    };
+                    hash_map.insert(key_as_string, val_value);
+                    ctx.set_var(res, VariableValue::Map(hash_map));
+                } else {
+                    eprintln!("[!] Runtime Error: MapInsert expected a Map variable for {:?}, got {:?}", map, map_value);
+                    ctx.set_var(res, VariableValue::Map(HashMap::new()));
+                }
                 ReturnInfo::None
             },
             // Jumps
@@ -300,7 +340,9 @@ impl ControlASM {
                     VariableValue::Float(_) => y_value = y_value.cast_as_float(ctx.clock, ctx.frame_len()),
                     VariableValue::Str(_) => y_value = y_value.cast_as_str(ctx.clock, ctx.frame_len()),
                     VariableValue::Dur(_) => y_value = y_value.cast_as_dur(),
+                    VariableValue::Map(_) => todo!(),
                     VariableValue::Func(_) => todo!(),
+
                 }
 
                 match self {
@@ -528,6 +570,71 @@ impl ControlASM {
                 ctx.line_mut().vars.insert(RANDSTEP_LAST_BEAT_KEY.to_string(), VariableValue::Float(current_beat), clock, frame_len);
 
                 ctx.set_var(dest_var, VariableValue::Integer(current_value)); // Return the current held value
+                ReturnInfo::None
+            },
+            ControlASM::GetMidiCC(device_var, channel_var, ctrl_var, result_var) => {
+                // Resolve Device ID
+                let device_id = match device_var {
+                    Variable::Instance(name) if name == "_use_context_device" => {
+                        // Fetch from implicit context variable (_target_device_id)
+                        let context_device_var = Variable::Instance("_target_device_id".to_string());
+                        self.evaluate_var_as_int_or(ctx, &context_device_var, DEFAULT_DEVICE) as usize
+                    },
+                    _ => {
+                        // Evaluate the provided device_var
+                        self.evaluate_var_as_int_or(ctx, device_var, DEFAULT_DEVICE) as usize
+                    }
+                };
+
+                // Resolve Channel
+                let channel_val = match channel_var {
+                    Variable::Instance(name) if name == "_use_context_channel" => {
+                        // Fetch from implicit context variable (_chan)
+                        let context_chan_var = Variable::Instance("_chan".to_string());
+                        self.evaluate_var_as_int_or(ctx, &context_chan_var, DEFAULT_CHAN)
+                    },
+                    _ => {
+                        // Evaluate the provided channel_var
+                        self.evaluate_var_as_int_or(ctx, channel_var, DEFAULT_CHAN)
+                    }
+                };
+
+                // Evaluate Control Number
+                let control_val = ctx.evaluate(ctrl_var).as_integer(ctx.clock, ctx.frame_len());
+
+                // Look up device and get CC value
+                let mut cc_value = 0i64; // Default value
+
+                if let Some(device_name) = ctx.device_map.get_name_for_slot(device_id) {
+                    let input_connections = ctx.device_map.input_connections.lock().unwrap();
+                    if let Some((_name, device_arc)) = input_connections.values().find(|(name, _)| *name == device_name) {
+                        if let ProtocolDevice::MIDIInDevice(midi_in_mutex) = &**device_arc {
+                            if let Ok(midi_in_handler) = midi_in_mutex.lock() {
+                                if let Ok(memory_guard) = midi_in_handler.memory.lock() {
+                                    let midi_chan_0_based = (channel_val.saturating_sub(1).max(0).min(15)) as i8;
+                                    let control_i8 = (control_val.max(0).min(127)) as i8;
+                                    cc_value = memory_guard.get(midi_chan_0_based, control_i8) as i64;
+                                    // Optional Debug: println!("[VM GetMidiCC] Resolved Dev: {}, Chan: {}, Ctrl: {}, Result: {}", device_id, channel_val, control_val, cc_value);
+                                } else {
+                                    eprintln!("[!] GetMidiCC Error: Failed to lock MidiInMemory for device '{}'", device_name);
+                                }
+                            } else {
+                                eprintln!("[!] GetMidiCC Error: Failed to lock MidiIn handler Mutex for device '{}'", device_name);
+                            }
+                        } else {
+                            eprintln!("[!] GetMidiCC Warning: Device '{}' in slot {} is not a MIDI Input device.", device_name, device_id);
+                        }
+                    } else {
+                        eprintln!("[!] GetMidiCC Warning: Device name '{}' (from slot {}) not found in registered input connections.", device_name, device_id);
+                    }
+                } else {
+                     if device_id != DEFAULT_DEVICE as usize { // Only warn if specific non-default device requested
+                        eprintln!("[!] GetMidiCC Warning: No device assigned to slot {}.", device_id);
+                    }
+                }
+
+                // Store the result
+                ctx.set_var(result_var, VariableValue::Integer(cc_value));
                 ReturnInfo::None
             },
         }
