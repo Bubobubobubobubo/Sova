@@ -793,7 +793,7 @@ impl Component for EditorComponent {
           } // End Ctrl modifier check
 
           // --- Mode-Specific Input Handling ---
-          let mut consumed_in_mode = false;
+          let consumed_in_mode;
           match app.settings.editor_keymap_mode {
               EditorKeymapMode::Vim => {
                   let input: Input = key_event.into();
