@@ -310,7 +310,7 @@ impl TimeStatement {
         }
     }
 
-    pub fn as_asm(&self, position: usize,  mut local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
+    pub fn as_asm(&self, position: usize,  local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
         match self {
             TimeStatement::At(_, x, context, choices) | TimeStatement::JustBefore(_, x, context, choices) | TimeStatement::JustAfter(_, x, context, choices) => {
 
@@ -667,7 +667,7 @@ impl TopLevelEffect {
         }
     }
 
-    pub fn as_asm(&self, position: usize, context: BaliContext,  mut local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
+    pub fn as_asm(&self, position: usize, context: BaliContext,  local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
         //let time_var = Variable::Instance("_time".to_owned());
         let bvar_out = Variable::Instance("_bres".to_owned());
         match self {
@@ -760,7 +760,7 @@ impl TopLevelEffect {
                     return res
                 }
 
-                let mut num_selectable = if *num_selectable < es.len() as i64 {
+                let num_selectable = if *num_selectable < es.len() as i64 {
                     es.len() as i64
                 } else {
                     *num_selectable
@@ -773,7 +773,7 @@ impl TopLevelEffect {
                 let mut choice_vars = Vec::new();
 
                 // generate random values for the choice
-                for selection_number in 0..num_selected {
+                for _selection_number in 0..num_selected {
                     let choice_variable = local_choice_vars.get_variable();
                     res.push(Instruction::Control(ControlASM::Mov(Variable::Environment(EnvironmentFunc::RandomUInt(num_selectable as u64)), choice_variable.clone())));
                     position += 1;
@@ -1318,7 +1318,6 @@ impl Expression {
         let var_5 = Variable::Instance("_exp5".to_owned());
         let speed_var = Variable::Instance("_osc_speed".to_owned());
         let var_out = Variable::Instance("_res".to_owned());
-        let midi_cc_ctrl_var = Variable::Instance("_midi_cc_ctrl".to_owned());
 
         let mut res_asm = match self {
             // Binary operations: Evaluate operands, pop into temps, execute operation into var_out
