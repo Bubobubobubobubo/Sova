@@ -9,13 +9,13 @@ use ratatui::{
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Modifier},
     text::{Line, Span},
-    widgets::{Block, Borders, Paragraph, Table, Row, Cell, BorderType, Tabs},
+    widgets::{Block, Borders, Paragraph, Table, Row, Cell, BorderType, Tabs, Wrap, Clear},
 };
 use bubocorelib::shared_types::{DeviceInfo, DeviceKind};
 use bubocorelib::server::client::ClientMessage;
 use tui_textarea::TextArea;
 use std::time::Instant;
-use std::collections::HashMap; 
+use std::collections::HashMap;
 
 /// Maximum user-assignable slot ID (1-based). Slot 0 is used for logging.
 const MAX_ASSIGNABLE_SLOT: usize = 16;
@@ -60,6 +60,10 @@ pub struct DevicesState {
     pub osc_port_input: TextArea<'static>,
     /// Current step within the OSC creation process (0: Name, 1: IP, 2: Port).
     pub osc_creation_step: usize,
+    /// Stores the confirmation prompt message, e.g., "Disconnect 'Device'? (Y/N)".
+    pub confirmation_prompt: Option<String>,
+    /// Stores the action to be performed upon confirmation.
+    pub pending_action: Option<ClientMessage>,
 }
 
 impl DevicesState {
@@ -102,6 +106,9 @@ impl DevicesState {
             osc_ip_input,
             osc_port_input,
             osc_creation_step: 0,
+            // Initialize new confirmation fields
+            confirmation_prompt: None,
+            pending_action: None,
         }
     }
     
@@ -117,10 +124,8 @@ impl DevicesState {
     /// Adds a virtual port name to the recent names history, maintaining a fixed size.
     /// Avoids adding duplicate names.
     pub fn add_recent_port_name(&mut self, name: String) {
-        // Ne pas ajouter de doublons
         if !self.recent_port_names.contains(&name) {
             self.recent_port_names.push(name);
-            // Limiter la liste à 5 noms récents
             if self.recent_port_names.len() > 5 {
                 self.recent_port_names.remove(0);
             }
@@ -141,21 +146,20 @@ impl DevicesComponent {
     /// Excludes internal/temporary MIDI devices used by BuboCore itself.
     /// Returns tuple: `(midi_devices, osc_devices)`.
     fn get_filtered_devices(app: &App) -> (Vec<DeviceInfo>, Vec<DeviceInfo>) {
-        // Filter MIDI devices, excluding temporary and internal utility devices
         let midi_devices: Vec<DeviceInfo> = app.server.devices.iter()
             .filter(|d| {
-                d.kind == DeviceKind::Midi 
-                && !d.name.contains("BuboCore-Temp-Connector") 
+                d.kind == DeviceKind::Midi
+                && !d.name.contains("BuboCore-Temp-Connector")
                 && !d.name.contains("BuboCore-Virtual-Creator")
             })
             .cloned()
             .collect();
-            
+
         let osc_devices: Vec<DeviceInfo> = app.server.devices.iter()
             .filter(|d| d.kind == DeviceKind::Osc)
             .cloned()
             .collect();
-            
+
         (midi_devices, osc_devices)
     }
     
@@ -188,8 +192,30 @@ impl Component for DevicesComponent {
         { // Scope for mutable borrow of state
             let state = &mut app.interface.components.devices_state;
 
-            // --- Handle OSC Creation Input Mode --- 
-            if state.is_creating_osc {
+            if let Some(_prompt) = &state.confirmation_prompt {
+                match key_event.code {
+                    KeyCode::Char('y') | KeyCode::Char('Y') | KeyCode::Enter => {
+                        if let Some(action) = state.pending_action.take() {
+                            client_message_to_send = Some(action);
+                            status_message_to_set = Some("Action confirmed.".to_string());
+                        } else {
+                             status_message_to_set = Some("Confirmation error (no pending action).".to_string());
+                        }
+                        state.confirmation_prompt = None;
+                        handled = true;
+                    }
+                    KeyCode::Char('n') | KeyCode::Char('N') | KeyCode::Esc => {
+                        state.confirmation_prompt = None;
+                        state.pending_action = None;
+                        status_message_to_set = Some("Action cancelled.".to_string());
+                        handled = true;
+                    }
+                    _ => {
+                        handled = true;
+                    }
+                }
+            }
+            else if state.is_creating_osc {
                 let osc_handled_in_mode;
                 match state.osc_creation_step {
                     0 => { // Name Input
@@ -201,7 +227,7 @@ impl Component for DevicesComponent {
                             }
                             KeyCode::Enter => {
                                 if !state.osc_name_input.lines()[0].trim().is_empty() {
-                                    state.osc_creation_step = 1; 
+                                    state.osc_creation_step = 1;
                                     status_message_to_set = Some("Enter OSC IP Address...".to_string());
                                 } else {
                                     status_message_to_set = Some("OSC name cannot be empty.".to_string());
@@ -216,13 +242,13 @@ impl Component for DevicesComponent {
                     1 => { // IP Input
                         match key_event.code {
                              KeyCode::Esc => {
-                                state.osc_creation_step = 0; 
+                                state.osc_creation_step = 0;
                                 status_message_to_set = Some("Enter OSC Device Name".to_string());
                                  osc_handled_in_mode = true;
                             }
                             KeyCode::Enter => {
                                 if !state.osc_ip_input.lines()[0].trim().is_empty() {
-                                    state.osc_creation_step = 2; 
+                                    state.osc_creation_step = 2;
                                     status_message_to_set = Some("Enter OSC Port...".to_string());
                                  } else {
                                      status_message_to_set = Some("OSC IP cannot be empty.".to_string());
@@ -237,7 +263,7 @@ impl Component for DevicesComponent {
                     2 => { // Port Input
                          match key_event.code {
                             KeyCode::Esc => {
-                                state.osc_creation_step = 1; 
+                                state.osc_creation_step = 1;
                                  status_message_to_set = Some("Enter OSC IP Address".to_string());
                                  osc_handled_in_mode = true;
                             }
@@ -249,7 +275,6 @@ impl Component for DevicesComponent {
                                         let ip = state.osc_ip_input.lines()[0].trim().to_string();
                                         status_message_to_set = Some(format!("Creating OSC '{}' @ {}:{}...", name, ip, port));
                                         client_message_to_send = Some(ClientMessage::CreateOscDevice(name, ip, port));
-                                        // Reset and exit mode
                                         state.is_creating_osc = false;
                                         state.osc_creation_step = 0;
                                         state.osc_name_input = TextArea::default();
@@ -267,16 +292,14 @@ impl Component for DevicesComponent {
                             }
                         }
                     }
-                     _ => { state.is_creating_osc = false; osc_handled_in_mode = true; } // Should not happen
+                     _ => { state.is_creating_osc = false; osc_handled_in_mode = true; }
                 }
-                 // If handled within OSC mode, set the main handled flag
                  if osc_handled_in_mode { handled = true; }
-             }
-            // --- Handle Slot Assignment Input Mode --- 
+            }
             else if state.is_assigning_slot {
                  let slot_handled_in_mode;
                  let mut exit_assign_mode = false;
-                 let mut temp_client_msg = None; // Temporary holder
+                 let mut temp_client_msg = None;
                  match key_event.code {
                     KeyCode::Esc => {
                         status_message_to_set = Some("Slot assignment cancelled.".to_string());
@@ -287,24 +310,21 @@ impl Component for DevicesComponent {
                         let input_str = state.slot_assignment_input.lines()[0].trim();
                         match input_str.parse::<usize>() {
                             Ok(digit) if digit <= MAX_ASSIGNABLE_SLOT => {
-                                // Determine the correct device list based on the current tab
                                 let current_devices = match state.tab_index {
                                     0 => &midi_devices,
                                     1 => &osc_devices,
-                                    _ => &Vec::new(), // Should not happen
+                                    _ => &Vec::new(),
                                 };
-                                
-                                // Get the selected device from the CORRECT list
+
                                 if let Some(selected_device) = current_devices.get(state.selected_index) {
                                     let device_name = selected_device.name.clone();
-                                    let current_slot = selected_device.id; // ID from DeviceInfo
+                                    let current_slot = selected_device.id;
                                     let target_slot_assignee_name = state.slot_assignments.get(&digit).cloned();
 
                                     if digit == 0 { // Unassign
                                         if current_slot != 0 { // Only unassign if currently assigned
                                             status_message_to_set = Some(format!("Unassigning '{}' from Slot {}...", device_name, current_slot));
-                                            // Send message to unassign the specific slot ID
-                                            temp_client_msg = Some(ClientMessage::UnassignDeviceFromSlot(current_slot)); 
+                                            temp_client_msg = Some(ClientMessage::UnassignDeviceFromSlot(current_slot));
                                         } else {
                                             status_message_to_set = Some(format!("Device '{}' is not assigned to a slot.", device_name));
                                         }
@@ -320,8 +340,7 @@ impl Component for DevicesComponent {
                                             status_message_to_set = Some(format!("Device '{}' is already assigned to Slot {}.", device_name, target_slot_id));
                                         } else {
                                             status_message_to_set = Some(format!("Assigning '{}' to Slot {}...", device_name, target_slot_id));
-                                            // Send message to assign the selected device name to the target slot
-                                            temp_client_msg = Some(ClientMessage::AssignDeviceToSlot(target_slot_id, device_name)); 
+                                            temp_client_msg = Some(ClientMessage::AssignDeviceToSlot(target_slot_id, device_name));
                                         }
                                     }
                                 } else {
@@ -335,25 +354,23 @@ impl Component for DevicesComponent {
                         exit_assign_mode = true;
                         slot_handled_in_mode = true;
                     }
-                     _ => { 
+                     _ => {
                          slot_handled_in_mode = state.slot_assignment_input.input(key_event);
-                    }
-                }
-                if exit_assign_mode {
-                     state.is_assigning_slot = false;
-                     state.slot_assignment_input = TextArea::default(); 
-                     state.slot_assignment_input.set_block(Block::default().borders(Borders::NONE));
-                }
-                 // If handled, set main flag and store potential client message
-                 if slot_handled_in_mode { 
-                      handled = true; 
-                      client_message_to_send = temp_client_msg; 
+                     }
                  }
-             }
-            // --- Handle Naming Virtual Port --- 
+                 if exit_assign_mode {
+                      state.is_assigning_slot = false;
+                      state.slot_assignment_input = TextArea::default();
+                      state.slot_assignment_input.set_block(Block::default().borders(Borders::NONE));
+                 }
+                  if slot_handled_in_mode {
+                       handled = true;
+                       client_message_to_send = temp_client_msg;
+                  }
+            }
             else if state.is_naming_virtual {
                   let virtual_handled_in_mode;
-                  let mut temp_client_msg = None; // Temporary holder
+                  let mut temp_client_msg = None;
                   match key_event.code {
                     KeyCode::Esc => {
                         state.is_naming_virtual = false;
@@ -372,7 +389,7 @@ impl Component for DevicesComponent {
                         } else {
                              state.add_recent_port_name(name.clone());
                              state.is_naming_virtual = false;
-                             state.status_message = format!("Creating port '{}'...", name); // Internal ok
+                             state.status_message = format!("Creating port '{}'...", name);
                              state.virtual_port_input = TextArea::default();
                              state.virtual_port_input.set_block(
                                  Block::default().borders(Borders::NONE)
@@ -385,64 +402,60 @@ impl Component for DevicesComponent {
                     KeyCode::Up => {
                         let current_text = state.virtual_port_input.lines()[0].trim();
                         let recent_names = &state.recent_port_names;
-                        
-                        // Vérifier s'il y a des noms récents
+
                         if recent_names.is_empty() {
                             return Ok(false);
                         }
-                        
-                        // Trouver le nom précédent dans l'historique
-                        if let Some(idx) = recent_names.iter().position(|n| n == current_text) {
-                            if idx < recent_names.len() - 1 {
-                                let next_name = &recent_names[idx + 1];
-                                let mut new_input = TextArea::new(vec![next_name.clone()]);
-                                new_input.set_block(Block::default().borders(Borders::NONE));
-                                state.virtual_port_input = new_input;
-                            }
-                        } else if !recent_names.is_empty() {
-                            // Si le texte actuel n'est pas dans l'historique, afficher le plus récent
-                            let latest_name = &recent_names[0];
-                            let mut new_input = TextArea::new(vec![latest_name.clone()]);
+
+                         let next_name = if let Some(idx) = recent_names.iter().position(|n| n == current_text) {
+                             if idx > 0 { // Move towards the start of the vec (older entries)
+                                 Some(&recent_names[idx - 1])
+                             } else { None } // Already at the oldest
+                         } else if !recent_names.is_empty() {
+                            recent_names.last()
+                         } else { None };
+
+
+                        if let Some(name_to_set) = next_name {
+                            let mut new_input = TextArea::new(vec![name_to_set.clone()]);
                             new_input.set_block(Block::default().borders(Borders::NONE));
                             state.virtual_port_input = new_input;
                         }
-                        return Ok(true);
+                        virtual_handled_in_mode = true;
                     }
                     KeyCode::Down => {
                         let current_text = state.virtual_port_input.lines()[0].trim();
                         let recent_names = &state.recent_port_names;
-                        
-                        // Check if there are recent names
+
                         if recent_names.is_empty() {
                             return Ok(false);
                         }
-                        
-                        // Find the next name in the history
-                        if let Some(idx) = recent_names.iter().position(|n| n == current_text) {
-                            if idx > 0 {
-                                let prev_name = &recent_names[idx - 1];
-                                let mut new_input = TextArea::new(vec![prev_name.clone()]);
-                                new_input.set_block(Block::default().borders(Borders::NONE));
-                                state.virtual_port_input = new_input;
-                            }
+
+                         let next_name = if let Some(idx) = recent_names.iter().position(|n| n == current_text) {
+                            if idx < recent_names.len() - 1 {
+                                Some(&recent_names[idx + 1])
+                            } else { None } // Already at the newest
+                         } else if !recent_names.is_empty() {
+                             None
+                         } else { None };
+
+                        if let Some(name_to_set) = next_name {
+                            let mut new_input = TextArea::new(vec![name_to_set.clone()]);
+                            new_input.set_block(Block::default().borders(Borders::NONE));
+                            state.virtual_port_input = new_input;
                         }
-                        return Ok(true);
+                         virtual_handled_in_mode = true;
                     }
                     _ => {
-                        let handled = state.virtual_port_input.input(key_event);
-                        return Ok(handled);
+                         virtual_handled_in_mode = state.virtual_port_input.input(key_event);
                     }
                 }
-                 // If handled, set main flag and store potential client message
-                 if virtual_handled_in_mode { 
-                      handled = true; 
-                      client_message_to_send = temp_client_msg; 
-                  }
-             }
-
-            // --- Normal Key Handling (only if not handled by input modes) --- 
-            if !handled {
-                // Select devices based on tab
+                 if virtual_handled_in_mode {
+                       handled = true;
+                       client_message_to_send = temp_client_msg;
+                   }
+            }
+            else if !handled {
                 let (current_devices, total_devices) = match state.tab_index {
                     0 => (&midi_devices, midi_devices.len()),
                     1 => (&osc_devices, osc_devices.len()),
@@ -472,22 +485,20 @@ impl Component for DevicesComponent {
                     }
                     (KeyCode::Enter, _) => {
                          let current_idx = state.get_current_tab_selection();
-                         if let Some(selected_device) = current_devices.get(current_idx) { 
-                             let name = selected_device.name.clone();
+                         if let Some(selected_device) = current_devices.get(current_idx) {
                              match selected_device.kind {
                                  DeviceKind::Midi => {
-                                     if selected_device.is_connected {
-                                         status_message_to_set = Some(format!("Disconnecting MIDI '{}'...", name));
-                                         client_message_to_send = Some(ClientMessage::DisconnectMidiDeviceByName(name)); 
-                                     } else {
+                                     if !selected_device.is_connected {
+                                         let name = selected_device.name.clone();
                                          status_message_to_set = Some(format!("Connecting MIDI '{}'...", name));
-                                         client_message_to_send = Some(ClientMessage::ConnectMidiDeviceByName(name)); 
+                                         client_message_to_send = Some(ClientMessage::ConnectMidiDeviceByName(name));
+                                     } else {
+                                         status_message_to_set = Some(format!("MIDI '{}' already connected.", selected_device.name));
                                      }
                                  }
                                  DeviceKind::Osc => {
-                                     status_message_to_set = Some(format!("Removing OSC '{}'...", name));
-                                     client_message_to_send = Some(ClientMessage::RemoveOscDevice(name));
-                                  }
+                                     status_message_to_set = Some("Use Backspace to remove OSC devices.".to_string());
+                                 }
                                   _ => { status_message_to_set = Some("Action not applicable.".to_string()); }
                              }
                          } else {
@@ -495,18 +506,41 @@ impl Component for DevicesComponent {
                          }
                          handled = true;
                     }
+                     (KeyCode::Backspace, _) | (KeyCode::Delete, _) => {
+                         let current_idx = state.get_current_tab_selection();
+                         if let Some(selected_device) = current_devices.get(current_idx) {
+                              let name = selected_device.name.clone();
+                              match selected_device.kind {
+                                  DeviceKind::Midi => {
+                                      if selected_device.is_connected {
+                                          state.confirmation_prompt = Some(format!("Disconnect MIDI '{}'?", name));
+                                          state.pending_action = Some(ClientMessage::DisconnectMidiDeviceByName(name.clone()));
+                                          status_message_to_set = Some("Confirmation required.".to_string());
+                                      } else {
+                                          status_message_to_set = Some(format!("MIDI '{}' is not connected.", name));
+                                      }
+                                  }
+                                  DeviceKind::Osc => {
+                                      state.confirmation_prompt = Some(format!("Remove OSC '{}'?", name));
+                                      state.pending_action = Some(ClientMessage::RemoveOscDevice(name.clone()));
+                                      status_message_to_set = Some("Confirmation required.".to_string());
+                                  }
+                                   _ => { status_message_to_set = Some("Action not applicable.".to_string()); }
+                              }
+                         } else {
+                              status_message_to_set = Some("No device selected.".to_string());
+                         }
+                         handled = true;
+                     }
                     (KeyCode::Char('n'), KeyModifiers::CONTROL) => {
-                        // Contextual Ctrl+N based on tab
                          if !state.is_assigning_slot && !state.is_creating_osc && !state.is_naming_virtual {
                             if state.tab_index == 0 { // MIDI Tab
-                                 // Enter virtual naming mode
                                  state.is_naming_virtual = true;
                                  state.virtual_port_input = TextArea::default();
                                  state.virtual_port_input.set_block(Block::default().borders(Borders::NONE));
                                  status_message_to_set = Some("Enter Virtual MIDI Port Name...".to_string());
                                  handled = true;
                             } else if state.tab_index == 1 { // OSC Tab
-                                 // Enter OSC creation mode
                                   state.is_creating_osc = true;
                                   state.osc_creation_step = 0;
                                   state.osc_name_input = TextArea::default();
@@ -514,13 +548,10 @@ impl Component for DevicesComponent {
                                   state.osc_port_input = TextArea::default();
                                   status_message_to_set = Some("Enter OSC Device Name...".to_string());
                                   handled = true;
-                            } else {
-                                 // Tab index out of bounds or other state? Ignore.
                             }
                          }
                     }
                     (KeyCode::Char('s'), _) => {
-                        // Enter slot assignment mode (if device selected)
                          let current_idx = state.get_current_tab_selection();
                          if current_devices.get(current_idx).is_some() {
                              state.is_assigning_slot = true;
@@ -529,36 +560,30 @@ impl Component for DevicesComponent {
                           } else {
                              status_message_to_set = Some("No device selected to assign slot.".to_string());
                           }
-                          // This always handles the key, even if just to show status
                           handled = true;
                     }
-                    // Tab switching
-                     (KeyCode::Char('m'), _) => { // Match against tuple
+                     (KeyCode::Char('m'), _) => {
                          if state.tab_index != 0 {
                             state.tab_index = 0;
                             state.selected_index = state.midi_selected_index;
-                            handled = true; 
+                            handled = true;
                          }
                      }
-                     (KeyCode::Char('o'), _) => { // Match against tuple
+                     (KeyCode::Char('o'), _) => {
                          if state.tab_index != 1 {
                              state.tab_index = 1;
                              state.selected_index = state.osc_selected_index;
-                             handled = true; 
+                             handled = true;
                          }
                      }
-                    _ => { /* handled remains false */ }
+                    _ => { }
                 }
             } // end if !handled (normal mode)
         } // End of state borrow scope
 
-        // --- Post-Action Updates --- 
-        // Set status message if it was determined
         if let Some(msg) = status_message_to_set { app.set_status_message(msg); }
-        // Send client message if it was determined
         if let Some(msg) = client_message_to_send { app.send_client_message(msg); }
         
-        // Return based on whether any action handled the key
         Ok(handled)
     }
 
@@ -566,7 +591,6 @@ impl Component for DevicesComponent {
     fn draw(&self, app: &App, frame: &mut Frame, area: Rect) {
         let state = &app.interface.components.devices_state;
         
-        // --- Animation Update (No changes needed) ---
         let animation_char = if state.animation_active {
             if let Some(start_time) = state.animation_start {
                 let elapsed = start_time.elapsed().as_millis();
@@ -578,29 +602,27 @@ impl Component for DevicesComponent {
             None
         };
         
-        // --- Layout Definitions --- 
-        let mut input_prompt_height = 0;
-        if state.is_naming_virtual || state.is_assigning_slot || state.is_creating_osc {
-            input_prompt_height = 3;
-        }
+        let mut prompt_height = 0;
+         if state.is_naming_virtual || state.is_assigning_slot || state.is_creating_osc {
+            prompt_height = 3;
+         }
         let status_height = if !state.status_message.is_empty() { 1 } else { 0 };
-        
+
         let outer_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(5), // Main zone (with minimum size)
-                Constraint::Length(input_prompt_height), // Input zone (if visible)
-                Constraint::Length(status_height), // Status message (if present)
+                Constraint::Min(5),
+                Constraint::Length(prompt_height),
+                Constraint::Length(status_height),
             ])
             .split(area);
             
         let main_area = outer_chunks[0];
-        let input_area = if input_prompt_height > 0 { Some(outer_chunks[1]) } else { None };
-        let status_area = if status_height > 0 { 
-            if input_prompt_height > 0 { Some(outer_chunks[2]) } else { Some(outer_chunks[1]) }
+        let prompt_area = if prompt_height > 0 { Some(outer_chunks[1]) } else { None };
+        let status_area = if status_height > 0 {
+            if prompt_height > 0 { Some(outer_chunks[2]) } else { Some(outer_chunks[1]) }
         } else { None };
 
-        // --- Draw the main block ---
         let outer_block = Block::default()
             .title(" Devices ")
             .borders(Borders::ALL)
@@ -614,32 +636,29 @@ impl Component for DevicesComponent {
             return;
         }
         
-        // Divide the inner area to reserve space for the help at the bottom
         let inner_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Min(3), // Content zone
-                Constraint::Length(2), // Help zone (2 lines)
+                Constraint::Min(3),
+                Constraint::Length(2),
             ])
             .split(inner_area);
             
         let content_area = inner_chunks[0];
         let help_area = inner_chunks[1];
 
-        // --- Onglets MIDI / OSC ---
         let tabs_height = 2;
         let content_layout = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
-                Constraint::Length(tabs_height), // Panes
-                Constraint::Min(0), // Content
+                Constraint::Length(tabs_height),
+                Constraint::Min(0),
             ])
             .split(content_area);
             
         let tabs_area = content_layout[0];
         let devices_area = content_layout[1];
         
-        // Draw the panes
         let tab_titles = vec!["MIDI", "OSC"];
         let tabs = Tabs::new(tab_titles.iter().map(|t| Line::from(*t)).collect::<Vec<Line>>())
             .select(state.tab_index)
@@ -649,18 +668,15 @@ impl Component for DevicesComponent {
             
         frame.render_widget(tabs, tabs_area);
         
-        // Get the filtered lists of devices HERE, in draw
         let (midi_devices, osc_devices) = Self::get_filtered_devices(app);
         
-        // Draw the content of the active pane
         if state.tab_index == 0 {
-            // --- MIDI Pane ---
             let headers = vec!["Slot", "Statut", "Nom", "Type"];
             let col_widths = [
-                Constraint::Length(6),    // Slot width
-                Constraint::Length(8),    // Status
-                Constraint::Min(20),      // Name
-                Constraint::Length(10),   // Type
+                Constraint::Length(6),
+                Constraint::Length(8),
+                Constraint::Min(20),
+                Constraint::Length(10),
             ];
             
             let header_cells = headers.iter()
@@ -672,7 +688,7 @@ impl Component for DevicesComponent {
             let rows = midi_devices.iter().enumerate().map(|(visual_index, device)| {
                 let is_selected = visual_index == state.selected_index;
                 let slot_id = device.id;
-                let device_id_u32 = 0; // Animation not linked to slot ID anymore
+                let device_id_u32 = 0;
                 let is_animated = animation_char.is_some() && state.animation_device_id == Some(device_id_u32);
                 
                 let status_text = if is_animated {
@@ -704,13 +720,12 @@ impl Component for DevicesComponent {
             frame.render_widget(table, devices_area);
             
         } else {
-            // --- OSC Pane ---
             let headers = vec!["Slot", "Status", "Name", "Address"];
             let col_widths = [
-                Constraint::Length(6),    // Slot ID
-                Constraint::Length(8),    // Status (Active/Inactive?)
-                Constraint::Min(15),      // Name
-                Constraint::Min(18),      // Address (IP:Port)
+                Constraint::Length(6),
+                Constraint::Length(8),
+                Constraint::Min(15),
+                Constraint::Min(18),
             ];
             
             let header_cells = headers.iter()
@@ -721,10 +736,9 @@ impl Component for DevicesComponent {
                 
             let rows = osc_devices.iter().enumerate().map(|(visual_index, device)| {
                 let is_selected = visual_index == state.selected_index;
-                let slot_id = device.id; // Assumes DeviceInfo includes slot ID for OSC too
+                let slot_id = device.id;
                 
-                // OSC doesn't have a persistent connection, maybe just "Active"?
-                let status_text = "Active"; 
+                let status_text = "Active";
                 let status_color = Color::Cyan;
                 
                 let row_style = if is_selected { Style::default().bg(Color::Blue).fg(Color::White) } else { Style::default() };
@@ -733,7 +747,6 @@ impl Component for DevicesComponent {
                 let slot_cell = Cell::from(slot_display);
                 let status_cell = Cell::from(status_text).style(Style::default().fg(status_color));
                 let name_cell = Cell::from(device.name.as_str());
-                // Use the actual address from DeviceInfo
                 let addr_display = device.address.clone().unwrap_or_else(|| "N/A".to_string());
                 let addr_cell = Cell::from(addr_display); 
                 
@@ -749,61 +762,58 @@ impl Component for DevicesComponent {
             frame.render_widget(table, devices_area);
         }
 
-        // Display the text input zone if the user is naming a virtual port OR assigning a slot
-        if let Some(area) = input_area {
-            if state.is_naming_virtual {
-                let input_widget = &state.virtual_port_input;
-                let block = Block::default().title(" Virtual Port Name ").borders(Borders::ALL).style(Style::default().fg(Color::Yellow));
-                frame.render_widget(block.clone(), area);
-                frame.render_widget(input_widget, block.inner(area));
-            } else if state.is_assigning_slot {
-                 let input_widget = &state.slot_assignment_input;
-                 let block = Block::default().title(" Assign Slot ").borders(Borders::ALL).style(Style::default().fg(Color::Yellow));
-                 frame.render_widget(block.clone(), area);
-                 frame.render_widget(input_widget, block.inner(area));
-            } else if state.is_creating_osc {
-                 let title = match state.osc_creation_step {
-                      0 => " OSC Name (Enter: Next, Esc: Cancel) ",
-                      1 => " OSC IP Address (Enter: Next, Esc: Back) ",
-                      2 => " OSC Port (Enter: Create, Esc: Back) ",
-                      _ => " Invalid State ",
-                 };
-                 let block = Block::default()
-                         .borders(Borders::ALL)
-                         .border_type(BorderType::Plain)
-                         .title(title)
-                         .style(Style::default().fg(Color::Magenta)); 
-                         
-                  frame.render_widget(block.clone(), area);
-                  let inner_area = block.inner(area);
+        if let Some(input_prompt_area) = prompt_area {
+            if state.confirmation_prompt.is_none() {
+                if state.is_naming_virtual {
+                    let input_widget = &state.virtual_port_input;
+                    let block = Block::default().title(" Virtual Port Name ").borders(Borders::ALL).style(Style::default().fg(Color::Yellow));
+                    frame.render_widget(block.clone(), input_prompt_area);
+                    frame.render_widget(input_widget, block.inner(input_prompt_area));
+                } else if state.is_assigning_slot {
+                    let input_widget = &state.slot_assignment_input;
+                    let block = Block::default().title(" Assign Slot ").borders(Borders::ALL).style(Style::default().fg(Color::Yellow));
+                    frame.render_widget(block.clone(), input_prompt_area);
+                    frame.render_widget(input_widget, block.inner(input_prompt_area));
+                } else if state.is_creating_osc {
+                    let title = match state.osc_creation_step {
+                         0 => " OSC Name (Enter: Next, Esc: Cancel) ",
+                         1 => " OSC IP Address (Enter: Next, Esc: Back) ",
+                         2 => " OSC Port (Enter: Create, Esc: Back) ",
+                         _ => " Invalid State ",
+                    };
+                    let block = Block::default()
+                            .borders(Borders::ALL)
+                            .border_type(BorderType::Plain)
+                            .title(title)
+                            .style(Style::default().fg(Color::Magenta));
 
-                  // Render the specific widget based on the step
-                  match state.osc_creation_step {
-                      0 => frame.render_widget(&state.osc_name_input, inner_area),
-                      1 => frame.render_widget(&state.osc_ip_input, inner_area),
-                      2 => frame.render_widget(&state.osc_port_input, inner_area),
-                      _ => frame.render_widget(Paragraph::new("Error"), inner_area), // Correctly render Paragraph
-                  }
+                     frame.render_widget(block.clone(), input_prompt_area);
+                     let inner_input_area = block.inner(input_prompt_area);
+
+                     match state.osc_creation_step {
+                         0 => frame.render_widget(&state.osc_name_input, inner_input_area),
+                         1 => frame.render_widget(&state.osc_ip_input, inner_input_area),
+                         2 => frame.render_widget(&state.osc_port_input, inner_input_area),
+                         _ => frame.render_widget(Paragraph::new("Error"), inner_input_area),
+                     }
+                }
             }
         }
         
-        // Display the status message if it is present
-        if let Some(area) = status_area {
+        if let Some(status_render_area) = status_area {
             let status_style = Style::default().fg(Color::Yellow);
             let status_paragraph = Paragraph::new(state.status_message.as_str())
                 .style(status_style)
                 .alignment(Alignment::Center);
-            frame.render_widget(status_paragraph, area);
+            frame.render_widget(status_paragraph, status_render_area);
         }
 
-        // --- Render Help Text ---
         let key_style = Style::default().fg(Color::White).add_modifier(Modifier::BOLD);
         let text_style = Style::default().fg(Color::DarkGray);
         let help_spans1;
         let help_spans2;
 
-        if state.is_naming_virtual {
-             // Help for naming mode
+         if state.is_naming_virtual {
              help_spans1 = vec![
                  Span::styled("Enter", key_style), Span::styled(": Confirm | ", text_style),
                  Span::styled("Esc", key_style), Span::styled(": Cancel", text_style),
@@ -812,34 +822,95 @@ impl Component for DevicesComponent {
                  Span::styled("↑↓", key_style), Span::styled(": Browse through history", text_style),
              ];
         } else if state.is_assigning_slot {
-            // Help for slot assignment mode
             help_spans1 = vec![
                 Span::styled("Enter", key_style), Span::styled(": Confirm | ", text_style),
                 Span::styled("Esc", key_style), Span::styled(": Cancel | ", text_style),
                 Span::styled("0-9", key_style), Span::styled(": Enter Slot Number", text_style),
             ];
-            help_spans2 = vec![Span::raw("")]; // Second line empty for this mode
+            help_spans2 = vec![Span::raw("")];
         } else if state.is_creating_osc {
-            // Help for OSC creation mode
             help_spans1 = vec![
                 Span::styled("Enter", key_style), Span::styled(": Next/Confirm | ", text_style),
                 Span::styled("Esc", key_style), Span::styled(": Back/Cancel", text_style),
             ];
-            help_spans2 = vec![Span::raw("")]; // Second line empty for this mode
+            help_spans2 = vec![Span::raw("")];
         } else {
-            // Help for normal mode
             help_spans1 = vec![
                 Span::styled("↑↓", key_style), Span::styled(": Navigate | ", text_style),
                 Span::styled("M", key_style), Span::styled("/", text_style), Span::styled("O", key_style), Span::styled(": MIDI/OSC | ", text_style),
                 Span::styled("s", key_style), Span::styled(": Assign Slot", text_style),
             ];
              help_spans2 = vec![
-                Span::styled("Enter", key_style), Span::styled(": Connect(MIDI)/Remove(OSC) | ", text_style),
-                Span::styled("Ctrl+N", key_style), Span::styled(": New MIDI/OSC Device", text_style),
+                Span::styled("Enter", key_style), Span::styled(": Connect MIDI | ", text_style),
+                Span::styled("Bksp/Del", key_style), Span::styled(": Disconnect/Remove (Confirm) | ", text_style),
+                Span::styled("Ctrl+N", key_style), Span::styled(": New MIDI/OSC", text_style),
             ];
         }
+
         let help_text = vec![Line::from(help_spans1), Line::from(help_spans2)];
         let help = Paragraph::new(help_text).alignment(Alignment::Center);
         frame.render_widget(help, help_area);
+
+        if let Some(prompt) = &state.confirmation_prompt {
+             let popup_area = centered_rect(60, 25, area);
+             let block = Block::default()
+                 .title(" Confirm Action ")
+                 .borders(Borders::ALL)
+                 .border_type(BorderType::Double)
+                 .style(Style::default().fg(Color::Red));
+
+             let confirm_key_style = Style::default().fg(Color::White).add_modifier(Modifier::BOLD);
+             let cancel_key_style = Style::default().fg(Color::White).add_modifier(Modifier::BOLD);
+             let text_style_popup = Style::default().fg(Color::Yellow);
+
+             let text_lines = vec![
+                Line::from(Span::styled(prompt.as_str(), text_style_popup)),
+                Line::from(""),
+                Line::from(vec![
+                    Span::styled("  Y", confirm_key_style),
+                    Span::raw("/"),
+                    Span::styled("Enter", confirm_key_style),
+                    Span::styled(": Confirm", confirm_key_style),
+                    Span::raw("   "),
+                    Span::styled("N", cancel_key_style),
+                    Span::raw("/"),
+                    Span::styled("Esc", cancel_key_style),
+                    Span::styled(": Cancel", cancel_key_style),
+                ]),
+             ];
+
+             let prompt_paragraph = Paragraph::new(text_lines)
+                 .block(block.clone())
+                 .alignment(Alignment::Center)
+                 .wrap(Wrap { trim: true });
+
+             frame.render_widget(Clear, popup_area);
+             frame.render_widget(prompt_paragraph, popup_area);
+
+             if !state.is_naming_virtual && !state.is_assigning_slot && !state.is_creating_osc {
+                 frame.set_cursor_position(Rect::default());
+             }
+        }
     }
+}
+
+/// Helper function to create a centered rect.
+fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
+    let popup_layout = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Percentage((100 - percent_y) / 2),
+            Constraint::Percentage(percent_y),
+            Constraint::Percentage((100 - percent_y) / 2),
+        ])
+        .split(r);
+
+    Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage((100 - percent_x) / 2),
+            Constraint::Percentage(percent_x),
+            Constraint::Percentage((100 - percent_x) / 2),
+        ])
+        .split(popup_layout[1])[1]
 }
