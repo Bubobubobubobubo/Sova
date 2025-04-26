@@ -14,7 +14,7 @@ pub type BaliPreparedProgram = Vec<TimeStatement>;
 // - pick
 // - fonctions (func f [x y z] TopLevelEffectSet)
 
-const DEBUG: bool = true;
+const DEBUG: bool = false;
 
 const DEFAULT_VELOCITY: i64 = 90;
 pub const DEFAULT_CHAN: i64 = 1;
@@ -23,6 +23,7 @@ const DEFAULT_DURATION: i64 = 2;
 
 lazy_static! {
     static ref LOCAL_TARGET_VAR: Variable = Variable::Instance("_local_target".to_owned());
+    static ref LOCAL_PICK_VAR: Variable = Variable::Instance("_local_pick".to_owned());
 }
 
 pub fn bali_as_asm(prog: BaliProgram) -> Program {
@@ -508,7 +509,7 @@ pub enum Statement {
     Binary(i64, i64, LoopContext, ConcreteFraction, Vec<Statement>, BaliContext),
     After(Vec<TopLevelEffect>, BaliContext),
     Before(Vec<TopLevelEffect>, BaliContext),
-    Effect(TopLevelEffect, BaliContext),
+    Effect(TopLevelEffect),
     With(Vec<Statement>, BaliContext),
     Choice(i64, i64, Vec<Statement>, BaliContext), // Choice(num, tot, ss, c) num chances sur tot de faire chaque chose de ss (si tot = ss.len() on en fait exactement num parmi les ss, si tot > ss.len() on en fait num parmi un vecteur dont le début et ss et les éléments suivants sont vides qui est de taille tot)
     Spread(ConcreteFraction, Vec<Statement>, BaliContext), // Spread(timeStep, ss, c) effectue les statements de ss en les séparant d'un temps timeStep (la première à 0, la deuxième à timeStep, la troisième à 2*timeStep, etc)
@@ -658,7 +659,7 @@ impl Statement {
             },
             Statement::After(es, cc) => es.into_iter().map(|e| TimeStatement::JustAfter(val.clone(), e, cc.clone().update(c.clone()), choices.clone(), picks.clone())).collect(),
             Statement::Before(es, cc) => es.into_iter().map(|e| TimeStatement::JustBefore(val.clone(), e, cc.clone().update(c.clone()), choices.clone(), picks.clone())).collect(),
-            Statement::Effect(e, cc) => vec![TimeStatement::At(val.clone(), e, cc.clone().update(c.clone()), choices.clone(), picks.clone())],
+            Statement::Effect(e) => vec![TimeStatement::At(val.clone(), e, c.clone(), choices.clone(), picks.clone())],
             Statement::With(es, cc) => es.into_iter().map(|e| e.expend(val, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
             Statement::Choice(num_selected, num_selectable, es, cc) => {
                 let mut res = Vec::new();
@@ -694,6 +695,24 @@ impl Statement {
                 res
             },
             Statement::Pick(pick_expression, es, cc) => {
+        
+                // If the pick contains only effects (no statements) consider it as a TopLevelEffect kind of pick as this is more intuitive
+                let mut only_effects = true;
+                let mut top_level_effects = Vec::new();
+                for e in es.iter() {
+                    if let Statement::Effect(effect) = e {
+                        top_level_effects.push(effect.clone());
+                    } else {
+                        only_effects = false;
+                        break
+                    }
+                }
+
+                if only_effects {
+                    return Statement::Effect(TopLevelEffect::Pick(pick_expression, top_level_effects, cc)).expend(val, c.clone(), choices.clone(), picks.clone(), choice_vars, pick_vars)
+                }
+
+                // Else, handle the pick as a timed pick
                 let mut res = Vec::new();
                 let (pick_variable, num_pick_variable) = pick_vars.get_variable_and_number();
                 for position in 0..es.len() {
@@ -722,6 +741,7 @@ pub enum TopLevelEffect {
     If(Box<BooleanExpression>, Vec<TopLevelEffect>, BaliContext),
     Choice(i64, i64, Vec<TopLevelEffect>, BaliContext),
     Effect(Effect, BaliContext),
+    Pick(Box<Expression>, Vec<TopLevelEffect>, BaliContext),
 }
 
 impl TopLevelEffect {
@@ -732,6 +752,7 @@ impl TopLevelEffect {
             TopLevelEffect::For(cond, es, for_context) => TopLevelEffect::For(cond, es, for_context.update(c)),
             TopLevelEffect::If(cond, es, if_context) => TopLevelEffect::If(cond, es, if_context.update(c)),
             TopLevelEffect::Choice(num_selected, num_selectable, es, choice_context) => TopLevelEffect::Choice(num_selected, num_selectable, es, choice_context.update(c)),
+            TopLevelEffect::Pick(position, es, pick_context) => TopLevelEffect::Pick(position, es, pick_context.update(c)),
             TopLevelEffect::Effect(e, effect_context) => TopLevelEffect::Effect(e, effect_context.update(c)),
         }
     }
@@ -883,6 +904,50 @@ impl TopLevelEffect {
                     res.extend(effect_prog);
 
 
+                }
+
+                res
+            },
+            TopLevelEffect::Pick(position, es, pick_context) => {
+
+                // get context
+                let context = pick_context.clone().update(context.clone());
+
+                // compute the position
+                let mut res = position.as_asm();
+                res.push(Instruction::Control(ControlASM::Pop(LOCAL_PICK_VAR.clone())));
+                res.push(Instruction::Control(ControlASM::Add(LOCAL_PICK_VAR.clone(), (es.len() as i64).into(), LOCAL_PICK_VAR.clone())));
+                res.push(Instruction::Control(ControlASM::Sub(LOCAL_PICK_VAR.clone(), 1.into(), LOCAL_PICK_VAR.clone())));
+                res.push(Instruction::Control(ControlASM::Mod(LOCAL_PICK_VAR.clone(), (es.len() as i64).into(), LOCAL_PICK_VAR.clone())));
+
+                let mut effect_progs = Vec::new();
+
+                // jump to the position
+                let mut effect_number = 0;
+                let num_pick_instruction_per_step = 1;
+                let num_pick_instructions = (es.len() as i64) * num_pick_instruction_per_step;
+                let mut distance_to_effect = num_pick_instructions - num_pick_instruction_per_step;
+                let mut distance_to_end = 0;
+                for e in es.iter() {
+                    effect_progs.push(e.as_asm(context.clone(), local_choice_vars));
+                    let new_effect_len = effect_progs[effect_number as usize].len() as i64 + 1; // +1 for the jumps that will be added later
+                    distance_to_end += new_effect_len;
+
+                    res.push(Instruction::Control(ControlASM::RelJumpIfEqual(LOCAL_PICK_VAR.clone(), effect_number.into(), distance_to_effect + 1)));
+
+                    distance_to_effect = distance_to_effect - num_pick_instruction_per_step + new_effect_len; // +1 for the jumps after the effects
+
+                    effect_number += 1;
+                }
+
+                // add the effects and jumps to avoir other effects
+                for ep in effect_progs.iter() {
+                    res.extend(ep.clone());
+
+                    distance_to_end -= (ep.len() as i64) + 1;
+                    if distance_to_end != 0 {
+                        res.push(Instruction::Control(ControlASM::RelJump(distance_to_end)));
+                    }
                 }
 
                 res
