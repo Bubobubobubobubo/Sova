@@ -64,6 +64,7 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
     }
 
     // Initialize the variables for the choices with random values in the good range
+    // Initialize the target variables as well TODO
     for var_pos in 0..choice_variables.variable_set.len() {
         res.push(Instruction::Control(ControlASM::Mov(Variable::Environment(EnvironmentFunc::RandomUInt(choice_variables.variable_bounds[var_pos] as u64)), choice_variables.variable_set[var_pos].clone())));
     }
@@ -348,9 +349,67 @@ impl TimeStatement {
 
     pub fn as_asm(&self, position: usize,  local_choice_vars: &mut LocalChoiceVariableGenerator, set_pick_variables: &mut Vec<bool>) -> Vec<Instruction> {
         match self {
-            TimeStatement::At(_, x, context, choices, picks) | TimeStatement::JustBefore(_, x, context, choices, picks) | TimeStatement::JustAfter(_, x, context, choices, picks) => {
+            TimeStatement::At(t, x, context, choices, picks) | TimeStatement::JustBefore(t, x, context, choices, picks) | TimeStatement::JustAfter(t, x, context, choices, picks) => {
+
+
+                if choices.len() == 0 && picks.len() == 0 {
+                    return x.as_asm(position, context.clone(), local_choice_vars);
+                }
 
                 // handle choices (? ...)
+                if choices.len() > 0 {
+                    let mut choices = choices.clone();
+                    let current_choice = choices.pop();
+                    let current_choice = current_choice.unwrap(); 
+
+                    let mut res = Vec::new();
+
+                    res.push(Instruction::Control(ControlASM::Mov((current_choice.position as i64).into(), LOCAL_TARGET_VAR.clone())));
+                        
+                    // handle choice structure
+                    let num_instruction_for_first_choice = 1;
+                    let num_instruction_for_other_choices = if current_choice.position == 0 {
+                        1
+                    } else {
+                        3
+                    };
+                    let num_instruction_between_choices_and_effects = 1;
+                    let mut distance_to_prog = num_instruction_for_first_choice + num_instruction_for_other_choices * (current_choice.variables.len() - 1) + num_instruction_between_choices_and_effects;
+
+                    for choice_step in 0..current_choice.variables.len() {
+                        
+                        distance_to_prog = if choice_step == 0 {
+                            distance_to_prog - num_instruction_for_first_choice
+                        } else {
+                            distance_to_prog - num_instruction_for_other_choices
+                        };
+
+                        if choice_step > 0 && current_choice.position > 0 {
+                            res.push(Instruction::Control(ControlASM::RelJumpIfLessOrEqual(LOCAL_TARGET_VAR.clone(), current_choice.variables[choice_step as usize -1].clone(), 2)));
+                            res.push(Instruction::Control(ControlASM::Sub(LOCAL_TARGET_VAR.clone(), 1.into(), LOCAL_TARGET_VAR.clone())));
+                        }
+
+                        res.push(Instruction::Control(ControlASM::RelJumpIfEqual(LOCAL_TARGET_VAR.clone(), current_choice.variables[choice_step].clone(), (distance_to_prog + 1) as i64)));
+                    }
+
+                    // jump after prog if choice is not successful
+                    let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), choices, picks.to_vec()).as_asm(position, local_choice_vars, set_pick_variables);
+                    res.push(Instruction::Control(ControlASM::RelJump((prog.len() + 1) as i64)));
+
+                    res.extend(prog);
+
+                    return res;
+                }
+
+                // handle picks (pick ...)
+                // here there is no choice to handle
+                let mut picks = picks.clone();
+                let _current_pick = picks.pop();
+                TimeStatement::At(t.clone(), x.clone(), context.clone(), choices.to_vec(), picks).as_asm(position, local_choice_vars, set_pick_variables)
+                
+
+
+/*
                 let mut res = if choices.len() == 0 {
                     x.as_asm(position, context.clone(), local_choice_vars)
                 } else {
@@ -376,7 +435,7 @@ impl TimeStatement {
                             current_inst_pos += 1;
                             if choice.position > 0 {
                                 for prev_choice_level in 0..count_vars {
-                                    choice_prog.push(Instruction::Control(ControlASM::JumpIfLessOrEqual(choice.target_variables[choice_level].clone(), choice.variables[prev_choice_level].clone(), current_inst_pos + 2)));
+                                    choice_prog.push(Instruction::Control(ControlASM::JumpIfLessOrEqual(choice.target_variables[choice_level].clone(), choice.variables[prev_choice_level].clone(), 2)));
                                     current_inst_pos += 1;
                                     choice_prog.push(Instruction::Control(ControlASM::Sub(choice.target_variables[choice_level].clone(), 1.into(), choice.target_variables[choice_level].clone())));
                                     current_inst_pos += 1;
@@ -456,10 +515,10 @@ impl TimeStatement {
                     res = prog;
                 }
 
-                res
+                res*/
             },
         }
-    }
+    }       
 
 }
 
