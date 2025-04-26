@@ -1,4 +1,4 @@
-use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, LoopContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression, set_context_effect_set};
+use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, LoopContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression};
 
 grammar;
 
@@ -22,7 +22,7 @@ pub loopContext: LoopContext = {
 }
 
 pub loopContextContent: LoopContext = {
-    <mut c: loopContextContent> <ce: loopContextElement> => ce.update(c),
+    <c: loopContextContent> <ce: loopContextElement> => ce.update(c),
     <ce: loopContextElement> => ce,
 }
 
@@ -42,7 +42,7 @@ pub OptionalWithContext: BaliContext = {
 }
 
 pub WithContext: BaliContext = {
-    <mut c: WithContext> <ce: ContextElement> => ce.update(c),
+    <c: WithContext> <ce: ContextElement> => ce.update(c),
     <ce: ContextElement> => ce,
 }
 
