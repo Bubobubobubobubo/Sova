@@ -13,7 +13,6 @@ pub type BaliPreparedProgram = Vec<TimeStatement>;
 // - (note [50 51 52]), (note <50 51 52>) - idem partout 
 // - pick
 // - fonctions (func f [x y z] TopLevelEffectSet)
-// - retirer tous les jump pour en faire des reljump, j'en suis au choice des topleveleffect, mais il est buggué de base je crois, le reprendre
 
 const DEBUG: bool = true;
 
@@ -102,14 +101,14 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
             delay
         };
         total_delay = prog[i+1].get_time_as_f64();
-        res.extend(prog[i].as_asm(res.len(), &mut local_choice_variables, &mut set_pick_variables));
+        res.extend(prog[i].as_asm(&mut local_choice_variables, &mut set_pick_variables));
         if delay > 0.0 {
             res.push(Instruction::Control(ControlASM::FloatAsFrames(delay.into(), time_var.clone())));
             res.push(Instruction::Effect(Event::Nop, time_var.clone()));
         }
     }
 
-    res.extend(prog[prog.len()-1].as_asm(res.len(), &mut local_choice_variables, &mut set_pick_variables));
+    res.extend(prog[prog.len()-1].as_asm(&mut local_choice_variables, &mut set_pick_variables));
 
 
     // print program for debug
@@ -347,12 +346,12 @@ impl TimeStatement {
         }
     }
 
-    pub fn as_asm(&self, position: usize,  local_choice_vars: &mut LocalChoiceVariableGenerator, set_pick_variables: &mut Vec<bool>) -> Vec<Instruction> {
+    pub fn as_asm(&self,  local_choice_vars: &mut LocalChoiceVariableGenerator, set_pick_variables: &mut Vec<bool>) -> Vec<Instruction> {
         match self {
             TimeStatement::At(t, x, context, choices, picks) | TimeStatement::JustBefore(t, x, context, choices, picks) | TimeStatement::JustAfter(t, x, context, choices, picks) => {
 
                 if choices.len() == 0 && picks.len() == 0 {
-                    return x.as_asm(position, context.clone(), local_choice_vars);
+                    return x.as_asm(context.clone(), local_choice_vars);
                 }
 
                 // handle choices (? ...)
@@ -392,7 +391,7 @@ impl TimeStatement {
                     }
 
                     // jump after prog if choice is not successful
-                    let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), choices, picks.to_vec()).as_asm(position, local_choice_vars, set_pick_variables);
+                    let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), choices, picks.to_vec()).as_asm(local_choice_vars, set_pick_variables);
                     res.push(Instruction::Control(ControlASM::RelJump((prog.len() + 1) as i64)));
 
                     res.extend(prog);
@@ -423,7 +422,7 @@ impl TimeStatement {
                 res.push(Instruction::Control(ControlASM::RelJumpIfEqual(current_pick.variable.clone(), (current_pick.position as i64).into(), 2)));
 
                 // jump over effects if the pick is not successful
-                let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), choices.to_vec(), picks).as_asm(position, local_choice_vars, set_pick_variables);
+                let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), choices.to_vec(), picks).as_asm(local_choice_vars, set_pick_variables);
                 let num_prog_instruction = prog.len();
                 res.push(Instruction::Control(ControlASM::RelJump((num_prog_instruction + 1) as i64)));
                     
@@ -737,17 +736,15 @@ impl TopLevelEffect {
         }
     }
 
-    pub fn as_asm(&self, position: usize, context: BaliContext,  local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
+    pub fn as_asm(&self, context: BaliContext,  local_choice_vars: &mut LocalChoiceVariableGenerator) -> Vec<Instruction> {
         //let time_var = Variable::Instance("_time".to_owned());
         let bvar_out = Variable::Instance("_bres".to_owned());
         match self {
             TopLevelEffect::Seq(s, seq_context) => {
                 let mut res = Vec::new();
-                let mut position = position;
                 let context = seq_context.clone().update(context.clone());
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(position, context.clone(), local_choice_vars);
-                    position += to_add.len();
+                    let to_add = s[i].as_asm(context.clone(), local_choice_vars);
                     res.extend(to_add);
                 };
                 res
@@ -755,31 +752,23 @@ impl TopLevelEffect {
             TopLevelEffect::For(e, s, for_context) => {
                 let mut res = Vec::new();
 
-                let condition_position = position;
-
                 // Compute and add condition
                 let condition = e.as_asm();
-                let mut position = position + condition.len();
                 res.extend(condition);
 
                 // Add for structure
-                position += 3;
                 res.push(Instruction::Control(ControlASM::Pop(bvar_out.clone())));
                 res.push(Instruction::Control(ControlASM::RelJumpIf(bvar_out.clone(), 2)));
-                //res.push(Instruction::Control(ControlASM::FloatAsFrames(delay.into(), time_var.clone())));
-                //res.push(Instruction::Effect(Event::Nop, time_var.clone()));
 
                 // Compute effects
                 let context = for_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(position, context.clone(), local_choice_vars);
-                    position += to_add.len();
+                    let to_add = s[i].as_asm(context.clone(), local_choice_vars);
                     effects.extend(to_add);
                 };
 
                 // Add for structure (continued)
-                position += 1;
                 let num_effect_instruction = effects.len() as i64;
                 res.push(Instruction::Control(ControlASM::RelJump(num_effect_instruction + 2)));
                 
@@ -797,11 +786,9 @@ impl TopLevelEffect {
 
                 // Compute and add condition
                 let condition = e.as_asm();
-                let mut position = position + condition.len();
                 res.extend(condition);
 
                 // Add if structure
-                position += 3;
                 res.push(Instruction::Control(ControlASM::Pop(bvar_out.clone())));
                 res.push(Instruction::Control(ControlASM::RelJumpIf(bvar_out.clone(), 2)));
 
@@ -809,8 +796,7 @@ impl TopLevelEffect {
                 let context = if_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(position, context.clone(), local_choice_vars);
-                    position += to_add.len();
+                    let to_add = s[i].as_asm(context.clone(), local_choice_vars);
                     effects.extend(to_add);
                 };
 
@@ -842,7 +828,7 @@ impl TopLevelEffect {
 
                 // If everything will be selected
                 if num_selected >= num_selectable {
-                    return TopLevelEffect::Seq(es.clone(), choice_context.clone()).as_asm(position, context, local_choice_vars)
+                    return TopLevelEffect::Seq(es.clone(), choice_context.clone()).as_asm(context, local_choice_vars)
                 }
 
                 // An actual selection will occur
@@ -890,7 +876,7 @@ impl TopLevelEffect {
                     }
 
                     // jump over effects if the choice don't select them
-                    let effect_prog = es[effect_pos].as_asm(0, context.clone(), local_choice_vars);
+                    let effect_prog = es[effect_pos].as_asm(context.clone(), local_choice_vars);
                     res.push(Instruction::Control(ControlASM::RelJump((effect_prog.len() + 1) as i64)));
 
                     // add the actual effects
