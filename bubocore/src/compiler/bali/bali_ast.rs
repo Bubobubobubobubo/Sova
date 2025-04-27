@@ -11,10 +11,10 @@ pub type BaliPreparedProgram = Vec<TimeStatement>;
 
 // TODO :
 // - (note [50 51 52]), (note <50 51 52>) - idem partout 
-// - pick
 // - fonctions (func f [x y z] TopLevelEffectSet)
+// - pour fspread, voir comment c'est fait. Passer un fspread_time dans les extend, qui vaut initialement 1 (durée de la frame) et est modifié à chaque loop (loop, eucloop, binloop) pour la durée du pas et à chaque spread/fspread pour la durée d'un élément
 
-const DEBUG: bool = false;
+const DEBUG: bool = true;
 
 const DEFAULT_VELOCITY: i64 = 90;
 pub const DEFAULT_CHAN: i64 = 1;
@@ -133,7 +133,7 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
 
 
 pub fn expend_prog(prog: BaliProgram, c: BaliContext, mut choice_vars: &mut ChoiceVariableGenerator, mut pick_variables: &mut LocalChoiceVariableGenerator) -> BaliPreparedProgram {
-    prog.into_iter().map(|s| s.expend(&ConcreteFraction{signe: 1, numerator: 0, denominator: 1}, c.clone(), Vec::new(), Vec::new(), &mut choice_vars, &mut pick_variables)).flatten().collect()
+    prog.into_iter().map(|s| s.expend(&ConcreteFraction{signe: 1, numerator: 0, denominator: 1}, &ConcreteFraction{signe: 1, numerator: 1, denominator: 1}, c.clone(), Vec::new(), Vec::new(), &mut choice_vars, &mut pick_variables)).flatten().collect()
 }
 
 /*
@@ -501,18 +501,35 @@ impl TopLevelStatement {
 */
 
 #[derive(Debug, Clone)]
+pub enum TimingInformation {
+    FrameRelative(ConcreteFraction),
+    PositionRelative(ConcreteFraction),
+}
+
+impl TimingInformation {
+
+    pub fn as_frames(&self, spread_time: &ConcreteFraction) -> ConcreteFraction {
+        match self {
+            TimingInformation::FrameRelative(time) => time.clone(),
+            TimingInformation::PositionRelative(time) => time.mult(spread_time),
+        }
+    }
+
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
-    AfterFrac(ConcreteFraction, Vec<Statement>, BaliContext),
-    BeforeFrac(ConcreteFraction, Vec<Statement>, BaliContext),
-    Loop(i64, ConcreteFraction, Vec<Statement>, BaliContext),
-    Euclidean(i64, i64, LoopContext, ConcreteFraction, Vec<Statement>, BaliContext),
-    Binary(i64, i64, LoopContext, ConcreteFraction, Vec<Statement>, BaliContext),
+    AfterFrac(TimingInformation, Vec<Statement>, BaliContext),
+    BeforeFrac(TimingInformation, Vec<Statement>, BaliContext),
+    Loop(i64, TimingInformation, Vec<Statement>, BaliContext),
+    Euclidean(i64, i64, LoopContext, TimingInformation, Vec<Statement>, BaliContext),
+    Binary(i64, i64, LoopContext, TimingInformation, Vec<Statement>, BaliContext),
     After(Vec<TopLevelEffect>, BaliContext),
     Before(Vec<TopLevelEffect>, BaliContext),
     Effect(TopLevelEffect),
     With(Vec<Statement>, BaliContext),
     Choice(i64, i64, Vec<Statement>, BaliContext), // Choice(num, tot, ss, c) num chances sur tot de faire chaque chose de ss (si tot = ss.len() on en fait exactement num parmi les ss, si tot > ss.len() on en fait num parmi un vecteur dont le début et ss et les éléments suivants sont vides qui est de taille tot)
-    Spread(ConcreteFraction, Vec<Statement>, BaliContext), // Spread(timeStep, ss, c) effectue les statements de ss en les séparant d'un temps timeStep (la première à 0, la deuxième à timeStep, la troisième à 2*timeStep, etc)
+    Spread(TimingInformation, Vec<Statement>, BaliContext), // Spread(timeStep, ss, c) effectue les statements de ss en les séparant d'un temps timeStep (la première à 0, la deuxième à timeStep, la troisième à 2*timeStep, etc)
     Pick(Box<Expression>, Vec<Statement>, BaliContext), // sélectionne le Statement dont le numéro est indiqué par la valeur de l'expression (modulo le nombre de Statements), l'expression est évaluée au moment du Statement qui arrive le plus tôt
 }
 
@@ -624,17 +641,18 @@ impl Statement {
     }
 
 
-    pub fn expend(self, val: &ConcreteFraction, c: BaliContext, choices: Vec<ChoiceInformation>, picks: Vec<PickInformation>, choice_vars: &mut ChoiceVariableGenerator, pick_vars: &mut LocalChoiceVariableGenerator) -> Vec<TimeStatement> {
+    pub fn expend(self, val: &ConcreteFraction, spread_time: &ConcreteFraction, c: BaliContext, choices: Vec<ChoiceInformation>, picks: Vec<PickInformation>, choice_vars: &mut ChoiceVariableGenerator, pick_vars: &mut LocalChoiceVariableGenerator) -> Vec<TimeStatement> {
         /*let c = match self {
             Statement::AfterFrac(_, _, ref cc) | Statement::BeforeFrac(_, _, ref cc) | Statement::Loop(_, _, _, ref cc) | Statement::After(_, ref cc) | Statement::Before(_, ref cc) | Statement::Effect(_, ref cc) => cc.clone().update(c),
         };*/
         match self {
-            Statement::AfterFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&v.add(val), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
-            Statement::BeforeFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&val.sub(&v), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
+            Statement::AfterFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&v.as_frames(spread_time).add(val), spread_time, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
+            Statement::BeforeFrac(v, es, cc) => es.into_iter().map(|e| e.expend(&val.sub(&v.as_frames(spread_time)), spread_time, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
             Statement::Loop(it, v, es, cc) => {
                 let mut res = Vec::new();
+                let v = v.as_frames(spread_time).divbyint(it);
                 for i in 0..it {
-                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(i)), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
+                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(i)), &v, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
                     res.extend(content);
                 };
                 res
@@ -642,8 +660,9 @@ impl Statement {
             Statement::Euclidean(beats, steps, loop_context, v, es, cc) => {
                 let mut res = Vec::new();
                 let euc = Self::get_euclidean(beats, steps, loop_context);
+                let v = v.as_frames(spread_time).divbyint(steps);
                 for i in 0..euc.len() {
-                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(euc[i])), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
+                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(euc[i])), &v, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
                     res.extend(content);
                 };
                 res
@@ -651,8 +670,9 @@ impl Statement {
             Statement::Binary(it, steps, loop_context, v, es, cc) => {
                 let mut res = Vec::new();
                 let bin = Self::get_binary(it, steps, loop_context);
+                let v = v.as_frames(spread_time).divbyint(steps);
                 for i in 0..bin.len() {
-                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(bin[i])), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
+                    let content: Vec<TimeStatement> = es.clone().into_iter().map(|e| e.expend(&val.add(&v.multbyint(bin[i])), &v, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect();
                     res.extend(content);
                 };
                 res
@@ -660,7 +680,7 @@ impl Statement {
             Statement::After(es, cc) => es.into_iter().map(|e| TimeStatement::JustAfter(val.clone(), e, cc.clone().update(c.clone()), choices.clone(), picks.clone())).collect(),
             Statement::Before(es, cc) => es.into_iter().map(|e| TimeStatement::JustBefore(val.clone(), e, cc.clone().update(c.clone()), choices.clone(), picks.clone())).collect(),
             Statement::Effect(e) => vec![TimeStatement::At(val.clone(), e, c.clone(), choices.clone(), picks.clone())],
-            Statement::With(es, cc) => es.into_iter().map(|e| e.expend(val, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
+            Statement::With(es, cc) => es.into_iter().map(|e| e.expend(val, spread_time, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect(),
             Statement::Choice(num_selected, num_selectable, es, cc) => {
                 let mut res = Vec::new();
 
@@ -669,7 +689,7 @@ impl Statement {
                 }
 
                 if num_selected >= num_selectable {
-                    return es.into_iter().map(|e| e.expend(val, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect()
+                    return es.into_iter().map(|e| e.expend(val, spread_time, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars)).flatten().collect()
                 }
 
                 let (choice_variables, target_variables) = choice_vars.get_variables(num_selected, num_selectable);
@@ -682,14 +702,15 @@ impl Statement {
                     };
                     let mut choices = choices.clone();
                     choices.push(new_choice);
-                    res.extend(es[position].clone().expend(val, cc.clone().update(c.clone()), choices, picks.clone(), choice_vars, pick_vars));
+                    res.extend(es[position].clone().expend(val, spread_time, cc.clone().update(c.clone()), choices, picks.clone(), choice_vars, pick_vars));
                 };
                 res
             },
             Statement::Spread(step, es, cc) => {
                 let mut res = Vec::new();
+                let step = &step.as_frames(spread_time).divbyint(es.len() as i64);
                 for i in 0..es.len() {
-                    let content: Vec<TimeStatement> = es[i].clone().expend(&val.add(&step.multbyint(i as i64)), cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars);
+                    let content: Vec<TimeStatement> = es[i].clone().expend(&val.add(&step.multbyint(i as i64)), &step, cc.clone().update(c.clone()), choices.clone(), picks.clone(), choice_vars, pick_vars);
                     res.extend(content);
                 };
                 res
@@ -709,7 +730,7 @@ impl Statement {
                 }
 
                 if only_effects {
-                    return Statement::Effect(TopLevelEffect::Pick(pick_expression, top_level_effects, cc)).expend(val, c.clone(), choices.clone(), picks.clone(), choice_vars, pick_vars)
+                    return Statement::Effect(TopLevelEffect::Pick(pick_expression, top_level_effects, cc)).expend(val, spread_time, c.clone(), choices.clone(), picks.clone(), choice_vars, pick_vars)
                 }
 
                 // Else, handle the pick as a timed pick
@@ -725,7 +746,7 @@ impl Statement {
                     };
                     let mut picks = picks.clone();
                     picks.push(new_pick);
-                    res.extend(es[position].clone().expend(val, cc.clone().update(c.clone()), choices.clone(), picks, choice_vars, pick_vars));
+                    res.extend(es[position].clone().expend(val, spread_time, cc.clone().update(c.clone()), choices.clone(), picks, choice_vars, pick_vars));
                 };
                 res
             }
@@ -1623,12 +1644,28 @@ impl ConcreteFraction {
         }.simplify()
     }
 
+    pub fn mult(&self, other: &Self) -> ConcreteFraction {
+        ConcreteFraction{
+            signe: 1,
+            numerator: self.signe * self.numerator * other.signe * other.numerator,
+            denominator: self.denominator * other.denominator,
+        }.simplify()
+    }
+
     pub fn multbyint(&self, mult: i64) -> ConcreteFraction {
         ConcreteFraction{
             signe: 1,
             numerator: self.signe * self.numerator * mult,
             denominator: self.denominator,
         }.simplify()
+    }
+
+    pub fn divbyint(&self, div: i64) -> ConcreteFraction {
+        ConcreteFraction{
+            signe: 1,
+            numerator: self.signe * self.numerator,
+            denominator: self.denominator * div,
+        }
     }
 
     fn simplify(&self) -> ConcreteFraction {

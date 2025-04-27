@@ -1,4 +1,4 @@
-use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, LoopContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression};
+use crate::compiler::bali::bali_ast::{BaliProgram, BaliContext, LoopContext, TopLevelEffect, Statement, Effect, Expression, Value, Fraction, ConcreteFraction, BooleanExpression, TimingInformation};
 
 grammar;
 
@@ -63,13 +63,18 @@ pub StatementSet: Vec<Statement> = {
     Comment => Vec::new(),
 }
 
+pub TimingInformation: TimingInformation = {
+    <t: ConcreteFraction> => TimingInformation::PositionRelative(t),
+    "frame:" <t: ConcreteFraction> => TimingInformation::FrameRelative(t),
+}
+
 pub Statement: Statement = {
-    "(>" <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::AfterFrac(n, s, c),
-    "(<" <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::BeforeFrac(n, s, c),
-    "(loop" <it: Number> <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Loop(it, n, s, c),
-    "(eucloop" <beats: Number> <steps: Number> <n: ConcreteFraction> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, lc, n, s, c),
-    "(binloop" <it: Number> <steps: Number> <n: ConcreteFraction> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, lc, n, s, c),
-    "(spread" <n: ConcreteFraction> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Spread(n, s, c),
+    "(>" <n: TimingInformation> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::AfterFrac(n, s, c),
+    "(<" <n: TimingInformation> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::BeforeFrac(n, s, c),
+    "(loop" <it: Number> <n: TimingInformation> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Loop(it, n, s, c),
+    "(eucloop" <beats: Number> <steps: Number> <n: TimingInformation> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Euclidean(beats, steps, lc, n, s, c),
+    "(binloop" <it: Number> <steps: Number> <n: TimingInformation> <lc: loopContext> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Binary(it, steps, lc, n, s, c),
+    "(spread" <n: TimingInformation> <c: OptionalWithContext> <s: StatementSet> ")" => Statement::Spread(n, s, c),
     startPick <pos: Expression> <c: OptionalWithContext> <s: StatementSet> endPick => Statement::Pick(pos, s, c),
     "(>>" <c: OptionalWithContext> <s: TopLevelEffectSet> ")" => Statement::After(s, c),
     "(<<" <c: OptionalWithContext> <s: TopLevelEffectSet> ")" => Statement::Before(s, c),
@@ -170,7 +175,10 @@ AbstractFraction: Fraction = {
 ConcreteFraction: ConcreteFraction = {
     "(//" <numerator: Number> <denominator: Number> ")" => ConcreteFraction{signe: 1, numerator, denominator},
     "(" <numerator: Number> "//" <denominator: Number> ")" => ConcreteFraction{signe: 1, numerator, denominator},
-    <numerator: Number> => ConcreteFraction{signe: 1, numerator, denominator: 1},
+    <numerator: Number?> => {
+        let numerator = numerator.unwrap_or(1);
+        ConcreteFraction{signe: 1, numerator, denominator: 1}
+    },
     <d: Dec> => ConcreteFraction::from_dec_string(d),
 };
 
