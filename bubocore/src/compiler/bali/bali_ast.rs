@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::cmp::min;
+use rand::{self, Rng}; // Add rand import
 
 pub type BaliProgram = Vec<Statement>;
 pub type BaliPreparedProgram = Vec<TimeStatement>;
@@ -541,6 +542,7 @@ pub enum Statement {
     Choice(i64, i64, Vec<Statement>, BaliContext), 
     Spread(Option<ConcreteFraction>, Vec<Statement>, BaliContext), 
     Pick(Box<Expression>, Vec<Statement>, BaliContext), 
+    Scatter(Option<ConcreteFraction>, Vec<Statement>, BaliContext), // Add Scatter variant
     WithDirt(HashMap<String, Fraction>, Vec<Statement>), 
 }
 
@@ -755,41 +757,6 @@ impl Statement {
                 }
                 res
             },
-            // Removed FSpread Arm
-            /*
-            Statement::FSpread(es, cc) => { // Updated FSpread implementation for nesting
-                let mut res = Vec::new();
-                let effective_context = cc.clone().update(c.clone()); // Merged context
-                let n = es.len() as i64;
-
-                if n == 0 {
-                    return res;
-                }
-
-                // Get frame duration from the *merged* context, or use default
-                let frame_duration = effective_context.frame_duration.as_ref().unwrap_or(&DEFAULT_FRAME_DURATION);
-
-                // Calculate step: frame_duration / n (This is the duration allocated to each child)
-                let step = frame_duration.divbyint(n);
-
-                for i in 0..n {
-                    let current_offset = val.add(&step.multbyint(i));
-
-                    // Create the context for the child:
-                    // Inherit most things, but specifically set the frame_duration
-                    // for the child to be the 'step' duration calculated by the parent.
-                    let child_context = BaliContext {
-                        frame_duration: Some(step.clone()),
-                        ..effective_context.clone() // Inherit other fields like dev, chan, etc.
-                    };
-
-                    // Expand child using the new child_context
-                    let content: Vec<TimeStatement> = es[i as usize].clone().expend(&current_offset, child_context, choices.clone(), picks.clone(), choice_vars, pick_vars);
-                    res.extend(content);
-                }
-                res
-            },
-            */
             Statement::Pick(pick_expression, es, cc) => {
                 let mut res = Vec::new();
                 let (pick_variable, num_pick_variable) = pick_vars.get_variable_and_number();
@@ -805,6 +772,45 @@ impl Statement {
                     picks.push(new_pick);
                     res.extend(es[position].clone().expend(val, cc.clone().update(c.clone()), choices.clone(), picks, choice_vars, pick_vars));
                 };
+                res
+            },
+            Statement::Scatter(duration_opt, es, cc) => {
+                let mut res = Vec::new();
+                let effective_context = cc.clone().update(c.clone()); 
+                let n = es.len() as i64;
+
+                if n == 0 {
+                    return res;
+                }
+
+                // Determine total duration for scattering
+                let total_duration = match duration_opt {
+                    Some(ref concrete_duration) => concrete_duration.clone(), // Use provided duration
+                    None => { // Use frame duration from context
+                        effective_context.frame_duration.as_ref().unwrap_or(&DEFAULT_FRAME_DURATION).clone()
+                    }
+                };
+
+                let mut rng = rand::rng();
+
+                for i in 0..n {
+                    // Generate a random offset within the total duration
+                    let random_offset_factor = rng.r#gen::<f64>();
+                    let random_offset = total_duration.mult_by_float(random_offset_factor);
+                    let current_offset = val.add(&random_offset);
+
+                    // Create the context for the child (similar to fspread logic if duration was context-based)
+                    // The child's frame_duration is a fraction of the total scatter duration.
+                    let child_frame_duration = total_duration.divbyint(n);
+                    let child_context = BaliContext {
+                        frame_duration: Some(child_frame_duration),
+                        ..effective_context.clone()
+                    };
+
+                    // Expand child using the random offset and child context
+                    let content: Vec<TimeStatement> = es[i as usize].clone().expend(&current_offset, child_context, choices.clone(), picks.clone(), choice_vars, pick_vars);
+                    res.extend(content);
+                }
                 res
             },
             Statement::WithDirt(defaults, stmts) => {
@@ -1762,6 +1768,31 @@ impl ConcreteFraction {
              denominator: self.denominator.saturating_mul(div), // Multiply denominator, handle potential overflow
          }.simplify()
      }
+
+    pub fn mult_by_float(&self, factor: f64) -> ConcreteFraction {
+        // This is tricky due to potential precision loss. 
+        // A simple approach is to convert to f64, multiply, then convert back.
+        // More robust might involve large integer math or libraries like `num`.
+        let current_f64 = self.tof64();
+        let result_f64 = current_f64 * factor;
+        
+        // Simple conversion back from f64 - might lose precision for complex fractions
+        // You might want a more sophisticated f64 -> Fraction conversion later.
+        const MAX_DENOMINATOR: i64 = 1000000; // Limit denominator size
+        let mut h1 = 1; let mut k1 = 0; // Make mutable
+        let mut h2 = 0; let mut k2 = 1; // Make mutable
+        let mut b = result_f64;
+        loop {
+            let a = b.floor();
+            let aux = h1; h1 = a as i64 * h1 + h2; h2 = aux;
+            let aux = k1; k1 = a as i64 * k1 + k2; k2 = aux;
+            if (result_f64 - a) < 1.0e-8 || k1 > MAX_DENOMINATOR {
+                break;
+            }
+            b = 1.0 / (b - a);
+        }
+        ConcreteFraction { signe: 1, numerator: h1, denominator: k1 }.simplify()
+    }
 
 }
 
