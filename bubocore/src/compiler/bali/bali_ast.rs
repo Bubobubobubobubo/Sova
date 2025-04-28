@@ -22,7 +22,7 @@ pub type BaliPreparedProgram = Vec<TimeStatement>;
 
 // TODO : pour que les alt/picks/choices se passent bien, il faut savoir l'ordre dans lequel ils ont été faits, donc les mettre dans un même tableau et les traiter dans l'ordre
 
-const DEBUG_TIME_STATEMENTS: bool = true;
+const DEBUG_TIME_STATEMENTS: bool = false;
 const DEBUG_INSTRUCTIONS: bool = false;
 
 const DEFAULT_VELOCITY: i64 = 90;
@@ -133,7 +133,7 @@ pub fn bali_as_asm(prog: BaliProgram) -> Program {
             res.push(Instruction::Effect(Event::Nop, time_var.clone()));
         }
 
-        print!("NEW TIME STATEMENT!\n");
+        //print!("NEW TIME STATEMENT!\n");
     }
 
     res.extend(prog[prog.len()-1].as_asm(&mut local_choice_variables, &mut set_pick_variables, &mut local_alt_variables, &mut set_alt_variables));
@@ -439,7 +439,7 @@ impl TimeStatement {
                 let mut infos = infos.clone();
                 let current_info = infos.pop();
                 let current_info = current_info.unwrap();
-                print!("ONE POP: {:?}\n", current_info);
+                //print!("ONE POP: {:?}\n", current_info);
 
                 match current_info {
                     Information::Choice(current_choice) => {
@@ -479,7 +479,7 @@ impl TimeStatement {
     
                         res.extend(prog);
 
-                        print!("END CHOICE\n");
+                        //print!("END CHOICE\n");
     
                         res
                     },
@@ -508,18 +508,33 @@ impl TimeStatement {
                         // add all of this to the previously constructed program
                         res.extend(prog);
 
-                        print!("END PICK\n");
+                        //print!("END PICK\n");
                         
                         res
                     },
                     Information::Alt(current_alt) => {
                         let mut res = Vec::new();
 
+                        // if this is the first element (in time) of this alt, get the
+                        // value of the frame variable, then increase it by one
+                        if !set_alt_variables[current_alt.num_variable as usize] {
+                            res.push(Instruction::Control(ControlASM::Mov(current_alt.frame_variable.clone(), current_alt.instance_variable.clone())));
+                            res.push(Instruction::Control(ControlASM::Add(current_alt.frame_variable.clone(), 1.into(), current_alt.frame_variable.clone())));  // there is a race condition here, it could be solved by implementing the Atomic instruction in ControlASM
+                            res.push(Instruction::Control(ControlASM::Mod(current_alt.instance_variable.clone(), (current_alt.possibilities as i64).into(), current_alt.instance_variable.clone())));
+                            set_alt_variables[current_alt.num_variable as usize] = true;
+                        }
+
+                        // in any case, add the conditional structure for the alt
+                        res.push(Instruction::Control(ControlASM::RelJumpIfEqual(current_alt.instance_variable.clone(), (current_alt.position as i64).into(), 2)));
+
+                        // jump over the effects if the alt is not selected
                         let prog = TimeStatement::At(t.clone(), x.clone(), context.clone(), infos).as_asm(local_choice_vars, set_pick_variables, local_alt_vars, set_alt_variables);
+                        let num_prog_instruction = prog.len();
+                        res.push(Instruction::Control(ControlASM::RelJump((num_prog_instruction + 1) as i64)));
 
                         res.extend(prog);
 
-                        print!("END ALT\n");
+                        //print!("END ALT\n");
 
                         res
                     },
