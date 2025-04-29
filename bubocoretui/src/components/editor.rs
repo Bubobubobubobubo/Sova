@@ -10,153 +10,16 @@ use ratatui::{
     prelude::{Constraint, Direction, Layout, Modifier, Rect},
     style::{Color, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, List, ListItem, Paragraph},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
-use std::{cmp::min, fmt};
-use tui_textarea::{CursorMove, Input, Key, Scrolling, TextArea, SyntaxHighlighter};
-use unicode_width::UnicodeWidthStr; // Needed for calculating display width
+use crate::components::editor::vim::{VimMode, VimTransition, VimState};
+use std::cmp::min;
+use tui_textarea::{CursorMove, Input, Key, Scrolling, TextArea};
 
-// --- Vim Mode Definitions ---
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum VimMode {
-    Normal,
-    Insert,
-    Visual,
-    Operator(char),
-    Command,        // New mode for entering commands like :1
-    SearchForward,  // New mode for typing forward search query
-    SearchBackward, // New mode for typing backward search query
-}
-
-impl VimMode {
-    // Helper to get a title string for the block
-    fn title_string(&self) -> String {
-        match self {
-            Self::Normal => "NORMAL".to_string(),
-            Self::Insert => "INSERT".to_string(),
-            Self::Visual => "VISUAL".to_string(),
-            Self::Operator(c) => format!("OPERATOR({})", c),
-            Self::Command => "COMMAND".to_string(), // Title for Command mode
-            Self::SearchForward => "SEARCH".to_string(), // Title for Search modes
-            Self::SearchBackward => "SEARCH".to_string(),
-        }
-    }
-
-    // Helper to get cursor style (copied from example)
-    fn cursor_style(&self) -> Style {
-        let color = match self {
-            Self::Normal => Color::Reset,
-            Self::Insert => Color::LightBlue,
-            Self::Visual => Color::LightYellow,
-            Self::Operator(_) => Color::LightGreen,
-            Self::Command => Color::Yellow, // Cursor style for Command mode
-            Self::SearchForward => Color::LightMagenta, // Cursor style for Search modes
-            Self::SearchBackward => Color::LightMagenta,
-        };
-        Style::default().fg(color).add_modifier(Modifier::REVERSED)
-    }
-}
-
-impl fmt::Display for VimMode {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> Result<(), fmt::Error> {
-        write!(f, "{}", self.title_string())
-    }
-}
-
-// How the Vim emulation state transitions
-#[derive(Debug, Clone, PartialEq, Eq)] // Removed Copy
-enum VimTransition {
-    Nop(Option<String>), // No operation / state change (optional status message)
-    Mode(VimMode, Option<String>), // Switch to a new mode (optional status message)
-    Pending(Input),      // Waiting for the next key (e.g., after 'g')
-                         // Quit is handled by the main editor Esc logic now
-}
-
-// State of Vim emulation
-#[derive(Debug, Clone)]
-pub struct VimState {
-    pub mode: VimMode,
-    pending: Input,             // For multi-key sequences like 'gg'
-    replace_pending: bool,      // Flag for 'r' command
-    pub command_buffer: String, // Buffer for command mode input
-}
-
-impl VimState {
-    pub fn new() -> Self {
-        Self {
-            mode: VimMode::Normal,
-            pending: Input::default(),
-            replace_pending: false,
-            command_buffer: String::new(), // Initialize command buffer
-        }
-    }
-
-    // Helper to update state with pending input
-    fn set_pending(&mut self, pending: Input) {
-        self.pending = pending;
-        self.replace_pending = false; // Clear replace flag if setting other pending input
-        self.command_buffer.clear(); // Clear command buffer
-    }
-
-    // Helper to reset pending input
-    fn clear_pending(&mut self) {
-        self.pending = Input::default();
-        self.replace_pending = false; // Also clear replace flag
-        // Keep command buffer as is, only clear on mode change or explicit command actions
-    }
-
-    // Helper to set Vim mode
-    fn set_mode(&mut self, mode: VimMode) {
-        self.mode = mode;
-        self.pending = Input::default();
-        self.replace_pending = false; // Clear flags on mode change
-        // Don't clear buffer when entering command or search modes
-        if !matches!(
-            mode,
-            VimMode::Command | VimMode::SearchForward | VimMode::SearchBackward
-        ) {
-            self.command_buffer.clear();
-        }
-    }
-
-    // Helper to enter replace pending state
-    fn set_replace_pending(&mut self) {
-        self.pending = Input::default(); // Clear other pending
-        self.replace_pending = true;
-        self.command_buffer.clear(); // Clear command buffer
-        // Mode remains Normal
-    }
-}
-
-// --- End Vim Mode Definitions ---
-
-// Define the state for the search functionality
-#[derive(Clone)]
-pub struct SearchState {
-    pub is_active: bool,
-    pub query_textarea: TextArea<'static>,
-    pub error_message: Option<String>,
-}
-
-impl SearchState {
-    pub fn new() -> Self {
-        let mut textarea = TextArea::default();
-        textarea.set_block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(" Search Query (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) "),
-        );
-        // Ensure it doesn't allow multi-line input by default
-        // Note: tui-textarea doesn't have a strict single-line mode, but
-        // we prevent Enter from inserting newlines in the handler.
-        Self {
-            is_active: false,
-            query_textarea: textarea,
-            error_message: None,
-        }
-    }
-}
+pub mod vim;
+pub mod search;
+pub mod line_view;
+pub mod lang_popup;
 
 pub struct EditorComponent;
 
@@ -216,7 +79,6 @@ impl EditorComponent {
                 }
             }
         }
-        // --- End Replace Pending Handling ---
 
         let pending_input = vim_state.pending.clone();
 
@@ -869,7 +731,7 @@ impl EditorComponent {
         textarea: &mut TextArea,
     ) -> (bool, Option<String>) {
         let old_mode = vim_state.mode;
-        let mut status_msg = None;
+        let status_msg;
 
         match transition {
             VimTransition::Mode(new_mode, msg_opt) => {
@@ -973,139 +835,6 @@ impl EditorComponent {
             }
         }
     }
-
-    fn render_single_line_view(
-        &self,
-        app: &App,
-        frame: &mut Frame,
-        area: Rect,
-        line_idx: usize,
-        current_edit_frame_idx: usize,
-        playhead_pos_opt: Option<usize>,
-    ) {
-        let line_view_block = Block::default()
-            .borders(Borders::ALL)
-            .style(Style::default().fg(Color::White));
-
-        let inner_area = line_view_block.inner(area);
-        frame.render_widget(line_view_block, area);
-
-        if inner_area.width == 0 || inner_area.height == 0 {
-            return;
-        }
-
-        if let Some(scene) = app.editor.scene.as_ref() {
-            if let Some(line) = scene.lines.get(line_idx) {
-                if line.frames.is_empty() {
-                    frame.render_widget(
-                        Paragraph::new("Line is empty")
-                            .centered()
-                            .style(Style::default().fg(Color::DarkGray)),
-                        inner_area,
-                    );
-                    return;
-                }
-
-                let items: Vec<ListItem> = line
-                    .frames
-                    .iter()
-                    .enumerate()
-                    .map(|(i, _frame_val)| {
-                        let is_enabled = line.is_frame_enabled(i);
-                        let is_playhead = playhead_pos_opt == Some(i);
-                        let is_start = line.start_frame == Some(i);
-                        let is_end = line.end_frame == Some(i);
-                        let is_current_edit = i == current_edit_frame_idx;
-
-                        // Fixed elements width calculation
-                        let playhead_width = 1;
-                        let marker_width = 1;
-                        let index_width = 3; // " {:<2}" -> " 1", " 10", "100" might need adjustment
-                        let fixed_spacers_width = 2; // Between playhead/marker, marker/name, name/index
-                        let total_fixed_width = playhead_width
-                            + marker_width
-                            + index_width
-                            + fixed_spacers_width;
-                        let max_name_width =
-                            (inner_area.width as usize).saturating_sub(total_fixed_width);
-
-                        // Fetch and truncate name
-                        let frame_name = line.frame_names.get(i).cloned().flatten();
-                        let name_str = frame_name.unwrap_or_default();
-                        let truncated_name: String = if name_str.width() > max_name_width {
-                            name_str
-                                .chars()
-                                .take(max_name_width.saturating_sub(1))
-                                .collect::<String>()
-                                + "…"
-                        } else {
-                            name_str
-                        };
-                        let name_span = Span::raw(format!(
-                            "{:<width$}",
-                            truncated_name,
-                            width = max_name_width
-                        ));
-
-                        // Build Spans
-                        let playhead_span = Span::raw(if is_playhead { "▶" } else { " " });
-                        let marker_span = Span::raw(if is_start {
-                            "b"
-                        } else if is_end {
-                            "e"
-                        } else {
-                            " "
-                        });
-                        let index_span = Span::raw(format!(" {:<2}", i));
-
-                        // Build Style
-                        let (bg_color, fg_color) = if is_enabled {
-                            (Color::Green, Color::White)
-                        } else {
-                            (Color::Red, Color::White)
-                        };
-
-                        let item_style = Style::default().bg(bg_color).fg(fg_color);
-
-                        // Style the index span specifically if it's the current edit
-                        let styled_index_span = if is_current_edit {
-                            index_span.style(Style::default().add_modifier(Modifier::REVERSED))
-                        } else {
-                            index_span // Inherits fg from item_style
-                        };
-
-                        ListItem::new(Line::from(vec![
-                            playhead_span,
-                            marker_span,
-                            Span::raw(" "), // Spacer 1
-                            name_span,      // Truncated Name
-                            Span::raw(" "), // Spacer 2
-                            styled_index_span,
-                        ]))
-                        .style(item_style)
-                    })
-                    .collect();
-
-                let list = List::new(items);
-
-                frame.render_widget(list, inner_area);
-            } else {
-                frame.render_widget(
-                    Paragraph::new("Invalid Line")
-                        .centered()
-                        .style(Style::default().fg(Color::Red)),
-                    inner_area,
-                );
-            }
-        } else {
-            frame.render_widget(
-                Paragraph::new("No Scene")
-                    .centered()
-                    .style(Style::default().fg(Color::Gray)),
-                inner_area,
-            );
-        }
-    }
 }
 
 impl Component for EditorComponent {
@@ -1113,168 +842,14 @@ impl Component for EditorComponent {
         // --- Priority Handling (Language Popup, Search, Global Actions) ---
 
         // 0. Handle Language Popup First (if active)
-        if app.editor.is_lang_popup_active {
-            let num_langs = app.editor.available_languages.len();
-            if num_langs == 0 {
-                // Should not happen if initialized correctly
-                app.editor.is_lang_popup_active = false;
-                app.set_status_message("No languages available to select.".to_string());
-                return Ok(true);
-            }
-
-            match key_event.code {
-                KeyCode::Esc => {
-                    app.editor.is_lang_popup_active = false;
-                    app.set_status_message("Language selection cancelled.".to_string());
-                    return Ok(true);
-                }
-                KeyCode::Up | KeyCode::Char('k') => {
-                    app.editor.selected_lang_index =
-                        app.editor.selected_lang_index.saturating_sub(1);
-                    return Ok(true);
-                }
-                KeyCode::Down | KeyCode::Char('j') => {
-                    app.editor.selected_lang_index =
-                        (app.editor.selected_lang_index + 1).min(num_langs - 1);
-                    return Ok(true);
-                }
-                KeyCode::Enter => {
-                    let lang_to_set: Option<String> = app
-                        .editor
-                        .available_languages
-                        .get(app.editor.selected_lang_index)
-                        .cloned(); // Clone the string here
-
-                    if let Some(selected_lang) = lang_to_set {
-                        let line_idx = app.editor.active_line.line_index;
-                        let frame_idx = app.editor.active_line.frame_index;
-                        app.send_client_message(ClientMessage::SetScriptLanguage(
-                            line_idx,
-                            frame_idx,
-                            selected_lang.clone(),
-                            ActionTiming::Immediate, // Clone again for the message
-                        ));
-                        app.set_status_message(format!(
-                            "Set language for Frame {}/{} to {}",
-                            line_idx, frame_idx, selected_lang
-                        ));
-                    } else {
-                        app.set_status_message("Error selecting language.".to_string());
-                    }
-                    app.editor.is_lang_popup_active = false;
-                    return Ok(true);
-                }
-                _ => {
-                    return Ok(true);
-                } // Consume other keys while popup is active
-            }
+        if lang_popup::handle_lang_popup_input(app, key_event)? {
+            return Ok(true);
         }
 
         // 1. Handle Search Mode First
-        if app.editor.search_state.is_active {
-            let search_state = &mut app.editor.search_state;
-            let main_textarea = &mut app.editor.textarea;
-            let input = key_event.into(); // Convert once
-
-            // --- Search Input Handling ---
-            match input {
-                Input { key: Key::Esc, .. } => {
-                    search_state.is_active = false;
-                    search_state.error_message = None;
-                    tui_textarea::TextArea::set_search_pattern(main_textarea, "")
-                        .expect("Empty pattern should be valid");
-                    search_state.query_textarea.move_cursor(CursorMove::End);
-                    // Clear the search text area content
-                    if !search_state.query_textarea.is_empty() {
-                        search_state.query_textarea.move_cursor(CursorMove::Head); // Go to start
-                        search_state.query_textarea.delete_line_by_end(); // Delete everything
-                    }
-                    app.set_status_message("Search cancelled.".to_string());
-                    return Ok(true);
-                }
-                Input {
-                    key: Key::Enter, ..
-                } => {
-                    if !tui_textarea::TextArea::search_forward(main_textarea, true) {
-                        search_state.error_message = Some("Pattern not found".to_string());
-                    } else {
-                        search_state.error_message = None;
-                    }
-                    search_state.is_active = false; // Deactivate search after Enter
-                    // Clear the search text area content
-                    if !search_state.query_textarea.is_empty() {
-                        search_state.query_textarea.move_cursor(CursorMove::Head);
-                        search_state.query_textarea.delete_line_by_end();
-                    }
-                    tui_textarea::TextArea::set_search_pattern(main_textarea, "").ok(); // Clear highlight
-                    app.set_status_message("Search closed.".to_string());
-                    return Ok(true);
-                }
-                Input {
-                    key: Key::Char('n'),
-                    ctrl: true,
-                    ..
-                }
-                | Input { key: Key::Down, .. } => {
-                    if !tui_textarea::TextArea::search_forward(main_textarea, false) {
-                        search_state.error_message = Some("Pattern not found".to_string());
-                    } else {
-                        search_state.error_message = None;
-                    }
-                    return Ok(true);
-                }
-                Input {
-                    key: Key::Char('p'),
-                    ctrl: true,
-                    ..
-                }
-                | Input { key: Key::Up, .. } => {
-                    if !tui_textarea::TextArea::search_back(main_textarea, false) {
-                        search_state.error_message = Some("Pattern not found".to_string());
-                    } else {
-                        search_state.error_message = None;
-                    }
-                    return Ok(true);
-                }
-                input => {
-                    // Prevent Enter/Ctrl+M from adding newline in search box
-                    if matches!(
-                        input,
-                        Input {
-                            key: Key::Enter,
-                            ..
-                        } | Input {
-                            key: Key::Char('m'),
-                            ctrl: true,
-                            ..
-                        }
-                    ) {
-                        return Ok(true);
-                    }
-                    let modified = search_state.query_textarea.input(input);
-                    if modified {
-                        // Handle empty query correctly - should clear pattern
-                        let query = search_state
-                            .query_textarea
-                            .lines()
-                            .get(0)
-                            .map_or("", |s| s.as_str());
-                        match tui_textarea::TextArea::set_search_pattern(main_textarea, query) {
-                            Ok(_) => {
-                                search_state.error_message = None;
-                                // Try to find first match immediately if pattern is valid and not empty
-                                if !query.is_empty() {
-                                    tui_textarea::TextArea::search_forward(main_textarea, true);
-                                }
-                            }
-                            Err(e) => search_state.error_message = Some(e.to_string()),
-                        }
-                    }
-                    return Ok(true);
-                }
-            }
-            // End Search Input Handling
-        } // End Search Mode block
+        if search::handle_search_input(app, key_event)? {
+            return Ok(true);
+        }
 
         // 2. Handle Editor Exit (Esc) - ONLY if not searching
         if key_event.code == KeyCode::Esc {
@@ -1728,32 +1303,8 @@ impl Component for EditorComponent {
             if let Some(panel_area) = bottom_panel_area {
                 if panel_area.width > 0 && panel_area.height > 0 {
                     if search_active {
-                        let search_state = &app.editor.search_state;
-                        let mut query_textarea = search_state.query_textarea.clone();
-                        let search_block_title = if let Some(err_msg) = &search_state.error_message
-                        {
-                            format!(
-                                " Search (Error: {}) (Esc:Cancel Enter:Find ^N/↓:Next ^P/↑:Prev) ",
-                                err_msg
-                            )
-                        } else {
-                            " Search Query (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) "
-                                .to_string()
-                        };
-                        let search_block_style = if search_state.error_message.is_some() {
-                            Style::default().fg(Color::Red)
-                        } else {
-                            Style::default().fg(Color::Yellow)
-                        };
-
-                        query_textarea.set_block(
-                            Block::default()
-                                .borders(Borders::ALL)
-                                .title(search_block_title)
-                                .style(search_block_style),
-                        );
-
-                        frame.render_widget(&query_textarea, panel_area);
+                        // Use the extracted function
+                        search::render_search_panel(app, frame, panel_area);
                     } else if let Some(error_msg) = &app.editor.compilation_error {
                         let mut error_line_num = 0;
                         let mut error_col_num = 0;
@@ -1876,17 +1427,6 @@ impl Component for EditorComponent {
                         Span::styled("Ctrl+←↑↓→", key_style),
                         Span::styled(": Navigate | ", help_style),
                     ];
-                    // Add Vim specific help if applicable
-                    // if app.settings.editor_keymap_mode == EditorKeymapMode::Vim {
-                    //     help_spans.push(Span::styled(" :<num> ", key_style));
-                    //     help_spans.push(Span::styled(": Go Line | ", help_style));
-                    //     help_spans.push(Span::styled(" /query ", key_style));
-                    //     help_spans.push(Span::styled(": Search Fwd | ", help_style));
-                    //     help_spans.push(Span::styled(" ?query ", key_style));
-                    //     help_spans.push(Span::styled(": Search Bwd | ", help_style));
-                    //     help_spans.push(Span::styled(" n/N ", key_style));
-                    //     help_spans.push(Span::styled(": Repeat Search | ", help_style));
-                    // }
                     help_spans.push(Span::styled("Esc", key_style));
                     help_spans.push(Span::styled(": Exit", help_style));
 
@@ -1906,7 +1446,7 @@ impl Component for EditorComponent {
         }
 
         if line_view_area.width > 0 && line_view_area.height > 0 {
-            self.render_single_line_view(
+            line_view::render_single_line_view(
                 app,
                 frame,
                 line_view_area,
@@ -1930,63 +1470,7 @@ impl Component for EditorComponent {
         }
 
         // --- Render Language Selection Popup (if active) ---
-        if app.editor.is_lang_popup_active {
-            use ratatui::widgets::Clear;
-            use ratatui::widgets::ListState;
-
-            let popup_width = 30;
-            let popup_height = min(app.editor.available_languages.len() + 2, 10) as u16; // +2 for borders, max 10 items high
-
-            // Use the fixed-size centering function
-            let popup_area = centered_rect_fixed(popup_width, popup_height, area);
-
-            frame.render_widget(Clear, popup_area); // Clear background
-
-            let items: Vec<ListItem> = app
-                .editor
-                .available_languages
-                .iter()
-                .map(|lang| ListItem::new(lang.as_str()))
-                .collect();
-
-            let list = List::new(items)
-                .block(
-                    Block::default()
-                        .title("Select Language (↑/↓/Enter/Esc)")
-                        .borders(Borders::ALL),
-                )
-                .highlight_style(
-                    Style::default()
-                        .add_modifier(Modifier::REVERSED)
-                        .fg(Color::Yellow),
-                )
-                .highlight_symbol("> ");
-
-            let mut list_state = ListState::default();
-            list_state.select(Some(app.editor.selected_lang_index));
-
-            frame.render_stateful_widget(list, popup_area, &mut list_state);
-        }
+        lang_popup::render_lang_popup(app, frame, area);
         // --- End Language Selection Popup ---
     }
-}
-
-/// Helper function to create a centered rectangle with fixed width/height.
-fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
-    let vertical_margin = r.height.saturating_sub(height) / 2;
-    let horizontal_margin = r.width.saturating_sub(width) / 2;
-
-    let popup_layout = Layout::vertical([
-        Constraint::Length(vertical_margin),
-        Constraint::Length(height),
-        Constraint::Length(vertical_margin),
-    ])
-    .split(r);
-
-    Layout::horizontal([
-        Constraint::Length(horizontal_margin),
-        Constraint::Length(width),
-        Constraint::Length(horizontal_margin),
-    ])
-    .split(popup_layout[1])[1]
 }

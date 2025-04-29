@@ -3,9 +3,9 @@ use crate::components::{
     command_palette::{CommandPaletteComponent, PaletteAction},
     devices::{DevicesComponent, DevicesState},
     editor::EditorComponent,
-    editor::SearchState,
-    editor::VimState,
-    grid::{GridComponent, GridRenderInfo},
+    editor::search::SearchState,
+    editor::vim::VimState,
+    grid::{GridComponent, utils::GridRenderInfo},
     help::{HelpComponent, HelpState},
     logs::{LogEntry, LogLevel, LogsComponent},
     navigation::NavigationComponent,
@@ -18,7 +18,7 @@ use crate::event::{AppEvent, Event, EventHandler};
 use crate::link::Link;
 use crate::network::NetworkManager;
 use crate::ui::Flash;
-use bubocorelib::compiler::{CompilationError, CompilerCollection};
+use bubocorelib::compiler::CompilationError;
 use bubocorelib::scene::Scene;
 use bubocorelib::server::{ServerMessage, client::ClientMessage};
 use bubocorelib::shared_types::{DeviceInfo, DeviceKind, GridSelection};
@@ -30,7 +30,6 @@ use ratatui::{
     crossterm::event::{Event as CrosstermEvent, KeyCode, KeyEvent, KeyEventKind, KeyModifiers},
     style::Color,
 };
-use std::borrow::Cow;
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
