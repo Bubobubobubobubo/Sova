@@ -638,7 +638,7 @@ impl Component for SaveLoadComponent {
                         .style(Style::default().fg(Color::Yellow)),
                 );
                 save_textarea.set_style(Style::default().fg(Color::White));
-                frame.render_widget(save_textarea.widget(), input_render_area); 
+                frame.render_widget(&save_textarea, input_render_area); 
                 // Cursor visibility/position is handled by the TextArea widget itself
             }
         }

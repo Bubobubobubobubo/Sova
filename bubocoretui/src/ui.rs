@@ -12,7 +12,7 @@ use crate::components::splash::SplashComponent;
 use ratatui::{
     buffer::Buffer,
     Frame,
-    layout::{Constraint, Direction, Layout, Rect},
+    layout::{Constraint, Direction, Layout, Rect, Position},
     style::{Color, Modifier, Style},
     widgets::{Block, Clear, Widget},
 };
@@ -161,7 +161,8 @@ impl Widget for PhaseTempoBarWidget {
                  _ => Color::White,
              };
 
-             let cell = buf.get_mut(x, y);
+             let pos: Position = (x, y).into();
+             let cell = buf.cell_mut(pos).unwrap();
 
              if col >= overlay_start_col && col < overlay_end_col && overlay_char_idx < overlay_content_chars.len() {
                  // Overlay text cell
@@ -185,7 +186,8 @@ impl Widget for PhaseTempoBarWidget {
          }
          // Ensure any remaining area has a white background (if area.width was somehow larger)
          for x in (area.left() + total_width as u16)..area.right() {
-             buf.get_mut(x, y).set_bg(Color::White);
+             let pos: Position = (x, y).into();
+             buf.cell_mut(pos).unwrap().set_bg(Color::White);
          }
      }
 }
