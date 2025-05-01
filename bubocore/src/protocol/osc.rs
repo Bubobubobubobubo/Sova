@@ -98,11 +98,21 @@ impl OSCMessage {
     ///
     /// # Arguments
     /// * `data` - A `HashMap` mapping SuperDirt parameter names (String) to their values (`Argument`).
+    /// * `cps` - The cps (cycles per second) parameter.
+    /// * `cycle` - The cycle parameter.
+    /// * `delta` - The delta parameter.
+    /// * `orbit` - The orbit parameter.
     ///
     /// # Returns
     /// An `OSCMessage` with `addr` set to "/dirt/play" and `args` containing the flattened key-value pairs.
-    pub fn dirt(data: HashMap<String, Argument>) -> Self {
-        let mut args = Vec::with_capacity(data.len() * 2);
+    pub fn dirt(
+        data: HashMap<String, Argument>,
+        cps: f32,
+        cycle: f32,
+        delta: f32,
+        orbit: i32,
+    ) -> Self {
+        let mut args = Vec::with_capacity(data.len() * 2 + 8); // +8 for the 4 temporal key-value pairs
         // Optional: Sort keys for deterministic argument order, though usually not required by SuperDirt.
 
         // Unordered iteration is fine for SuperDirt:
@@ -110,7 +120,16 @@ impl OSCMessage {
             args.push(Argument::String(key));
             args.push(value);
         }
-        // TODO: add temporal information
+
+        // Add temporal information required by SuperDirt
+        args.push(Argument::String("cps".to_string()));
+        args.push(Argument::Float(cps));
+        args.push(Argument::String("cycle".to_string()));
+        args.push(Argument::Float(cycle));
+        args.push(Argument::String("delta".to_string()));
+        args.push(Argument::Float(delta));
+        args.push(Argument::String("orbit".to_string()));
+        args.push(Argument::Int(orbit));
 
         OSCMessage {
             addr: "/dirt/play".to_string(),

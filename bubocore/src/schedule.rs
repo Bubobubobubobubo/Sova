@@ -349,7 +349,11 @@ impl Scheduler {
                     loop_iteration as f64 * effective_loop_length_beats;
                 let frame_first_rep_start_beat_absolute =
                     absolute_beat_at_loop_start + cumulative_beats_in_line;
-                let start_date = clock.date_at_beat(frame_first_rep_start_beat_absolute); // Use clock arg
+                // Calculate the start date of the *current* repetition
+                let current_rep_start_beat_absolute = frame_first_rep_start_beat_absolute
+                    + (current_repetition_index as f64 * single_rep_len_beats);
+                let current_repetition_start_date =
+                    clock.date_at_beat(current_rep_start_beat_absolute); // Use clock arg
 
                 // Calculate remaining time until the end of the *current* repetition
                 let current_rep_end_beat_in_line = cumulative_beats_in_line
@@ -368,7 +372,7 @@ impl Scheduler {
                     absolute_frame_index,
                     loop_iteration,
                     current_repetition_index, // Return 0-based index
-                    start_date, // Start date of the first repetition
+                    current_repetition_start_date, // Start date of the *current* repetition
                     next_event_delay,
                 );
             }
