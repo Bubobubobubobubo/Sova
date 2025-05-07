@@ -1,4 +1,8 @@
-use crate::{compiler::{CompilationError, Compiler}, lang::Program};
+use crate::{
+    compiler::{CompilationError, Compiler},
+    lang::Program,
+};
+use std::borrow::Cow;
 
 use crate::compiler::bali::{the_grammar_of_bali, bali_ast::{bali_as_asm, AltVariableGenerator}};
 
@@ -7,7 +11,6 @@ use lalrpop_util::ParseError;
 #[derive(Debug)]
 pub struct BaliCompiler;
 impl Compiler for BaliCompiler {
-
     fn name(&self) -> String {
         "bali".to_string()
     }
@@ -20,23 +23,37 @@ impl Compiler for BaliCompiler {
                 let mut from = 0;
                 let mut to = 0;
                 match parse_error {
-                    ParseError::InvalidToken{location: loc} | ParseError::UnrecognizedEof{location: loc, expected: _} => {
+                    ParseError::InvalidToken { location: loc }
+                    | ParseError::UnrecognizedEof {
+                        location: loc,
+                        expected: _,
+                    } => {
                         from = loc;
                         to = loc;
-                    },
-                    ParseError::UnrecognizedToken{token: (f, _, t), expected: _} | ParseError::ExtraToken{token: (f, _, t)} => {
+                    }
+                    ParseError::UnrecognizedToken {
+                        token: (f, _, t),
+                        expected: _,
+                    }
+                    | ParseError::ExtraToken { token: (f, _, t) } => {
                         from = f;
                         to = t;
-                    },
-                    ParseError::User{error: _} => {},
+                    }
+                    ParseError::User { error: _ } => {}
                 };
-                Err(CompilationError{
+                Err(CompilationError {
                     lang: "BaLi".to_string(),
                     info: parse_error.to_string(),
                     from,
                     to,
                 })
-            },
+            }
         }
+    }
+
+    fn syntax(&self) -> Option<Cow<'static, str>> {
+        Some(Cow::Borrowed(include_str!(
+            "../../static/syntaxes/bali.sublime-syntax"
+        )))
     }
 }
