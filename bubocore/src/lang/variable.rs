@@ -11,7 +11,7 @@ use crate::{
     lang::Program,
 };
 
-use crate::util::decimal_operations::{add_decimal, sub_decimal, mul_decimal, div_decimal, decimal_from_float64, string_from_decimal, lt_decimal, leq_decimal, eq_decimal, neq_decimal};
+use crate::util::decimal_operations::{add_decimal, sub_decimal, mul_decimal, div_decimal, decimal_from_float64, string_from_decimal, lt_decimal, leq_decimal, eq_decimal, neq_decimal, float64_from_decimal};
 
 use super::{environment_func::EnvironmentFunc, evaluation_context::EvaluationContext};
 
@@ -516,13 +516,7 @@ impl VariableValue {
         match self {
             VariableValue::Integer(i) => *i as f64,
             VariableValue::Float(f) => *f,
-            VariableValue::Decimal(sign, num, den) => {
-                let mut as_float = (*num as f64) / (*den as f64);
-                if *sign < 0 {
-                    as_float = -as_float;
-                }
-                as_float
-            }
+            VariableValue::Decimal(sign, num, den) => float64_from_decimal(*sign, *num, *den),
             VariableValue::Bool(b) => {
                 if *b {
                     1.0
