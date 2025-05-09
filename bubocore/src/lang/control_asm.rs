@@ -428,6 +428,9 @@ impl ControlASM {
                     VariableValue::Float(_) => {
                         y_value = y_value.cast_as_float(ctx.clock, ctx.frame_len())
                     }
+                    VariableValue::Decimal(_, _, _) => {
+                        y_value = y_value.cast_as_decimal(ctx.clock, ctx.frame_len())
+                    }
                     VariableValue::Str(_) => {
                         y_value = y_value.cast_as_str(ctx.clock, ctx.frame_len())
                     }
