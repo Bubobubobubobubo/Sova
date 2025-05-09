@@ -166,6 +166,16 @@ pub fn decimal_from_float64(x: f64) -> (i8, u64, u64) {
     simplify_decimal(sign, numerator, denominator)
 }
 
+// get float from decimal number
+pub fn float64_from_decimal(sign: i8, num: u64, den: u64) -> f64 {
+    let mut as_float = (num as f64) / (den as f64);
+    if sign < 0 {
+        as_float = -as_float;
+    }
+    as_float
+}
+
+// Display decimal number
 pub fn string_from_decimal(sign: i8, num: u64, den: u64) -> String {
     let sign = if sign < 0 {
         "-"
