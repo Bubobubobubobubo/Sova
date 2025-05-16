@@ -132,6 +132,7 @@ pub Effect: TopLevelEffect = {
     "(def" <v: Name> <ex: ExpressionArgument> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::Definition,
+            dirt_args_names: Vec::new(),
             args: vec![
                 AbstractArg::Concrete(ConcreteArg::Litteral(v)),
                 ex,
@@ -142,6 +143,7 @@ pub Effect: TopLevelEffect = {
     "(note" <n: ExpressionArgument> <c: OptionalWithContext> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::Note,
+            dirt_args_names: Vec::new(),
             args: vec![n],
         };
         abs_effect.make_concrete(c, alt_variables)
@@ -149,6 +151,7 @@ pub Effect: TopLevelEffect = {
     "(prog" <v: ExpressionArgument> <c: OptionalWithContext> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::ProgramChange,
+            dirt_args_names: Vec::new(),
             args: vec![v],
         };
         abs_effect.make_concrete(c, alt_variables)
@@ -156,6 +159,7 @@ pub Effect: TopLevelEffect = {
     "(control" <v1: ExpressionArgument> <v2: ExpressionArgument> <c: OptionalWithContext> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::ControlChange,
+            dirt_args_names: Vec::new(),
             args: vec![v1, v2],
         };
         abs_effect.make_concrete(c, alt_variables)
@@ -163,6 +167,7 @@ pub Effect: TopLevelEffect = {
     "(at" <v1: ExpressionArgument> <v2: ExpressionArgument> <c: OptionalWithContext> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::Aftertouch,
+            dirt_args_names: Vec::new(),
             args: vec![v1, v2],
         };
         abs_effect.make_concrete(c, alt_variables)
@@ -170,15 +175,36 @@ pub Effect: TopLevelEffect = {
     "(chanpress" <v: ExpressionArgument> <c: OptionalWithContext> ")" => {
         let abs_effect = AbstractEffect{
             concrete_type: EffectType::ChannelPressure,
+            dirt_args_names: Vec::new(),
             args: vec![v],
         };
         abs_effect.make_concrete(c, alt_variables)
     },
-    //"(osc" <addr: StringLiteral> <args: Expression*> <c: OptionalWithContext> ")" => Effect::Osc(Value::String(addr.trim_matches('"').to_string()), args.into_iter().map(|e| *e).collect(), c),
-    /*"(dirt" <sound: StringLiteral> <params: DirtParam*> <c: OptionalWithContext> ")" => {
-        let params_typed: Vec<(String, Box<Expression>)> = params.into_iter().collect(); // Ensure correct type
-        Effect::Dirt(Value::String(sound.trim_matches('"').to_string()), params_typed, c)
-    },*/
+    "(osc" <addr: StringLiteral> <args: ExpressionArgument*> <c: OptionalWithContext> ")" => {
+        let mut all_args = vec![AbstractArg::Concrete(ConcreteArg::Litteral(Value::String(addr.trim_matches('"').to_string())))];
+        all_args.extend(args);
+        let abs_effect = AbstractEffect{
+            concrete_type: EffectType::Osc,
+            dirt_args_names: Vec::new(),
+            args: all_args,
+        };
+        abs_effect.make_concrete(c, alt_variables)
+    },
+    "(dirt" <sound: StringLiteral> <params: DirtParam*> <c: OptionalWithContext> ")" => {
+        let params_typed: Vec<(String, AbstractArg)> = params.into_iter().collect(); // Ensure correct type
+        let mut dirt_args_names = Vec::new();
+        let mut args = vec![AbstractArg::Concrete(ConcreteArg::Litteral(Value::String(sound.trim_matches('"').to_string())))];
+        for (param_name, param_value) in params_typed.iter() {
+            dirt_args_names.push(param_name.clone());
+            args.push(param_value.clone());
+        }
+        let abs_effect = AbstractEffect {
+            concrete_type: EffectType::Dirt,
+            dirt_args_names,
+            args,
+        };
+        abs_effect.make_concrete(c, alt_variables)
+    },
 };
 
 pub ExpressionArgument: AbstractArg = {
@@ -263,8 +289,8 @@ Comment = r";.*";
 StringLiteral: String = <s:r#""([^"\\]|\\.)*""#> => s.to_string();
 
 // Rule for parsing Dirt parameters: :keyword Expression
-DirtParam: (String, Box<Expression>) = {
-    <key: Keyword> <val: Expression> => (key.trim_start_matches(':').to_string(), val),
+DirtParam: (String, AbstractArg) = {
+    <key: Keyword> <val: ExpressionArgument> => (key.trim_start_matches(':').to_string(), val),
 };
 
 // Add Keyword terminal (starts with :, followed by identifier characters)
