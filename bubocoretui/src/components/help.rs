@@ -46,6 +46,12 @@ pub struct HelpState {
     pub is_searching: bool,
 }
 
+impl Default for HelpState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl HelpState {
     /// Creates a new `HelpState` instance, loading topics and content from static files.
     pub fn new() -> Self {
@@ -107,6 +113,12 @@ impl HelpState {
 /// It works in conjunction with `HelpState` to maintain the current state of the help system,
 /// including selected topics, scroll position, and search queries.
 pub struct HelpComponent;
+
+impl Default for HelpComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl HelpComponent {
     /// Creates a new `HelpComponent`.

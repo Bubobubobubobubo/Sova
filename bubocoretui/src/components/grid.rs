@@ -45,6 +45,12 @@ struct GridLayoutAreas {
     repetitions_prompt_area: Rect,
 }
 
+impl Default for GridComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GridComponent {
     pub fn new() -> Self {
         Self {}
@@ -291,7 +297,6 @@ impl GridComponent {
 
         // Need at least some space to draw anything inside
         if inner_area.width < 1 || inner_area.height < 2 {
-            return;
         }
     }
 

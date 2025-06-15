@@ -89,7 +89,7 @@ impl CommandPaletteComponent {
             self.filtered_commands = self.available_commands.clone();
         } else {
             let query_parts: Vec<&str> = query.splitn(2, ' ').collect();
-            let query_command = query_parts.get(0).cloned().unwrap_or("");
+            let query_command = query_parts.first().cloned().unwrap_or("");
 
             let mut scored_commands: Vec<(i32, PaletteCommand)> = self
                 .available_commands
@@ -125,13 +125,9 @@ impl CommandPaletteComponent {
                         }
                     }
 
-                    if score == 0 {
-                        if keyword_lower.contains(&query)
-                            || aliases_lower.iter().any(|a| a.contains(&query))
-                            || description_lower.contains(&query)
-                        {
-                            score = 1;
-                        }
+                    if score == 0 && (keyword_lower.contains(&query)
+                            || aliases_lower.iter().any(|a| a.contains(&query)) || description_lower.contains(&query)) {
+                        score = 1;
                     }
 
                     if score > 0 {
@@ -202,11 +198,7 @@ impl CommandPaletteComponent {
                 Ok(None)
             }
             KeyCode::Enter => {
-                let action_to_execute = if let Some(command) = self.get_selected_command() {
-                    Some(command.action.clone())
-                } else {
-                    None
-                };
+                let action_to_execute = self.get_selected_command().map(|command| command.action.clone());
                 self.hide();
                 Ok(action_to_execute)
             }
@@ -514,7 +506,7 @@ fn execute_set_tempo(app: &mut App, input: &str) -> EyreResult<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     if let Some(tempo_str) = parts.get(1) {
         if let Ok(tempo) = tempo_str.parse::<f64>() {
-            if tempo >= 20.0 && tempo <= 999.0 {
+            if (20.0..=999.0).contains(&tempo) {
                 // Send AppEvent for local Link state update first
                 let _ = app
                     .events

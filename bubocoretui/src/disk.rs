@@ -2,7 +2,6 @@ use bubocorelib::server::Snapshot;
 use chrono::{DateTime, Utc};
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
-use serde_json;
 use std::path::PathBuf;
 use std::{error::Error, fmt, io, path::Path, str::FromStr};
 use tokio::{
@@ -153,16 +152,13 @@ impl Error for DiskError {
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
+#[derive(Default)]
 pub enum EditingMode {
+    #[default]
     Normal,
     Vim,
 }
 
-impl Default for EditingMode {
-    fn default() -> Self {
-        EditingMode::Normal
-    }
-}
 
 impl fmt::Display for EditingMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

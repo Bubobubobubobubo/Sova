@@ -357,14 +357,11 @@ impl App {
             // Process the event
             match event {
                 Event::Tick => self.tick(),
-                Event::Crossterm(event) => match event {
-                    CrosstermEvent::Key(key_event) => {
-                        if key_event.kind == KeyEventKind::Release {
-                            continue;
-                        }
-                        let _ = self.handle_key_events(key_event)?;
+                Event::Crossterm(event) => if let CrosstermEvent::Key(key_event) = event {
+                    if key_event.kind == KeyEventKind::Release {
+                        continue;
                     }
-                    _ => {}
+                    let _ = self.handle_key_events(key_event)?;
                 },
                 Event::App(app_event) => self.handle_app_event(app_event)?,
                 Event::Network(message) => self.handle_server_message(message),
@@ -425,7 +422,7 @@ impl App {
             }
             // Received a chat message from another peer.
             ServerMessage::Chat(msg) => {
-                self.add_log(LogLevel::Info, format!("Received: {}", msg.to_string()));
+                self.add_log(LogLevel::Info, format!("Received: {}", msg));
             }
             // Received an updated list of connected peers.
             ServerMessage::PeersUpdated(peers) => {
@@ -560,7 +557,7 @@ impl App {
 
                 // Check if we can request the first script (Line 0, Frame 0)
                 let mut request_first_script = false;
-                if let Some(first_line) = scene.lines.get(0) {
+                if let Some(first_line) = scene.lines.first() {
                     if !first_line.frames.is_empty() {
                         request_first_script = true;
                     }
@@ -1102,19 +1099,15 @@ impl App {
         // --- Screensaver Activation Check ---
         let screensaver_timeout = Duration::from_secs(self.client_config.screensaver_timeout_secs);
         if self.client_config.screensaver_enabled
-            && self.interface.screen.mode != Mode::Screensaver
-            && self.last_interaction_time.elapsed() >= screensaver_timeout
-        {
-            if self.interface.screen.mode != Mode::Splash && screensaver_timeout > Duration::ZERO {
-                self.add_log(LogLevel::Info, "Activating screensaver due to inactivity.".to_string());
-                self.interface.screen.previous_mode = self.interface.screen.mode;
-                self.interface.screen.mode = Mode::Screensaver;
-                // Reset screensaver specific timers/state upon activation
-                self.interface.components.screensaver_start_time = now;
-                self.interface.components.screensaver_last_switch = now;
-                // Optionally reset pattern to default or keep the last one?
-                // self.interface.components.screensaver_pattern = BitfieldPattern::default_pattern();
-            }
+            && self.interface.screen.mode != Mode::Screensaver && self.last_interaction_time.elapsed() >= screensaver_timeout && self.interface.screen.mode != Mode::Splash && screensaver_timeout > Duration::ZERO {
+            self.add_log(LogLevel::Info, "Activating screensaver due to inactivity.".to_string());
+            self.interface.screen.previous_mode = self.interface.screen.mode;
+            self.interface.screen.mode = Mode::Screensaver;
+            // Reset screensaver specific timers/state upon activation
+            self.interface.components.screensaver_start_time = now;
+            self.interface.components.screensaver_last_switch = now;
+            // Optionally reset pattern to default or keep the last one?
+            // self.interface.components.screensaver_pattern = BitfieldPattern::default_pattern();
         }
 
         // --- Screensaver Pattern Cycling (only if screensaver is active) ---
@@ -1548,6 +1541,12 @@ pub struct LogsState {
     pub scroll_position: usize,
     /// Whether the view should automatically scroll to the bottom on new logs.
     pub is_following: bool,
+}
+
+impl Default for LogsState {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl LogsState {

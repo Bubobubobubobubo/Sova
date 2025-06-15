@@ -60,6 +60,12 @@ pub struct SaveLoadState {
     pub project_to_overwrite: Option<String>,
 }
 
+impl Default for SaveLoadState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SaveLoadState {
     /// Creates a new `SaveLoadState` with default values.
     pub fn new() -> Self {
@@ -92,7 +98,7 @@ pub struct SaveLoadComponent;
 impl SaveLoadComponent {
     /// Creates a new `SaveLoadComponent`.
     pub fn new() -> Self {
-        Self::default()
+        Self
     }
 }
 

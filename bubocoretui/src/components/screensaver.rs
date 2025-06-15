@@ -57,6 +57,12 @@ impl BitfieldPattern {
 /// Component responsible for displaying the screensaver.
 pub struct ScreensaverComponent;
 
+impl Default for ScreensaverComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ScreensaverComponent {
     /// Creates a new `ScreensaverComponent`.
     pub fn new() -> Self {

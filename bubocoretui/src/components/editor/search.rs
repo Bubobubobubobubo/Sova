@@ -35,6 +35,12 @@ pub struct SearchState {
     pub error_message: Option<String>,
 }
 
+impl Default for SearchState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SearchState {
 
     pub fn new() -> Self {
@@ -95,7 +101,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
                 search_state.query_textarea.delete_line_by_end(); // Delete everything
             }
             app.set_status_message("Search cancelled.".to_string());
-            return Ok(true);
+            Ok(true)
         }
         Input {
             key: Key::Enter, ..
@@ -113,7 +119,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
             }
             tui_textarea::TextArea::set_search_pattern(main_textarea, "").ok(); // Clear highlight
             app.set_status_message("Search closed.".to_string());
-            return Ok(true);
+            Ok(true)
         }
         Input {
             key: Key::Char('n'),
@@ -126,7 +132,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
             } else {
                 search_state.error_message = None;
             }
-            return Ok(true);
+            Ok(true)
         }
         Input {
             key: Key::Char('p'),
@@ -139,7 +145,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
             } else {
                 search_state.error_message = None;
             }
-            return Ok(true);
+            Ok(true)
         }
         input => {
             // Prevent Enter/Ctrl+M from adding newline in search box
@@ -161,8 +167,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
                 // Handle empty query correctly - should clear pattern
                 let query = search_state
                     .query_textarea
-                    .lines()
-                    .get(0)
+                    .lines().first()
                     .map_or("", |s| s.as_str());
                 match tui_textarea::TextArea::set_search_pattern(main_textarea, query) {
                     Ok(_) => {
@@ -175,7 +180,7 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
                     Err(e) => search_state.error_message = Some(e.to_string()),
                 }
             }
-            return Ok(true);
+            Ok(true)
         }
     }
 }

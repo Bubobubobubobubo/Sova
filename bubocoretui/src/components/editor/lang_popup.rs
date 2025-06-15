@@ -46,17 +46,17 @@ pub fn handle_lang_popup_input(app: &mut App, key_event: KeyEvent) -> EyreResult
         KeyCode::Esc => {
             app.editor.is_lang_popup_active = false;
             app.set_status_message("Language selection cancelled.".to_string());
-            return Ok(true);
+            Ok(true)
         }
         KeyCode::Up | KeyCode::Char('k') => {
             app.editor.selected_lang_index =
                 app.editor.selected_lang_index.saturating_sub(1);
-            return Ok(true);
+            Ok(true)
         }
         KeyCode::Down | KeyCode::Char('j') => {
             app.editor.selected_lang_index =
                 (app.editor.selected_lang_index + 1).min(num_langs - 1);
-            return Ok(true);
+            Ok(true)
         }
         KeyCode::Enter => {
             let lang_to_set: Option<String> = app
@@ -82,11 +82,11 @@ pub fn handle_lang_popup_input(app: &mut App, key_event: KeyEvent) -> EyreResult
                 app.set_status_message("Error selecting language.".to_string());
             }
             app.editor.is_lang_popup_active = false;
-            return Ok(true);
+            Ok(true)
         }
         _ => {
             // Consume other keys while popup is active
-            return Ok(true);
+            Ok(true)
         }
     }
 }

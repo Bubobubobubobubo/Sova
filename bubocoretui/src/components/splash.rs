@@ -282,6 +282,12 @@ impl ConnectionState {
 /// BuboCore server.
 pub struct SplashComponent;
 
+impl Default for SplashComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl SplashComponent {
     pub fn new() -> Self {
         Self {}
@@ -310,21 +316,21 @@ impl Component for SplashComponent {
                                     .update_connection_info(ip, port, username);
                                 app.server.is_connecting = true;
                                 app.set_status_message("Connecting...".to_string());
-                                return Ok(true);
+                                Ok(true)
                             }
                             Err(msg) => {
                                 app.set_status_message(msg);
-                                return Ok(true);
+                                Ok(true)
                             }
                         },
                         Err(msg) => {
                             app.set_status_message(msg);
-                            return Ok(true);
+                            Ok(true)
                         }
                     },
                     Err(msg) => {
                         app.set_status_message(msg);
-                        return Ok(true);
+                        Ok(true)
                     }
                 },
                 // Switch to the next field

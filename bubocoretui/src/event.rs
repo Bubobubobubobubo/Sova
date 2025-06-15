@@ -110,6 +110,12 @@ pub struct EventHandler {
     receiver: mpsc::UnboundedReceiver<Event>,
 }
 
+impl Default for EventHandler {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EventHandler {
     /// Construit une nouvelle instance de [`EventHandler`] et lance une tâche
     /// dédiée à la gestion des événements en arrière-plan.

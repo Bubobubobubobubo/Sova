@@ -75,6 +75,12 @@ pub struct DevicesState {
     pub pending_action: Option<ClientMessage>,
 }
 
+impl Default for DevicesState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl DevicesState {
     /// Creates a new `DevicesState` with default values and initialized text areas.
     pub fn new() -> Self {
@@ -141,6 +147,12 @@ impl DevicesState {
 
 /// The UI component responsible for drawing the devices list and handling interactions.
 pub struct DevicesComponent;
+
+impl Default for DevicesComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl DevicesComponent {
     /// Creates a new `DevicesComponent`.
@@ -852,7 +864,7 @@ impl Component for DevicesComponent {
         let tabs_area = content_layout[0];
         let devices_area = content_layout[1];
 
-        let tab_titles = vec!["(M) MIDI", "(O) OSC"];
+        let tab_titles = ["(M) MIDI", "(O) OSC"];
         let tabs = Tabs::new(
             tab_titles
                 .iter()
