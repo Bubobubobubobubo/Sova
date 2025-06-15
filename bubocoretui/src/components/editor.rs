@@ -37,6 +37,12 @@ pub mod help;
 /// mode-specific behaviors and commands.
 pub struct EditorComponent;
 
+impl Default for EditorComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl EditorComponent {
     pub fn new() -> Self {
         Self {}
@@ -439,8 +445,7 @@ impl Component for EditorComponent {
             .server
             .current_frame_positions
             .as_ref()
-            .and_then(|p| p.get(line_idx))
-            .map(|&v| v);
+            .and_then(|p| p.get(line_idx)).copied();
 
         let (_status_str, _length_str, is_enabled) = if let Some(line) = line_opt {
             if frame_idx < line.frames.len() {
@@ -491,7 +496,7 @@ impl Component for EditorComponent {
         let main_editor_area = horizontal_chunks[1];
 
         if main_editor_area.width > 0 && main_editor_area.height > 0 {
-            let editor_text_area: Rect;
+            
             let help_area: Rect;
             let mut bottom_panel_area: Option<Rect> = None;
 
@@ -555,7 +560,7 @@ impl Component for EditorComponent {
                 .constraints(constraints)
                 .split(main_editor_area);
 
-            editor_text_area = vertical_chunks[0];
+            let editor_text_area: Rect = vertical_chunks[0];
             let mut current_index = 1;
             if bottom_panel_height > 0 {
                 bottom_panel_area = Some(vertical_chunks[current_index]);
@@ -738,19 +743,17 @@ impl Component for EditorComponent {
                 frame_idx,
                 playhead_frame_idx_opt, // Pass Option<usize>
             );
-        } else {
-            if inner_area.width > 0 && inner_area.height > 0 {
-                let indicator_area = Rect {
-                    x: inner_area.right() - 1,
-                    y: inner_area.top(),
-                    width: 1,
-                    height: 1,
-                };
-                frame.render_widget(
-                    Span::styled("…", Style::default().fg(Color::White)),
-                    indicator_area,
-                );
-            }
+        } else if inner_area.width > 0 && inner_area.height > 0 {
+            let indicator_area = Rect {
+                x: inner_area.right() - 1,
+                y: inner_area.top(),
+                width: 1,
+                height: 1,
+            };
+            frame.render_widget(
+                Span::styled("…", Style::default().fg(Color::White)),
+                indicator_area,
+            );
         }
 
         // --- Render Language Selection Popup (if active) ---

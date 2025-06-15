@@ -137,6 +137,12 @@ pub struct VimState {
     pub command_buffer: String,
 }
 
+impl Default for VimState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl VimState {
 
     pub fn new() -> Self {

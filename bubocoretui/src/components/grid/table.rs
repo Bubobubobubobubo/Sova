@@ -5,7 +5,7 @@ use ratatui::widgets::{Widget, Block, Table, Paragraph, Row, Cell};
 use ratatui::text::Line;
 use ratatui::style::Color;
 use crate::components::grid::{GridCellData, GridCellRenderer};
-use std::iter::{repeat, once};
+use std::iter::once;
 
 /// A widget that renders the grid table in the timeline view.
 /// 
@@ -89,7 +89,7 @@ impl<'a> Widget for GridTableWidget<'a> {
         let header = Row::new(header_cells).height(1).style(header_style);
 
         let padding_cells =
-            repeat(Cell::from("").style(Style::default().bg(Color::Reset))).take(num_lines);
+            std::iter::repeat_n(Cell::from("").style(Style::default().bg(Color::Reset)), num_lines);
         let padding_row = Row::new(padding_cells).height(1);
 
         // Data Rows - Iterate over the *entire visible range*, not just max_frames
@@ -123,8 +123,7 @@ impl<'a> Widget for GridTableWidget<'a> {
         } else {
             Constraint::Min(area.width)
         };
-        let widths: Vec<Constraint> = repeat(col_width_constraint)
-            .take(num_lines)
+        let widths: Vec<Constraint> = std::iter::repeat_n(col_width_constraint, num_lines)
             .collect();
 
         // Create Table

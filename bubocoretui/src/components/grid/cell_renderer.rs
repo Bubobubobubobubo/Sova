@@ -202,7 +202,7 @@ impl GridCellRenderer {
                         data.frame_idx >= start
                     }
                 } else {
-                    line.end_frame.map_or(false, |end| data.frame_idx <= end)
+                    line.end_frame.is_some_and(|end| data.frame_idx <= end)
                 };
                 let bar_char = if should_draw_bar {
                     self.bar_char_active
@@ -243,7 +243,7 @@ impl GridCellRenderer {
                 // Build right part (duration)
                 let duration_str = format!(" {:.1} ", frame_val);
                 let duration_style = Style::default().fg(Color::White).bg(Color::DarkGray);
-                let duration_span = Span::styled(duration_str.clone(), duration_style.clone()); // Clone style for potential reuse
+                let duration_span = Span::styled(duration_str.clone(), duration_style); // Clone style for potential reuse
                 let duration_width = duration_span.width();
 
                 // Calculate repetition width

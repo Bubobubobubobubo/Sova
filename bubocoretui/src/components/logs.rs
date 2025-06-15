@@ -71,6 +71,12 @@ impl fmt::Display for LogLevel {
 /// in conjunction with `LogsState` to manage the display state and log entries.
 pub struct LogsComponent;
 
+impl Default for LogsComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl LogsComponent {
     pub fn new() -> Self {
         Self {}

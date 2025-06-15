@@ -41,7 +41,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     }
                     Tag::Heading { level, .. } => {
                         current_heading_level = Some(level);
-                        if !lines.is_empty() && lines.last().map_or(false, |l| !l.spans.is_empty())
+                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty())
                         {
                             lines.push(Line::raw(""));
                         }
@@ -80,7 +80,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     }
                     Tag::CodeBlock(_) => {
                         style_stack.push(Style::default().fg(Color::Cyan));
-                        if !lines.is_empty() && lines.last().map_or(false, |l| !l.spans.is_empty())
+                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty())
                         {
                             lines.push(Line::raw(""));
                         }
@@ -91,10 +91,8 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                 }
             }
             Event::End(tag_end) => {
-                if !matches!(tag_end, TagEnd::Item | TagEnd::Heading(_)) {
-                    if style_stack.len() > 1 {
-                        style_stack.pop();
-                    }
+                if !matches!(tag_end, TagEnd::Item | TagEnd::Heading(_)) && style_stack.len() > 1 {
+                    style_stack.pop();
                 }
 
                 match tag_end {
@@ -127,18 +125,12 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                         }
                     }
                     TagEnd::List(_) => {
-                        if list_level > 0 {
-                            list_level -= 1;
-                        }
+                        list_level = list_level.saturating_sub(1);
                         if list_level == 0
-                            && !lines.is_empty()
-                            && lines.last().map_or(false, |l| !l.spans.is_empty())
-                        {
-                            if lines.last().map_or(false, |l| {
+                            && !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty()) && lines.last().is_some_and(|l| {
                                 !l.spans.is_empty() || l.style != Style::default()
                             }) {
-                                lines.push(Line::raw(""));
-                            }
+                            lines.push(Line::raw(""));
                         }
                     }
                     TagEnd::Item => {
@@ -156,7 +148,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                 let style = *style_stack.last().unwrap_or(&base_style);
                 let is_in_code_block = style_stack
                     .last()
-                    .map_or(false, |s| s.fg == Some(Color::Cyan));
+                    .is_some_and(|s| s.fg == Some(Color::Cyan));
 
                 for (i, part) in text.split('\n').enumerate() {
                     if i > 0 {
@@ -171,10 +163,8 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     }
                     if !part.is_empty() {
                         current_spans.push(Span::styled(part.to_string(), style));
-                    } else if i > 0 {
-                        if is_in_code_block {
-                            lines.push(Line::raw(""));
-                        }
+                    } else if i > 0 && is_in_code_block {
+                        lines.push(Line::raw(""));
                     }
                 }
             }
@@ -209,7 +199,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
 
     while lines
         .last()
-        .map_or(false, |l| l.spans.is_empty() && l.style == Style::default())
+        .is_some_and(|l| l.spans.is_empty() && l.style == Style::default())
     {
         lines.pop();
     }

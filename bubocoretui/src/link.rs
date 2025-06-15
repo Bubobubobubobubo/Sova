@@ -6,6 +6,12 @@ pub struct Link {
     pub quantum: f64,
 }
 
+impl Default for Link {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Link {
     pub fn new() -> Self {
         let link = AblLink::new(120.0);
@@ -30,7 +36,7 @@ impl Link {
         self.capture_app_state();
         let beat = self
             .session_state
-            .beat_at_time(self.link.clock_micros(), self.quantum as f64);
-        beat % self.quantum as f64
+            .beat_at_time(self.link.clock_micros(), self.quantum);
+        beat % self.quantum
     }
 }

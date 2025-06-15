@@ -117,7 +117,7 @@ impl Widget for GridHelpPopupWidget {
     fn render(self, area: Rect, buf: &mut Buffer) {
         // --- Create two-column layout (calculate combined lines first) ---
         let all_lines = Self::create_help_text();
-        let mid = (all_lines.len() + 1) / 2;
+        let mid = all_lines.len().div_ceil(2);
         let left_col_lines = &all_lines[..mid];
         let right_col_lines = &all_lines[mid..];
 

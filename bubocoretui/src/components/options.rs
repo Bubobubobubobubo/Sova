@@ -44,6 +44,12 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 /// Component responsible for displaying and handling application settings.
 pub struct OptionsComponent;
 
+impl Default for OptionsComponent {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl OptionsComponent {
     /// Creates a new `OptionsComponent`.
     pub fn new() -> Self {

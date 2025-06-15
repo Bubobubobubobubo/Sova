@@ -368,7 +368,7 @@ impl GridComponent {
             }
             _ => {
                 // Only allow digits in the input
-                let is_digit = matches!(key_event.code, KeyCode::Char(c) if c.is_digit(10));
+                let is_digit = matches!(key_event.code, KeyCode::Char(c) if c.is_ascii_digit());
                 if is_digit || matches!(key_event.code, KeyCode::Backspace) {
                      handled_textarea = textarea.input(key_event);
                 } else {
@@ -1101,7 +1101,7 @@ impl GridComponent {
                 *current_selection = GridSelection::single(target_row, target_col);
 
                 let num_cols_pasted = data.len();
-                let num_rows_pasted = data.get(0).map_or(0, |col| col.len());
+                let num_rows_pasted = data.first().map_or(0, |col| col.len());
 
                 if num_cols_pasted > 0 && num_rows_pasted > 0 {
                     let pasted_data: Vec<Vec<PastedFrameData>> = data
@@ -1267,7 +1267,7 @@ impl GridComponent {
                         lines_and_indices_to_remove.len()
                     );
                     handled_delete = true;
-                } else if handled_delete != false && !cannot_delete_last_frame { // Use the flag here
+                } else if handled_delete && !cannot_delete_last_frame { // Use the flag here
                     // Check renamed variable
                     status_msg = "Cannot delete: Selection contains no valid frames.".to_string();
                     handled_delete = false;
