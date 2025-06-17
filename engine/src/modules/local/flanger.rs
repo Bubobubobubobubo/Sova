@@ -65,16 +65,16 @@ faust_macro::dsp!(
         base_delay = hslider("delay", 0.8, 0.0, 1.0, 0.01);
         depth = hslider("depth", 0.7, 0.0, 1.0, 0.01);
         fb = hslider("feedback", 0.4, 0.0, 0.95, 0.01);
-        
+
         lfo_freq = 0.5 + base_delay * 2.0;
         lfo_phase_offset = ma.PI * 0.5;
-        
+
         lfo1 = os.osc(lfo_freq);
         lfo2 = os.osc(lfo_freq + 0.1) * sin(lfo_phase_offset);
-        
+
         delay_range = dmax * 0.8;
         center_delay = dmax * 0.2;
-        
+
         curdel1 = center_delay + lfo1 * delay_range * base_delay;
         curdel2 = center_delay + lfo2 * delay_range * base_delay;
     };

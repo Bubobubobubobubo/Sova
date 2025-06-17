@@ -84,7 +84,6 @@ impl LogsComponent {
 }
 
 impl Component for LogsComponent {
-
     fn handle_key_event(&mut self, app: &mut App, key_event: KeyEvent) -> EyreResult<bool> {
         let total_lines = app.logs.len();
         // The maximum scroll position index (0-based).
@@ -294,8 +293,8 @@ fn format_log_entry(log: &LogEntry) -> Line {
     Line::from(vec![
         Span::styled(time_str, Style::default().fg(Color::White)), // Timestamp style (white)
         Span::styled(time_separator, Style::default().fg(Color::White)), // Separator style (white)
-        Span::styled(level_str, level_style), // Level style
-        Span::raw(" "), // Spacer
+        Span::styled(level_str, level_style),                      // Level style
+        Span::raw(" "),                                            // Spacer
         Span::raw(&log.message), // Log message content (will inherit line style)
     ])
 }

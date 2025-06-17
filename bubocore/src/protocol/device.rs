@@ -1,23 +1,19 @@
+use crate::clock::SyncTime;
+use crate::protocol::error::ProtocolError;
+use crate::protocol::log;
+use crate::protocol::midi::MidiIn;
+use crate::protocol::osc::Argument as BuboArgument;
+use crate::protocol::{midi::MidiOut, payload::ProtocolPayload};
+use midir::MidiOutputConnection;
+use rosc::{OscBundle, OscMessage as RoscOscMessage, OscPacket, OscTime, OscType};
+use serde::{Deserialize, Serialize};
+use std::fmt::{self, Debug, Display};
+use std::net::UdpSocket;
+use std::time::{SystemTime, UNIX_EPOCH};
 use std::{
     net::SocketAddr,
     sync::{Arc, Mutex},
 };
-use crate::protocol::{
-    payload::ProtocolPayload,
-    midi::MidiOut,
-};
-use serde::{Serialize, Deserialize};
-use midir::MidiOutputConnection;
-use std::net::UdpSocket;
-use crate::clock::SyncTime;
-use crate::protocol::error::ProtocolError;
-use crate::protocol::midi::MidiIn;
-use std::fmt::{self, Debug, Display};
-use std::time::{SystemTime, UNIX_EPOCH};
-use rosc::{OscBundle, OscMessage as RoscOscMessage, OscPacket, OscTime, OscType};
-use crate::protocol::osc::Argument as BuboArgument;
-use crate::protocol::log;
-
 
 /// Represents the different types of devices the system can interact with.
 ///
@@ -65,7 +61,6 @@ pub enum ProtocolDevice {
     /// Used for system control messages (shutdown, etc.)
     Control,
 }
-
 
 impl ProtocolDevice {
     /// Attempts to establish or verify the necessary connection for the device.
@@ -428,7 +423,11 @@ impl ProtocolDevice {
                     name, address
                 );
             }
-            ProtocolDevice::Log | ProtocolDevice::MIDIInDevice(_) | ProtocolDevice::OSCInDevice | ProtocolDevice::AudioEngine | ProtocolDevice::Control => {
+            ProtocolDevice::Log
+            | ProtocolDevice::MIDIInDevice(_)
+            | ProtocolDevice::OSCInDevice
+            | ProtocolDevice::AudioEngine
+            | ProtocolDevice::Control => {
                 // No flushing mechanism for Log, AudioEngine, Control, or input devices
                 ()
             }

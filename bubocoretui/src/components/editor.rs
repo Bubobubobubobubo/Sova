@@ -1,4 +1,5 @@
 use crate::app::App;
+use crate::disk;
 use crate::{components::Component, components::logs::LogLevel};
 use bubocorelib::schedule::action_timing::ActionTiming;
 use bubocorelib::server::client::ClientMessage;
@@ -13,14 +14,13 @@ use ratatui::{
 };
 use std::cmp::min;
 use tui_textarea::{CursorMove, Input};
-use crate::disk;
 
-pub mod vim;
-pub mod search;
-pub mod line_view;
-pub mod lang_popup;
-pub mod normal;
 pub mod help;
+pub mod lang_popup;
+pub mod line_view;
+pub mod normal;
+pub mod search;
+pub mod vim;
 
 /// The main editor component that handles text editing functionality.
 ///
@@ -50,7 +50,6 @@ impl EditorComponent {
 }
 
 impl Component for EditorComponent {
-
     /// Handles keyboard input events for the editor component.
     ///
     /// This function processes keyboard events in the following order:
@@ -68,7 +67,7 @@ impl Component for EditorComponent {
     ///
     /// # Returns
     /// * `EyreResult<bool>` - Ok(true) if the event was handled, Ok(false) if not
-    /// 
+    ///
     /// # Global Actions
     /// * Ctrl+S - Send current script to server
     /// * Ctrl+G - Activate search mode
@@ -80,7 +79,6 @@ impl Component for EditorComponent {
     /// * Normal Mode: Esc exits editor
     /// * Vim Mode: Esc handled by vim input handler, exits editor only in Normal mode
     fn handle_key_event(&mut self, app: &mut App, key_event: KeyEvent) -> EyreResult<bool> {
-
         // 0. Handle Help Popup First (if active)
         if help::handle_help_popup_input(app, key_event)? {
             return Ok(true);
@@ -336,7 +334,7 @@ impl Component for EditorComponent {
                 }
                 _ => {}
             }
-        } 
+        }
 
         // --- Mode-Specific Input Handling ---
         let consumed_in_mode;
@@ -348,7 +346,8 @@ impl Component for EditorComponent {
                 // If Esc was pressed AND vim handler didn't consume it (meaning it was in Normal mode)
                 if key_event.code == KeyCode::Esc
                     && !consumed_in_mode
-                    && app.editor.vim_state.mode == vim::VimMode::Normal // Use vim::VimMode
+                    && app.editor.vim_state.mode == vim::VimMode::Normal
+                // Use vim::VimMode
                 {
                     // Then exit the editor
                     app.send_client_message(ClientMessage::StoppedEditingFrame(
@@ -364,7 +363,7 @@ impl Component for EditorComponent {
                 }
             }
             disk::EditingMode::Normal => {
-                 // Call the handler from the normal module
+                // Call the handler from the normal module
                 consumed_in_mode = normal::handle_normal_input(app, key_event);
                 // In Normal mode, Esc exit is handled earlier (before mode-specific block)
             }
@@ -379,14 +378,17 @@ impl Component for EditorComponent {
         {
             let should_open_help = match app.client_config.editing_mode {
                 disk::EditingMode::Normal => {
-                    key_event.code == KeyCode::Char('h') && key_event.modifiers == KeyModifiers::CONTROL
+                    key_event.code == KeyCode::Char('h')
+                        && key_event.modifiers == KeyModifiers::CONTROL
                 }
                 disk::EditingMode::Vim => {
-                    key_event.code == KeyCode::Char('?') && key_event.modifiers == KeyModifiers::NONE
+                    key_event.code == KeyCode::Char('?')
+                        && key_event.modifiers == KeyModifiers::NONE
                 }
             };
 
-             if should_open_help { // Use the calculated boolean
+            if should_open_help {
+                // Use the calculated boolean
                 app.editor.is_help_popup_active = true;
                 let open_key_str = match app.client_config.editing_mode {
                     disk::EditingMode::Normal => "Ctrl+H",
@@ -445,7 +447,8 @@ impl Component for EditorComponent {
             .server
             .current_frame_positions
             .as_ref()
-            .and_then(|p| p.get(line_idx)).copied();
+            .and_then(|p| p.get(line_idx))
+            .copied();
 
         let (_status_str, _length_str, is_enabled) = if let Some(line) = line_opt {
             if frame_idx < line.frames.len() {
@@ -496,7 +499,6 @@ impl Component for EditorComponent {
         let main_editor_area = horizontal_chunks[1];
 
         if main_editor_area.width > 0 && main_editor_area.height > 0 {
-            
             let help_area: Rect;
             let mut bottom_panel_area: Option<Rect> = None;
 
@@ -636,8 +638,12 @@ impl Component for EditorComponent {
                     let buffer_text = &app.editor.vim_state.command_buffer;
                     let (prefix, style) = match app.editor.vim_state.mode {
                         vim::VimMode::Command => (":", Style::default().fg(Color::Yellow)),
-                        vim::VimMode::SearchForward => ("/", Style::default().fg(Color::LightMagenta)),
-                        vim::VimMode::SearchBackward => ("?", Style::default().fg(Color::LightMagenta)),
+                        vim::VimMode::SearchForward => {
+                            ("/", Style::default().fg(Color::LightMagenta))
+                        }
+                        vim::VimMode::SearchBackward => {
+                            ("?", Style::default().fg(Color::LightMagenta))
+                        }
                         _ => ("", Style::default()), // Should not be reached if command_line_area is Some
                     };
 
@@ -655,7 +661,8 @@ impl Component for EditorComponent {
                 text_area.set_line_number_style(Style::default().fg(Color::DarkGray));
 
                 // --- Syntax Highlighting Configuration ---
-                if let Some(highlighter) = app.editor.syntax_highlighter.as_ref() { // Assuming highlighter is Option<Arc<SyntaxHighlighter>>
+                if let Some(highlighter) = app.editor.syntax_highlighter.as_ref() {
+                    // Assuming highlighter is Option<Arc<SyntaxHighlighter>>
                     // 1. Determine the language of the current frame
                     let current_lang_opt: Option<String> = scene_opt
                         .and_then(|s| s.lines.get(line_idx))
@@ -667,7 +674,7 @@ impl Component for EditorComponent {
                         .and_then(|lang| app.editor.syntax_name_map.get(&lang).cloned());
 
                     // 3. Configure the TextArea
-                    text_area.set_syntax_highlighter((**highlighter).clone()); 
+                    text_area.set_syntax_highlighter((**highlighter).clone());
                     text_area.set_syntax(syntax_name_opt);
                     // TODO: Make theme configurable?
                     text_area.set_theme(Some("base16-ocean.dark".to_string()));
@@ -701,13 +708,13 @@ impl Component for EditorComponent {
                 } else {
                     // Determine help text based on editing mode
                     let help_spans = match app.client_config.editing_mode {
-                         disk::EditingMode::Vim => {
+                        disk::EditingMode::Vim => {
                             vec![
                                 Span::styled("?", key_style),
                                 Span::styled(": Help ", help_style), // Add padding space here
                             ]
                         }
-                         disk::EditingMode::Normal => {
+                        disk::EditingMode::Normal => {
                             vec![
                                 Span::styled("Ctrl+H", key_style),
                                 Span::styled(": Help ", help_style), // Add padding space here

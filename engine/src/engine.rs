@@ -4,13 +4,14 @@ use crate::modules::Frame;
 use crate::registry::ModuleRegistry;
 use crate::server::ScheduledEngineMessage;
 use crate::track::Track;
-use crate::types::{EngineMessage, EngineError, EngineStatusMessage, ScheduledMessage, TrackId, VoiceId};
+use crate::types::{
+    EngineError, EngineMessage, EngineStatusMessage, ScheduledMessage, TrackId, VoiceId,
+};
 use crate::voice::Voice;
 use std::collections::BinaryHeap;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
-
 
 pub struct AudioEngine {
     pub voices: Vec<Voice>,
@@ -27,6 +28,9 @@ pub struct AudioEngine {
     scheduled_messages: BinaryHeap<ScheduledMessage>,
     voice_memory: Arc<VoiceMemory>,
     sample_library: Arc<Mutex<SampleLibrary>>,
+    // High-precision timing state
+    current_sample_count: u64,
+    stream_start_time: u64,
 }
 
 impl AudioEngine {
@@ -36,7 +40,11 @@ impl AudioEngine {
 
         let global_pool = Arc::new(MemoryPool::new(64 * 1024 * 1024));
         let voice_memory = Arc::new(VoiceMemory::new());
-        let sample_library = Arc::new(Mutex::new(SampleLibrary::new(1024, "./samples", sample_rate as u32)));
+        let sample_library = Arc::new(Mutex::new(SampleLibrary::new(
+            1024,
+            "./samples",
+            sample_rate as u32,
+        )));
 
         Self::new_with_memory(
             sample_rate,
@@ -59,7 +67,11 @@ impl AudioEngine {
     ) -> Self {
         let global_pool = Arc::new(MemoryPool::new(64 * 1024 * 1024));
         let voice_memory = Arc::new(VoiceMemory::new());
-        let sample_library = Arc::new(Mutex::new(SampleLibrary::new(1024, "./samples", sample_rate as u32)));
+        let sample_library = Arc::new(Mutex::new(SampleLibrary::new(
+            1024,
+            "./samples",
+            sample_rate as u32,
+        )));
 
         Self::new_with_memory(
             sample_rate,
@@ -135,20 +147,47 @@ impl AudioEngine {
             scheduled_messages: BinaryHeap::new(),
             voice_memory,
             sample_library,
+            current_sample_count: 0,
+            stream_start_time: 0,
         }
+    }
+
+    /// Initialize stream timing when audio processing starts
+    pub fn initialize_stream_timing(&mut self) {
+        self.stream_start_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+        self.current_sample_count = 0;
+    }
+
+    /// Convert absolute timestamp to sample-accurate position
+    fn timestamp_to_sample_offset(&self, timestamp_micros: u64) -> Option<i64> {
+        if self.stream_start_time == 0 {
+            return None;
+        }
+        
+        // Calculate how many microseconds have passed since stream start
+        let stream_elapsed_micros = self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
+        let current_timestamp = self.stream_start_time + stream_elapsed_micros as u64;
+        
+        // Calculate sample offset from current position
+        let time_diff_micros = timestamp_micros as i64 - current_timestamp as i64;
+        let sample_offset = (time_diff_micros as f64 / 1_000_000.0 * self.sample_rate as f64) as i64;
+        
+        Some(sample_offset)
     }
 
     pub fn allocate_voice(&mut self) -> &mut Voice {
         let voice_index = self.next_voice_id as usize % self.max_voices;
         let voice = &mut self.voices[voice_index];
-        
+
         voice.immediate_reset();
         voice.id = self.next_voice_id;
         voice.set_voice_index(voice_index);
         self.next_voice_id += 1;
         voice
     }
-
 
     pub fn release_voice(&mut self, voice_id: VoiceId) {
         for voice in &mut self.voices {
@@ -210,10 +249,11 @@ impl AudioEngine {
         let mut processed = 0;
 
         while processed < len {
-            self.process_scheduled_messages(None);
-
             let remaining = len - processed;
             let block_len = remaining.min(self.block_size);
+
+            // Process sample-accurate scheduled messages for this block
+            self.process_scheduled_messages_for_block(block_len, None);
 
             if let Some(voice_buffer) = self.voice_memory.get_voice_buffer(0) {
                 (0..block_len).for_each(|i| {
@@ -237,6 +277,9 @@ impl AudioEngine {
 
             output[processed..processed + block_len].copy_from_slice(block_slice);
             processed += block_len;
+            
+            // Update sample count for timing accuracy
+            self.current_sample_count += block_len as u64;
         }
 
         self.cleanup_finished_voices();
@@ -250,23 +293,56 @@ impl AudioEngine {
         }
     }
 
-    fn process_scheduled_messages(&mut self, status_tx: Option<&mpsc::Sender<EngineStatusMessage>>) {
-        let now_ms = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_millis() as u64;
-
+    fn process_scheduled_messages_for_block(
+        &mut self,
+        block_len: usize,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
         while let Some(scheduled) = self.scheduled_messages.peek() {
-            if scheduled.due_time_ms <= now_ms {
-                let scheduled = self.scheduled_messages.pop().unwrap();
-                self.handle_message_immediate(&scheduled.message, status_tx);
+            if let Some(sample_offset) = self.timestamp_to_sample_offset(scheduled.due_time_micros) {
+                // Check if message should fire within this block
+                if sample_offset >= 0 && sample_offset < block_len as i64 {
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    // For sample-accurate timing, we could delay the message execution
+                    // by the exact sample offset, but for now we execute immediately
+                    // since most voices will start with slight delay anyway due to ADSR
+                    self.handle_message_immediate(&scheduled.message, status_tx);
+                } else if sample_offset < 0 {
+                    // Message is overdue, execute immediately
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    self.handle_message_immediate(&scheduled.message, status_tx);
+                } else {
+                    // Message is for future blocks, stop processing
+                    break;
+                }
             } else {
-                break;
+                // Fallback to old timing if stream timing not initialized
+                let stream_elapsed_micros = self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
+                let estimated_current_time = self.stream_start_time + stream_elapsed_micros as u64;
+                
+                if scheduled.due_time_micros <= estimated_current_time {
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    self.handle_message_immediate(&scheduled.message, status_tx);
+                } else {
+                    break;
+                }
             }
         }
     }
 
-    fn handle_message_immediate(&mut self, message: &EngineMessage, status_tx: Option<&mpsc::Sender<EngineStatusMessage>>) {
+    fn process_scheduled_messages(
+        &mut self,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
+        // Legacy method for compatibility - use block-aware processing instead
+        self.process_scheduled_messages_for_block(self.block_size, status_tx);
+    }
+
+    fn handle_message_immediate(
+        &mut self,
+        message: &EngineMessage,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
         match message {
             EngineMessage::Play {
                 voice_id: _,
@@ -287,9 +363,14 @@ impl AudioEngine {
                         eprintln!("[ENGINE ERROR] {}", error);
                         let _ = tx.send(EngineStatusMessage::Error(error));
                     } else {
-                        let available_sources: Vec<String> = self.registry.sources.keys().cloned().collect();
-                        eprintln!("[ENGINE ERROR] Unknown source '{}' for voice {}. Available sources: [{}]", 
-                            source_name, self.next_voice_id, available_sources.join(", "));
+                        let available_sources: Vec<String> =
+                            self.registry.sources.keys().cloned().collect();
+                        eprintln!(
+                            "[ENGINE ERROR] Unknown source '{}' for voice {}. Available sources: [{}]",
+                            source_name,
+                            self.next_voice_id,
+                            available_sources.join(", ")
+                        );
                     }
                     return;
                 }
@@ -330,7 +411,8 @@ impl AudioEngine {
                             }
                         }
 
-                        if let Some(effect_name) = self.registry.is_global_effect_wet_parameter(key) {
+                        if let Some(effect_name) = self.registry.is_global_effect_wet_parameter(key)
+                        {
                             if let Some(value_f32) = value.downcast_ref::<f32>() {
                                 let effect_name_owned = effect_name.to_string();
                                 if let Some((_, params)) = self
@@ -340,10 +422,8 @@ impl AudioEngine {
                                 {
                                     params.push((key.clone(), *value_f32));
                                 } else {
-                                    self.temp_effect_params.push((
-                                        effect_name_owned,
-                                        vec![(key.clone(), *value_f32)],
-                                    ));
+                                    self.temp_effect_params
+                                        .push((effect_name_owned, vec![(key.clone(), *value_f32)]));
                                 }
                             }
                         } else {
@@ -351,10 +431,10 @@ impl AudioEngine {
                                 if let Some(temp_effect) =
                                     self.registry.create_global_effect(effect_name)
                                 {
-                                    let param_exists = temp_effect
-                                        .get_parameter_descriptors()
-                                        .iter()
-                                        .any(|d| d.name == key || d.aliases.contains(&key.as_str()));
+                                    let param_exists =
+                                        temp_effect.get_parameter_descriptors().iter().any(|d| {
+                                            d.name == key || d.aliases.contains(&key.as_str())
+                                        });
 
                                     if param_exists {
                                         if let Some(value_f32) = value.downcast_ref::<f32>() {
@@ -391,7 +471,7 @@ impl AudioEngine {
                     voice.track_id = *track_id;
                     voice.voice_index
                 };
-                
+
                 {
                     let voice = &mut self.voices[voice_index];
 
@@ -487,9 +567,9 @@ impl AudioEngine {
         }
     }
 
-    pub fn schedule_message(&mut self, message: EngineMessage, due_time_ms: u64) {
+    pub fn schedule_message(&mut self, message: EngineMessage, due_time_micros: u64) {
         self.scheduled_messages.push(ScheduledMessage {
-            due_time_ms,
+            due_time_micros,
             message,
         });
     }
@@ -549,7 +629,6 @@ impl AudioEngine {
                 .expect("No output device available")
         };
 
-
         let config = StreamConfig {
             channels: 2,
             sample_rate: cpal::SampleRate(sample_rate),
@@ -560,6 +639,8 @@ impl AudioEngine {
         let _effective_block_size = block_size.min(buffer_size as u32) as usize;
 
         let engine_clone = Arc::clone(&engine);
+        let mut stream_initialized = false;
+        
         let stream = device
             .build_output_stream(
                 &config,
@@ -570,9 +651,15 @@ impl AudioEngine {
 
                     // Always clear the buffer first
                     Frame::process_block_zero(buffer_slice);
-                    
+
                     // Try to get engine lock with minimal hold time
                     if let Ok(mut engine_lock) = engine_clone.try_lock() {
+                        // Initialize stream timing on first callback
+                        if !stream_initialized {
+                            engine_lock.initialize_stream_timing();
+                            stream_initialized = true;
+                        }
+                        
                         // Process audio - this is the only place we hold the lock
                         engine_lock.process(buffer_slice);
                         // Lock is automatically released here
@@ -583,7 +670,7 @@ impl AudioEngine {
 
                     // Always fill output buffer (even if it's silence)
                     data.fill(0.0);
-                    
+
                     for (i, frame) in buffer_slice.iter().enumerate() {
                         let idx = i * 2;
                         if idx + 1 < data.len() {
@@ -603,7 +690,7 @@ impl AudioEngine {
 
         // Collect messages in batches to minimize lock frequency
         let mut pending_messages = Vec::with_capacity(32);
-        
+
         loop {
             // Collect all available messages
             pending_messages.clear();
@@ -630,7 +717,8 @@ impl AudioEngine {
                                 engine_lock.handle_message_immediate(&msg, status_tx.as_ref());
                             }
                             ScheduledEngineMessage::Scheduled(scheduled) => {
-                                engine_lock.schedule_message(scheduled.message, scheduled.due_time_ms);
+                                engine_lock
+                                    .schedule_message(scheduled.message, scheduled.due_time_micros);
                             }
                         }
                     }
@@ -642,7 +730,6 @@ impl AudioEngine {
         }
     }
 
-
     fn prepare_sample_data(
         &mut self,
         parameters: &std::collections::HashMap<String, Box<dyn std::any::Any + Send>>,
@@ -652,7 +739,7 @@ impl AudioEngine {
         let sample_name = parameters
             .get("sample_name")
             .and_then(|v| v.downcast_ref::<String>());
-            
+
         if sample_name.is_none() {
             if let Some(tx) = status_tx {
                 let _available_params: Vec<String> = parameters.keys().cloned().collect();
@@ -661,16 +748,23 @@ impl AudioEngine {
                     value: "missing".to_string(),
                     reason: "sample_name parameter is required for sample playback".to_string(),
                     voice_id,
-                    valid_params: vec!["sample_name".to_string(), "sample_number".to_string(), "speed".to_string()],
+                    valid_params: vec![
+                        "sample_name".to_string(),
+                        "sample_number".to_string(),
+                        "speed".to_string(),
+                    ],
                 };
                 eprintln!("[ENGINE ERROR] {}", error);
                 let _ = tx.send(EngineStatusMessage::Error(error));
             } else {
-                eprintln!("[ENGINE ERROR] Missing sample_name parameter for voice {}", voice_id);
+                eprintln!(
+                    "[ENGINE ERROR] Missing sample_name parameter for voice {}",
+                    voice_id
+                );
             }
             return None;
         }
-        
+
         let sample_name = sample_name.unwrap().clone();
 
         let sample_number = parameters
@@ -681,7 +775,7 @@ impl AudioEngine {
 
         let sample_index = sample_number.floor() as usize;
         let mix_factor = sample_number.fract();
-        
+
         let speed = parameters
             .get("speed")
             .and_then(|v| v.downcast_ref::<f32>())
@@ -711,7 +805,11 @@ impl AudioEngine {
             } else {
                 // Sample not found - report error
                 if let Some(tx) = status_tx {
-                    let available_folders: Vec<String> = sample_lib.get_folders().into_iter().map(|s| s.clone()).collect();
+                    let available_folders: Vec<String> = sample_lib
+                        .get_folders()
+                        .into_iter()
+                        .map(|s| s.clone())
+                        .collect();
                     let error = EngineError::SampleNotFound {
                         folder: sample_name.clone(),
                         index: sample_index,
@@ -721,9 +819,18 @@ impl AudioEngine {
                     eprintln!("[ENGINE ERROR] {}", error);
                     let _ = tx.send(EngineStatusMessage::Error(error));
                 } else {
-                    let available_folders: Vec<String> = sample_lib.get_folders().into_iter().map(|s| s.clone()).collect();
-                    eprintln!("[ENGINE ERROR] Sample folder '{}' (index {}) not found for voice {}. Available folders: [{}]", 
-                        sample_name, sample_index, voice_id, available_folders.join(", "));
+                    let available_folders: Vec<String> = sample_lib
+                        .get_folders()
+                        .into_iter()
+                        .map(|s| s.clone())
+                        .collect();
+                    eprintln!(
+                        "[ENGINE ERROR] Sample folder '{}' (index {}) not found for voice {}. Available folders: [{}]",
+                        sample_name,
+                        sample_index,
+                        voice_id,
+                        available_folders.join(", ")
+                    );
                 }
             }
         } else {

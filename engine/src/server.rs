@@ -166,7 +166,8 @@ impl OscServer {
                         None
                     };
 
-                let track_id = parameters.get("track")
+                let track_id = parameters
+                    .get("track")
                     .and_then(|t| t.downcast_ref::<f32>())
                     .map(|&f| f as TrackId)
                     .unwrap_or(1);
@@ -199,9 +200,9 @@ impl OscServer {
                     parameters,
                 };
 
-                if let Some(due_time_ms) = due_timestamp {
+                if let Some(due_time_micros) = due_timestamp {
                     let scheduled_msg = ScheduledMessage {
-                        due_time_ms,
+                        due_time_micros,
                         message: engine_message,
                     };
                     Some(ScheduledEngineMessage::Scheduled(scheduled_msg))
@@ -249,9 +250,9 @@ impl OscServer {
                     parameters,
                 };
 
-                if let Some(due_time_ms) = due_timestamp {
+                if let Some(due_time_micros) = due_timestamp {
                     Some(ScheduledEngineMessage::Scheduled(ScheduledMessage {
-                        due_time_ms,
+                        due_time_micros,
                         message: engine_message,
                     }))
                 } else {
@@ -302,7 +303,8 @@ impl OscServer {
             i += 2;
         }
 
-        self.registry.normalize_parameters(raw_parameters, source_name.as_ref())
+        self.registry
+            .normalize_parameters(raw_parameters, source_name.as_ref())
     }
 
     fn parse_play_message(&mut self, parts: &[&str]) -> Option<ScheduledEngineMessage> {
@@ -311,10 +313,12 @@ impl OscServer {
         }
 
         let mut parameters = self.parse_parameters(parts);
-        
-        let voice_id = if let Some(voice_param) = parameters.remove("id")
+
+        let voice_id = if let Some(voice_param) = parameters
+            .remove("id")
             .or_else(|| parameters.remove("voice"))
-            .or_else(|| parameters.remove("v")) {
+            .or_else(|| parameters.remove("v"))
+        {
             if let Some(voice_str) = voice_param.downcast_ref::<String>() {
                 if voice_str == "s" {
                     // Auto-assign using server's voice counter
@@ -367,7 +371,8 @@ impl OscServer {
             None
         };
 
-        let track_id = parameters.get("track")
+        let track_id = parameters
+            .get("track")
             .and_then(|t| t.downcast_ref::<f32>())
             .map(|&f| f as TrackId)
             .unwrap_or(1);
@@ -379,9 +384,9 @@ impl OscServer {
             parameters,
         };
 
-        if let Some(due_time_ms) = due_timestamp {
+        if let Some(due_time_micros) = due_timestamp {
             Some(ScheduledEngineMessage::Scheduled(ScheduledMessage {
-                due_time_ms,
+                due_time_micros,
                 message: engine_message,
             }))
         } else {
@@ -414,9 +419,9 @@ impl OscServer {
             parameters,
         };
 
-        if let Some(due_time_ms) = due_timestamp {
+        if let Some(due_time_micros) = due_timestamp {
             Some(ScheduledEngineMessage::Scheduled(ScheduledMessage {
-                due_time_ms,
+                due_time_micros,
                 message: engine_message,
             }))
         } else {
@@ -447,7 +452,8 @@ impl OscServer {
             i += 2;
         }
 
-        self.registry.normalize_parameters(raw_parameters, source_name.as_ref())
+        self.registry
+            .normalize_parameters(raw_parameters, source_name.as_ref())
     }
 
     fn print_samples(&self) {

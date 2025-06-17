@@ -7,12 +7,12 @@ use crate::components::help::HelpComponent;
 use crate::components::logs::LogsComponent;
 use crate::components::options::OptionsComponent;
 use crate::components::saveload::SaveLoadComponent;
-use crate::components::splash::SplashComponent;
 use crate::components::screensaver::ScreensaverComponent;
+use crate::components::splash::SplashComponent;
 use ratatui::{
-    buffer::Buffer,
     Frame,
-    layout::{Constraint, Direction, Layout, Rect, Position},
+    buffer::Buffer,
+    layout::{Constraint, Direction, Layout, Position, Rect},
     style::{Color, Modifier, Style},
     widgets::{Block, Widget},
 };
@@ -79,11 +79,18 @@ impl<'a> Widget for ContextBarWidget<'a> {
             Mode::Logs => "LOGS",
             Mode::SaveLoad => "FILES",
             Mode::Screensaver => "SLEEPING",
-        }.to_string();
+        }
+        .to_string();
 
         // Add Vim mode if applicable
-        if self.mode == Mode::Editor && self.app.client_config.editing_mode == crate::disk::EditingMode::Vim {
-            mode_text_inner = format!("{} ({}) ", mode_text_inner, self.app.editor.vim_state.mode.title_string());
+        if self.mode == Mode::Editor
+            && self.app.client_config.editing_mode == crate::disk::EditingMode::Vim
+        {
+            mode_text_inner = format!(
+                "{} ({}) ",
+                mode_text_inner,
+                self.app.editor.vim_state.mode.title_string()
+            );
         }
 
         let mode_text_padded = format!(" {} ", mode_text_inner);
@@ -99,13 +106,20 @@ impl<'a> Widget for ContextBarWidget<'a> {
         let max_message_width = message_area.width as usize;
         if max_message_width > 0 {
             let truncated_message = if self.message.width() > max_message_width {
-                 if max_message_width >= 3 {
-                     let mut truncated: String = self.message.chars().take(max_message_width.saturating_sub(3)).collect();
-                     truncated.push_str("...");
-                     truncated
-                 } else {
-                     self.message.chars().next().map_or(String::new(), |c| c.to_string())
-                 }
+                if max_message_width >= 3 {
+                    let mut truncated: String = self
+                        .message
+                        .chars()
+                        .take(max_message_width.saturating_sub(3))
+                        .collect();
+                    truncated.push_str("...");
+                    truncated
+                } else {
+                    self.message
+                        .chars()
+                        .next()
+                        .map_or(String::new(), |c| c.to_string())
+                }
             } else {
                 self.message.to_string()
             };
@@ -133,13 +147,23 @@ struct PhaseTempoBarWidget {
 }
 
 impl Widget for PhaseTempoBarWidget {
-     fn render(self, area: Rect, buf: &mut Buffer) {
+    fn render(self, area: Rect, buf: &mut Buffer) {
         let available_width = area.width as usize;
-        if available_width == 0 { return; }
+        if available_width == 0 {
+            return;
+        }
 
         // Calculate phase bar state
-        let bar_fg_color = if self.is_playing { Color::Green } else { Color::Red };
-        let filled_ratio = if self.quantum > 0.0 { (self.phase / self.quantum).clamp(0.0, 1.0) } else { 0.0 };
+        let bar_fg_color = if self.is_playing {
+            Color::Green
+        } else {
+            Color::Red
+        };
+        let filled_ratio = if self.quantum > 0.0 {
+            (self.phase / self.quantum).clamp(0.0, 1.0)
+        } else {
+            0.0
+        };
         let filled_width = (filled_ratio * available_width as f64).round() as usize;
 
         let mut bar_chars: Vec<char> = Vec::with_capacity(available_width);
@@ -148,7 +172,11 @@ impl Widget for PhaseTempoBarWidget {
         }
 
         // Prepare overlay text content and style
-        let (status_symbol, _) = if self.is_playing { ('▶', Color::Green) } else { ('■', Color::Red) };
+        let (status_symbol, _) = if self.is_playing {
+            ('▶', Color::Green)
+        } else {
+            ('■', Color::Red)
+        };
         let tempo_text = format!("{:.1} BPM", self.tempo);
         let separator = " | ";
         let overlay_content_str = format!("{}{}{}", status_symbol, separator, tempo_text);
@@ -160,7 +188,11 @@ impl Widget for PhaseTempoBarWidget {
         // Calculate centering position
         let total_width = available_width;
         let text_width = overlay_text_width;
-        let overlay_start_col = if text_width >= total_width { 0 } else { total_width.saturating_sub(text_width) / 2 };
+        let overlay_start_col = if text_width >= total_width {
+            0
+        } else {
+            total_width.saturating_sub(text_width) / 2
+        };
         let overlay_end_col = overlay_start_col.saturating_add(text_width); // Use saturating_add
 
         // Render cell by cell
@@ -168,44 +200,52 @@ impl Widget for PhaseTempoBarWidget {
         let y = area.top();
 
         for col in 0..total_width {
-             let x = area.left() + col as u16;
-             if col >= bar_chars.len() { continue; } // Should not happen if width > 0
+            let x = area.left() + col as u16;
+            if col >= bar_chars.len() {
+                continue;
+            } // Should not happen if width > 0
 
-             let bar_char = bar_chars[col];
-             let cell_bg_color = match bar_char {
-                 '█' => bar_fg_color,
-                 _ => Color::White,
-             };
+            let bar_char = bar_chars[col];
+            let cell_bg_color = match bar_char {
+                '█' => bar_fg_color,
+                _ => Color::White,
+            };
 
-             let pos: Position = (x, y).into();
-             let cell = buf.cell_mut(pos).unwrap();
+            let pos: Position = (x, y).into();
+            let cell = buf.cell_mut(pos).unwrap();
 
-             if col >= overlay_start_col && col < overlay_end_col && overlay_char_idx < overlay_content_chars.len() {
-                 // Overlay text cell
-                 let overlay_char = overlay_content_chars[overlay_char_idx];
-                 let final_fg_color = if cell_bg_color == Color::White { Color::Black } else { Color::White };
-                 let base_overlay_style = overlay_bold_style;
+            if col >= overlay_start_col
+                && col < overlay_end_col
+                && overlay_char_idx < overlay_content_chars.len()
+            {
+                // Overlay text cell
+                let overlay_char = overlay_content_chars[overlay_char_idx];
+                let final_fg_color = if cell_bg_color == Color::White {
+                    Color::Black
+                } else {
+                    Color::White
+                };
+                let base_overlay_style = overlay_bold_style;
 
-                 cell.set_char(overlay_char)
-                     .set_style(base_overlay_style.fg(final_fg_color).bg(cell_bg_color));
-                 overlay_char_idx += 1;
-
-             } else {
-                 // Phase bar background cell
-                 let final_fg_color = match bar_char {
-                     '█' => bar_fg_color,
-                     _ => Color::White, // Make space invisible on white background
-                 };
-                 cell.set_char(bar_char)
-                     .set_style(Style::default().fg(final_fg_color).bg(cell_bg_color));
-             }
-         }
-         // Ensure any remaining area has a white background (if area.width was somehow larger)
-         for x in (area.left() + total_width as u16)..area.right() {
-             let pos: Position = (x, y).into();
-             buf.cell_mut(pos).unwrap().set_bg(Color::White);
-         }
-     }
+                cell.set_char(overlay_char)
+                    .set_style(base_overlay_style.fg(final_fg_color).bg(cell_bg_color));
+                overlay_char_idx += 1;
+            } else {
+                // Phase bar background cell
+                let final_fg_color = match bar_char {
+                    '█' => bar_fg_color,
+                    _ => Color::White, // Make space invisible on white background
+                };
+                cell.set_char(bar_char)
+                    .set_style(Style::default().fg(final_fg_color).bg(cell_bg_color));
+            }
+        }
+        // Ensure any remaining area has a white background (if area.width was somehow larger)
+        for x in (area.left() + total_width as u16)..area.right() {
+            let pos: Position = (x, y).into();
+            buf.cell_mut(pos).unwrap().set_bg(Color::White);
+        }
+    }
 }
 
 /// Main UI drawing function.
@@ -225,7 +265,6 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
     if app.interface.screen.mode == Mode::Screensaver {
         // --- Screensaver Mode: Render only the screensaver component fullscreen ---
         ScreensaverComponent::new().draw(app, frame, area);
-
     } else {
         // --- Normal Mode: Render with Top Bar, Central Area, Bottom Bar ---
         let chunks = Layout::default()
@@ -277,7 +316,8 @@ pub fn ui(frame: &mut Frame, app: &mut App) {
             if let Some(start) = app.interface.screen.flash.flash_start {
                 if start.elapsed() < app.interface.screen.flash.flash_duration {
                     frame.render_widget(
-                        Block::default().style(Style::default().bg(app.interface.screen.flash.flash_color)),
+                        Block::default()
+                            .style(Style::default().bg(app.interface.screen.flash.flash_color)),
                         area, // Flash the entire screen (or just central_area?)
                     );
                 } else {

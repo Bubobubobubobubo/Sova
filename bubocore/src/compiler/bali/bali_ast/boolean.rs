@@ -1,12 +1,5 @@
-use crate::compiler::bali::bali_ast::{
-    expression::Expression,
-    function::FunctionContent,
-};
-use crate::lang::{
-    Instruction,
-    control_asm::ControlASM,
-    variable::Variable,
-};
+use crate::compiler::bali::bali_ast::{expression::Expression, function::FunctionContent};
+use crate::lang::{Instruction, control_asm::ControlASM, variable::Variable};
 use std::collections::HashMap;
 
 #[derive(Debug, Clone)]

@@ -24,10 +24,7 @@ use crate::{
     device_map::DeviceMap,
     protocol::message::TimedMessage,
     scene::Scene,
-    schedule::{
-        message::SchedulerMessage,
-        notification::SchedulerNotification
-    },
+    schedule::{message::SchedulerMessage, notification::SchedulerNotification},
     shared_types::{DeviceInfo, GridSelection},
     transcoder::Transcoder,
 };
@@ -197,21 +194,21 @@ impl ServerMessage {
         use crate::server::client::CompressionStrategy;
         match self {
             // Real-time/frequent messages that should never be compressed
-            ServerMessage::PeerGridSelectionUpdate(_, _) |
-            ServerMessage::PeerStartedEditing(_, _, _) |
-            ServerMessage::PeerStoppedEditing(_, _, _) |
-            ServerMessage::ClockState(_, _, _, _) |
-            ServerMessage::SceneLength(_) |
-            ServerMessage::FramePosition(_) |
-            ServerMessage::TransportStarted |
-            ServerMessage::TransportStopped => CompressionStrategy::Never,
-            
+            ServerMessage::PeerGridSelectionUpdate(_, _)
+            | ServerMessage::PeerStartedEditing(_, _, _)
+            | ServerMessage::PeerStoppedEditing(_, _, _)
+            | ServerMessage::ClockState(_, _, _, _)
+            | ServerMessage::SceneLength(_)
+            | ServerMessage::FramePosition(_)
+            | ServerMessage::TransportStarted
+            | ServerMessage::TransportStopped => CompressionStrategy::Never,
+
             // Large content messages that should always be compressed if beneficial
-            ServerMessage::Hello { .. } |
-            ServerMessage::SceneValue(_) |
-            ServerMessage::Snapshot(_) |
-            ServerMessage::DeviceList(_) => CompressionStrategy::Always,
-            
+            ServerMessage::Hello { .. }
+            | ServerMessage::SceneValue(_)
+            | ServerMessage::Snapshot(_)
+            | ServerMessage::DeviceList(_) => CompressionStrategy::Always,
+
             // Everything else uses adaptive compression
             _ => CompressionStrategy::Adaptive,
         }
@@ -971,7 +968,12 @@ async fn on_message(
                             is_enabled,
                             script: compiled_script_arc, // Store the compiled Option<Arc<Script>>
                             name: frame_name,            // Store the name
-                            repetitions: src_line.frame_repetitions.get(i).copied().unwrap_or(1).max(1), // Copy repetitions
+                            repetitions: src_line
+                                .frame_repetitions
+                                .get(i)
+                                .copied()
+                                .unwrap_or(1)
+                                .max(1), // Copy repetitions
                         });
                     }
 
@@ -1108,7 +1110,12 @@ async fn on_message(
                                 is_enabled,
                                 script: compiled_script_arc_opt, // Store Arc<Script> with compiled code
                                 name: src_line.frame_names.get(row_idx).cloned().flatten(), // Copy name
-                                repetitions: src_line.frame_repetitions.get(row_idx).copied().unwrap_or(1).max(1), // Copy repetitions
+                                repetitions: src_line
+                                    .frame_repetitions
+                                    .get(row_idx)
+                                    .copied()
+                                    .unwrap_or(1)
+                                    .max(1), // Copy repetitions
                             });
                         } else {
                             // If any part of the selection is out of bounds, it's invalid
@@ -1334,7 +1341,10 @@ async fn on_message(
             if state
                 .sched_iface
                 .send(SchedulerMessage::SetFrameRepetitions(
-                    line_idx, frame_idx, repetitions, timing,
+                    line_idx,
+                    frame_idx,
+                    repetitions,
+                    timing,
                 ))
                 .is_ok()
             {
@@ -1412,21 +1422,25 @@ async fn send_msg<W: AsyncWriteExt + Unpin>(writer: &mut W, msg: ServerMessage) 
 }
 
 /// Intelligently compresses message based on type and content
-fn compress_message_intelligently(msg: &ServerMessage, msgpack_bytes: &[u8]) -> io::Result<(Vec<u8>, bool)> {
+fn compress_message_intelligently(
+    msg: &ServerMessage,
+    msgpack_bytes: &[u8],
+) -> io::Result<(Vec<u8>, bool)> {
     use crate::server::client::CompressionStrategy;
-    
+
     match msg.compression_strategy() {
         CompressionStrategy::Never => {
             // Never compress frequent/small messages
             Ok((msgpack_bytes.to_vec(), false))
-        },
+        }
         CompressionStrategy::Always => {
             // Always compress large content, but only if beneficial
             if msgpack_bytes.len() > 64 {
                 let compression_level = if msgpack_bytes.len() < 1024 { 1 } else { 3 };
-                let compressed = zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
-                })?;
+                let compressed =
+                    zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
+                        io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
+                    })?;
                 // Only use compressed if it's actually smaller
                 if compressed.len() < msgpack_bytes.len() {
                     Ok((compressed, true))
@@ -1436,16 +1450,17 @@ fn compress_message_intelligently(msg: &ServerMessage, msgpack_bytes: &[u8]) -> 
             } else {
                 Ok((msgpack_bytes.to_vec(), false))
             }
-        },
+        }
         CompressionStrategy::Adaptive => {
             // Original size-based logic
             if msgpack_bytes.len() < 256 {
                 Ok((msgpack_bytes.to_vec(), false))
             } else {
                 let compression_level = if msgpack_bytes.len() < 1024 { 1 } else { 3 };
-                let compressed = zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
-                    io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
-                })?;
+                let compressed =
+                    zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
+                        io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
+                    })?;
                 Ok((compressed, true))
             }
         }
@@ -1500,7 +1515,7 @@ impl BuboCoreServer {
                  _ = tokio::time::sleep(Duration::from_millis(10)) => {}
             }
         }
-        
+
         Ok(())
     }
 }
@@ -1552,8 +1567,10 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     "[!] Connection rejected: Username '{}' already taken by {}",
                     new_name, client_addr_str
                 );
-                let refuse_msg =
-                    ServerMessage::ConnectionRefused(format!("Username '{}' is already taken.", new_name));
+                let refuse_msg = ServerMessage::ConnectionRefused(format!(
+                    "Username '{}' is already taken.",
+                    new_name
+                ));
                 let _ = send_msg(&mut writer, refuse_msg).await; // Attempt to notify client
                 drop(clients_guard); // Release lock
                 return Err(io::Error::new(
@@ -1564,7 +1581,10 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
 
             // Name is valid and unique, accept connection
             client_name = new_name; // Assign the validated name
-            println!("[👤] Client {} identified as: {}", client_addr_str, client_name);
+            println!(
+                "[👤] Client {} identified as: {}",
+                client_addr_str, client_name
+            );
             clients_guard.push(client_name.clone());
 
             // --- Get initial data AFTER adding client ---
@@ -1582,7 +1602,6 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     updated_peers_for_broadcast,
                 ));
 
-
             // --- THEN fetch dynamic state like clock/playing status ---
             let clock = Clock::from(&state.clock_server);
             let initial_link_state = (
@@ -1594,7 +1613,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
             );
             let initial_is_playing = state.shared_atomic_is_playing.load(Ordering::Relaxed);
 
-             // --- Get available compilers and their syntax definitions ---
+            // --- Get available compilers and their syntax definitions ---
             let transcoder_guard = state.transcoder.lock().await;
             let available_compilers = transcoder_guard.available_compilers();
             let mut syntax_definitions = std::collections::HashMap::new();
@@ -1610,9 +1629,9 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
             // --- Construct the Hello message ---
             println!(
                 "[ handshake ] Sending Hello to {} ({}). Initial is_playing state: {}",
-                 client_addr_str, client_name, initial_is_playing
+                client_addr_str, client_name, initial_is_playing
             );
-             hello_msg = ServerMessage::Hello {
+            hello_msg = ServerMessage::Hello {
                 username: client_name.clone(), // Send the *accepted* name
                 scene: initial_scene,
                 devices: initial_devices,
@@ -1625,14 +1644,13 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
 
             // Send Hello
             if send_msg(&mut writer, hello_msg).await.is_err() {
-                 eprintln!("[!] Failed to send Hello to {}", client_name);
-                 // Don't remove from list yet, cleanup will handle it
-                 return Err(io::Error::new(
-                     io::ErrorKind::WriteZero, // Or other appropriate error
-                     "Failed to send Hello message",
-                 ));
-             }
-
+                eprintln!("[!] Failed to send Hello to {}", client_name);
+                // Don't remove from list yet, cleanup will handle it
+                return Err(io::Error::new(
+                    io::ErrorKind::WriteZero, // Or other appropriate error
+                    "Failed to send Hello message",
+                ));
+            }
         }
         Ok(Some(other_msg)) => {
             // First message was not SetName
@@ -1640,26 +1658,31 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                 "[!] Connection rejected: Expected SetName, received {:?} from {}",
                 other_msg, client_addr_str
             );
-             let refuse_msg = ServerMessage::ConnectionRefused("Invalid handshake sequence.".to_string());
-             let _ = send_msg(&mut writer, refuse_msg).await;
-             return Err(io::Error::new(
-                 io::ErrorKind::InvalidData,
-                 "Invalid handshake sequence",
-             ));
-
+            let refuse_msg =
+                ServerMessage::ConnectionRefused("Invalid handshake sequence.".to_string());
+            let _ = send_msg(&mut writer, refuse_msg).await;
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Invalid handshake sequence",
+            ));
         }
-         Ok(None) => {
-             // Connection closed during handshake before sending SetName
-             println!("[🔌] Connection closed by {} during handshake.", client_addr_str);
-             return Ok(client_name); // Return default name as it wasn't set
-         }
-         Err(e) => {
-             // Read error during handshake
-             eprintln!("[!] Read error during handshake with {}: {}", client_addr_str, e);
-             return Err(e);
-         }
+        Ok(None) => {
+            // Connection closed during handshake before sending SetName
+            println!(
+                "[🔌] Connection closed by {} during handshake.",
+                client_addr_str
+            );
+            return Ok(client_name); // Return default name as it wasn't set
+        }
+        Err(e) => {
+            // Read error during handshake
+            eprintln!(
+                "[!] Read error during handshake with {}: {}",
+                client_addr_str, e
+            );
+            return Err(e);
+        }
     }
-
 
     // --- Main Loop: Read client messages and listen for broadcasts ---
     let mut update_receiver = state.update_receiver.clone(); // Clone receiver for this task
@@ -1824,7 +1847,6 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
         );
     }
 
-
     Ok(client_name) // Return the final name for logging by the caller
 }
 
@@ -1842,7 +1864,7 @@ async fn read_message_internal<R: AsyncReadExt + Unpin>(
             let len_with_flag = u32::from_be_bytes(len_buf);
             let is_compressed = (len_with_flag & 0x80000000) != 0;
             let length = len_with_flag & 0x7FFFFFFF;
-            
+
             if length == 0 {
                 return Err(io::Error::new(
                     io::ErrorKind::InvalidData,
@@ -1860,16 +1882,22 @@ async fn read_message_internal<R: AsyncReadExt + Unpin>(
             } else {
                 message_buf
             };
-            
+
             // Deserialize MessagePack
             deserialize_message(&final_bytes, client_id_for_logging)
         }
         Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
-            println!("[🔌] Connection closed by {} (EOF before header).", client_id_for_logging);
+            println!(
+                "[🔌] Connection closed by {} (EOF before header).",
+                client_id_for_logging
+            );
             Ok(None) // Indicate clean closure
         }
         Err(e) => {
-            eprintln!("[!] Error reading message header from {}: {}", client_id_for_logging, e);
+            eprintln!(
+                "[!] Error reading message header from {}: {}",
+                client_id_for_logging, e
+            );
             Err(e)
         }
     }
@@ -1878,7 +1906,10 @@ async fn read_message_internal<R: AsyncReadExt + Unpin>(
 /// Decompresses a message buffer using Zstd
 fn decompress_message(message_buf: &[u8], client_id: &str) -> io::Result<Vec<u8>> {
     zstd::decode_all(message_buf).map_err(|e| {
-        eprintln!("[!] Failed to decompress Zstd data from {}: {}", client_id, e);
+        eprintln!(
+            "[!] Failed to decompress Zstd data from {}: {}",
+            client_id, e
+        );
         io::Error::new(
             io::ErrorKind::InvalidData,
             format!("Zstd decompression error: {}", e),
@@ -1891,7 +1922,10 @@ fn deserialize_message(final_bytes: &[u8], client_id: &str) -> io::Result<Option
     match rmp_serde::from_slice::<ClientMessage>(final_bytes) {
         Ok(msg) => Ok(Some(msg)),
         Err(e) => {
-            eprintln!("[!] Failed to deserialize MessagePack from {}: {}", client_id, e);
+            eprintln!(
+                "[!] Failed to deserialize MessagePack from {}: {}",
+                client_id, e
+            );
             Err(io::Error::new(
                 io::ErrorKind::InvalidData,
                 format!("MessagePack deserialization error: {}", e),

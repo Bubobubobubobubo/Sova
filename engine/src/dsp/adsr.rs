@@ -1,4 +1,3 @@
-
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EnvelopePhase {
     Idle,
@@ -106,8 +105,8 @@ impl EnvelopeState {
 
     #[inline]
     pub fn is_finished(&self) -> bool {
-        matches!(self.phase, EnvelopePhase::Idle) || 
-        (matches!(self.phase, EnvelopePhase::Release) && self.current_level <= 0.001)
+        matches!(self.phase, EnvelopePhase::Idle)
+            || (matches!(self.phase, EnvelopePhase::Release) && self.current_level <= 0.001)
     }
 
     #[inline]
@@ -123,7 +122,7 @@ impl Envelope {
     fn curve_transform(t: f32, curve: f32) -> f32 {
         let t = t.clamp(0.0, 1.0);
         let curve = curve.clamp(0.001, 0.999);
-        
+
         if curve < 0.5 {
             let factor = curve * 2.0;
             t * (1.0 + factor * (1.0 - t))
@@ -213,9 +212,14 @@ impl Envelope {
     }
 
     #[inline]
-    pub fn process_block(params: &EnvelopeParams, state: &mut EnvelopeState, buffer: &mut [f32], sample_rate: f32) {
+    pub fn process_block(
+        params: &EnvelopeParams,
+        state: &mut EnvelopeState,
+        buffer: &mut [f32],
+        sample_rate: f32,
+    ) {
         let dt = 1.0 / sample_rate;
-        
+
         for sample in buffer.iter_mut() {
             Self::update_envelope_state(params, state, dt);
             *sample = Self::flush_denormals(state.current_level.clamp(0.0, 1.0));
@@ -227,7 +231,7 @@ impl Envelope {
         if matches!(state.phase, EnvelopePhase::Idle) {
             return 0.0;
         }
-        
+
         Self::update_envelope_state(params, state, dt);
         Self::flush_denormals(state.current_level.clamp(0.0, 1.0))
     }

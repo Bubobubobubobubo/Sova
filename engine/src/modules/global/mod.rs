@@ -1,2 +1,2 @@
-pub mod reverb;
 pub mod echo;
+pub mod reverb;

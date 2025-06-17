@@ -26,9 +26,9 @@ use crate::{
     clock::{Clock, SyncTime},
     lang::event::ConcreteEvent,
     protocol::{
-        device::ProtocolDevice, 
-        message::{ProtocolMessage, TimedMessage},
+        device::ProtocolDevice,
         log::{LOG_NAME, LogMessage, Severity},
+        message::{ProtocolMessage, TimedMessage},
         midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut},
         osc::{Argument as OscArgument, OSCMessage},
     },
@@ -533,10 +533,7 @@ impl DeviceMap {
                         device_id: _,
                     } => Some(message),
                     // Handle Dirt Event (map to /dirt/play with context)
-                    ConcreteEvent::Dirt {
-                        args,
-                        device_id: _,
-                    } => {
+                    ConcreteEvent::Dirt { args, device_id: _ } => {
                         // Calculate SuperDirt context using the clock
                         let tempo_bpm = clock.tempo();
                         let cps_val = tempo_bpm / 60.0;

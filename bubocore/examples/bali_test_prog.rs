@@ -5,12 +5,10 @@ use bubocorelib::clock::ClockServer;
 use bubocorelib::compiler::{Compiler, CompilerCollection, bali::BaliCompiler};
 use bubocorelib::device_map::DeviceMap;
 use bubocorelib::protocol::midi::{MidiInterface, MidiOut};
-use bubocorelib::scene::{line::Line, Scene};
+use bubocorelib::scene::{Scene, line::Line};
 use bubocorelib::schedule::{
-    action_timing::ActionTiming,
-    message::SchedulerMessage,
+    Scheduler, action_timing::ActionTiming, message::SchedulerMessage,
     notification::SchedulerNotification,
-    Scheduler,
 };
 use bubocorelib::server::{
     BuboCoreServer, ServerState,

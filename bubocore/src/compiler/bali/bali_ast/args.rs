@@ -1,5 +1,6 @@
 use crate::compiler::bali::bali_ast::{
-    Expression, Value, BooleanExpression, information::TimingInformation, ConcreteFraction, Variable,
+    BooleanExpression, ConcreteFraction, Expression, Value, Variable,
+    information::TimingInformation,
 };
 
 #[derive(Debug, Clone)]
@@ -26,7 +27,7 @@ impl ConcreteArg {
             _ => Value::Number(0), // should never occur
         }
     }
-    
+
     pub fn to_expression(&self) -> Box<Expression> {
         match self {
             ConcreteArg::Expr(e) => e.clone(),
@@ -39,7 +40,7 @@ impl ConcreteArg {
             ConcreteArg::BoolExpr(b) => b.clone(),
             _ => Box::new(BooleanExpression::Equal(
                 Box::new(Expression::Value(Value::Number(0))),
-                Box::new(Expression::Value(Value::Number(1)))
+                Box::new(Expression::Value(Value::Number(1))),
             )), // should never occur
         }
     }
@@ -54,7 +55,11 @@ impl ConcreteArg {
     pub fn to_timing_information(&self) -> TimingInformation {
         match self {
             ConcreteArg::TimingInfo(t) => t.clone(),
-            _ => TimingInformation::PositionRelative(ConcreteFraction{signe: 1, numerator: 0, denominator: 1}),
+            _ => TimingInformation::PositionRelative(ConcreteFraction {
+                signe: 1,
+                numerator: 0,
+                denominator: 1,
+            }),
         }
     }
 }

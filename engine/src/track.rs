@@ -43,13 +43,13 @@ use std::sync::Arc;
 /// let mut track = Track::new(track_id, buffer_size);
 /// track.set_memory_pool(memory_pool);
 /// track.initialize_global_effects(&registry);
-/// 
+///
 /// // Activate reverb with specific parameters
 /// track.activate_global_effect("reverb", &[
 ///     ("room_size".to_string(), 0.7),
 ///     ("damping".to_string(), 0.5),
 /// ]);
-/// 
+///
 /// // Process audio block
 /// track.process(&mut voices, &mut master_output, sample_rate);
 /// ```
@@ -290,15 +290,15 @@ impl Track {
             if let Some(effect) = self.global_effects.get_mut(effect_name) {
                 if effect.is_active() {
                     let wet_level = self.wet_levels.get(effect_name).copied().unwrap_or(0.0);
-                    
+
                     if wet_level > 0.0 {
                         if wet_level < 1.0 {
                             // Use pre-allocated dry buffer to avoid heap allocation
                             let dry_slice = &mut self.dry_buffer[..len];
                             dry_slice.copy_from_slice(&buffer[..len]);
-                            
+
                             effect.process(buffer, sample_rate);
-                            
+
                             for (i, frame) in buffer.iter_mut().enumerate() {
                                 let dry = dry_slice[i];
                                 let wet = *frame;

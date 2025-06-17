@@ -6,11 +6,11 @@ use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
-    style::{Color, Modifier, Style}, 
+    style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph}, 
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState, Paragraph},
 };
-use tui_textarea::TextArea; 
+use tui_textarea::TextArea;
 
 /// Helper function to create a `Rect` centered within another `Rect`.
 ///
@@ -78,11 +78,15 @@ impl Component for OptionsComponent {
                                 match target {
                                     EditableSetting::SketchDuration => {
                                         app.client_config.sketch_duration_secs = value;
-                                        status_msg = format!("Sketch duration set to {} seconds.", value);
+                                        status_msg =
+                                            format!("Sketch duration set to {} seconds.", value);
                                     }
                                     EditableSetting::ScreensaverTimeout => {
                                         app.client_config.screensaver_timeout_secs = value;
-                                        status_msg = format!("Screensaver timeout set to {} seconds.", value);
+                                        status_msg = format!(
+                                            "Screensaver timeout set to {} seconds.",
+                                            value
+                                        );
                                     }
                                 }
                                 clear_editing_state = true;
@@ -91,10 +95,13 @@ impl Component for OptionsComponent {
                             }
                         }
                         Ok(_) => {
-                            status_msg = format!("Invalid value: Must be at least {} second(s).", MIN_DURATION);
+                            status_msg = format!(
+                                "Invalid value: Must be at least {} second(s).",
+                                MIN_DURATION
+                            );
                         }
                         Err(_) => {
-                             status_msg = "Invalid input: Please enter a number.".to_string();
+                            status_msg = "Invalid input: Please enter a number.".to_string();
                         }
                     }
 
@@ -102,8 +109,8 @@ impl Component for OptionsComponent {
                         app.set_status_message(status_msg);
                     }
                     if clear_editing_state {
-                         app.interface.components.is_editing_setting = false;
-                         app.interface.components.setting_input_target = None;
+                        app.interface.components.is_editing_setting = false;
+                        app.interface.components.setting_input_target = None;
                     }
                     return Ok(true);
                 }
@@ -134,7 +141,7 @@ impl Component for OptionsComponent {
             }
             KeyCode::Down => {
                 if num_options > 0 {
-                     new_selected_index = (selected_index + 1).min(num_options.saturating_sub(1));
+                    new_selected_index = (selected_index + 1).min(num_options.saturating_sub(1));
                 }
                 app.interface.components.options_selected_index = new_selected_index;
                 Ok(true)
@@ -151,7 +158,9 @@ impl Component for OptionsComponent {
                 if let Some(setting) = setting_to_edit {
                     let current_value = match setting {
                         EditableSetting::SketchDuration => app.client_config.sketch_duration_secs,
-                        EditableSetting::ScreensaverTimeout => app.client_config.screensaver_timeout_secs,
+                        EditableSetting::ScreensaverTimeout => {
+                            app.client_config.screensaver_timeout_secs
+                        }
                     };
                     let components = &mut app.interface.components;
                     components.is_editing_setting = true;
@@ -163,10 +172,12 @@ impl Component for OptionsComponent {
                             .title(" Enter Value (Esc: Cancel, Enter: Confirm) ")
                             .border_style(Style::default().fg(Color::Yellow)),
                     );
-                    components.setting_input_area.set_style(Style::default().fg(Color::White));
+                    components
+                        .setting_input_area
+                        .set_style(Style::default().fg(Color::White));
                     app.set_status_message("Editing setting value...".to_string());
-
-                } else if selected_index == 0 { // Toggle Keymap
+                } else if selected_index == 0 {
+                    // Toggle Keymap
                     let current_mode = app.client_config.editing_mode.clone();
                     app.client_config.editing_mode = match current_mode {
                         disk::EditingMode::Normal => disk::EditingMode::Vim,
@@ -174,9 +185,14 @@ impl Component for OptionsComponent {
                     };
                     let new_mode_str = app.client_config.editing_mode.to_string();
                     app.set_status_message(format!("Editor keymap set to {}", new_mode_str));
-                } else if selected_index == 1 { // Toggle Screensaver Enabled
+                } else if selected_index == 1 {
+                    // Toggle Screensaver Enabled
                     app.client_config.screensaver_enabled = !app.client_config.screensaver_enabled;
-                    let status = if app.client_config.screensaver_enabled { "enabled" } else { "disabled" };
+                    let status = if app.client_config.screensaver_enabled {
+                        "enabled"
+                    } else {
+                        "disabled"
+                    };
                     app.set_status_message(format!("Screensaver {}", status));
                 }
                 Ok(true)
@@ -185,9 +201,10 @@ impl Component for OptionsComponent {
                 let mut status_msg = "".to_string();
                 match selected_index {
                     0 => {
-                         if app.client_config.editing_mode == disk::EditingMode::Vim {
-                             app.client_config.editing_mode = disk::EditingMode::Normal;
-                             status_msg = format!("Editor keymap set to {}", app.client_config.editing_mode);
+                        if app.client_config.editing_mode == disk::EditingMode::Vim {
+                            app.client_config.editing_mode = disk::EditingMode::Normal;
+                            status_msg =
+                                format!("Editor keymap set to {}", app.client_config.editing_mode);
                         }
                     }
                     1 => {
@@ -200,17 +217,17 @@ impl Component for OptionsComponent {
                         let current_val = app.client_config.sketch_duration_secs;
                         let new_val = current_val.saturating_sub(DURATION_STEP).max(MIN_DURATION);
                         if new_val != current_val {
-                             app.client_config.sketch_duration_secs = new_val;
-                             status_msg = format!("Sketch duration: {}s", new_val);
+                            app.client_config.sketch_duration_secs = new_val;
+                            status_msg = format!("Sketch duration: {}s", new_val);
                         }
                     }
                     3 => {
-                         let current_val = app.client_config.screensaver_timeout_secs;
-                         let new_val = current_val.saturating_sub(DURATION_STEP).max(MIN_DURATION);
-                         if new_val != current_val {
-                             app.client_config.screensaver_timeout_secs = new_val;
-                             status_msg = format!("Screensaver timeout: {}s", new_val);
-                         }
+                        let current_val = app.client_config.screensaver_timeout_secs;
+                        let new_val = current_val.saturating_sub(DURATION_STEP).max(MIN_DURATION);
+                        if new_val != current_val {
+                            app.client_config.screensaver_timeout_secs = new_val;
+                            status_msg = format!("Screensaver timeout: {}s", new_val);
+                        }
                     }
                     _ => {}
                 }
@@ -221,11 +238,12 @@ impl Component for OptionsComponent {
             }
             KeyCode::Right => {
                 let mut status_msg = "".to_string();
-                 match selected_index {
+                match selected_index {
                     0 => {
                         if app.client_config.editing_mode == disk::EditingMode::Normal {
-                             app.client_config.editing_mode = disk::EditingMode::Vim;
-                             status_msg = format!("Editor keymap set to {}", app.client_config.editing_mode);
+                            app.client_config.editing_mode = disk::EditingMode::Vim;
+                            status_msg =
+                                format!("Editor keymap set to {}", app.client_config.editing_mode);
                         }
                     }
                     1 => {
@@ -238,21 +256,21 @@ impl Component for OptionsComponent {
                         let current_val = app.client_config.sketch_duration_secs;
                         let new_val = current_val.saturating_add(DURATION_STEP);
                         if new_val != current_val {
-                             app.client_config.sketch_duration_secs = new_val;
-                             status_msg = format!("Sketch duration: {}s", new_val);
+                            app.client_config.sketch_duration_secs = new_val;
+                            status_msg = format!("Sketch duration: {}s", new_val);
                         }
                     }
                     3 => {
-                         let current_val = app.client_config.screensaver_timeout_secs;
-                         let new_val = current_val.saturating_add(DURATION_STEP);
-                          if new_val != current_val {
-                             app.client_config.screensaver_timeout_secs = new_val;
-                             status_msg = format!("Screensaver timeout: {}s", new_val);
-                         }
+                        let current_val = app.client_config.screensaver_timeout_secs;
+                        let new_val = current_val.saturating_add(DURATION_STEP);
+                        if new_val != current_val {
+                            app.client_config.screensaver_timeout_secs = new_val;
+                            status_msg = format!("Screensaver timeout: {}s", new_val);
+                        }
                     }
                     _ => {}
                 }
-                 if !status_msg.is_empty() {
+                if !status_msg.is_empty() {
                     app.set_status_message(status_msg);
                 }
                 Ok(true)
@@ -290,9 +308,13 @@ impl Component for OptionsComponent {
 
         // Définir les styles
         let normal_style = Style::default().fg(Color::White);
-        let value_style = Style::default().fg(Color::Green).add_modifier(Modifier::BOLD);
-        let selected_style = Style::default().add_modifier(Modifier::BOLD).bg(Color::DarkGray);
-        let name_width = 25; 
+        let value_style = Style::default()
+            .fg(Color::Green)
+            .add_modifier(Modifier::BOLD);
+        let selected_style = Style::default()
+            .add_modifier(Modifier::BOLD)
+            .bg(Color::DarkGray);
+        let name_width = 25;
 
         // Define the list items for available options
         let options = vec![
@@ -301,32 +323,67 @@ impl Component for OptionsComponent {
                 Span::raw(format!("{:<width$}", "Editor Keymap:", width = name_width)),
                 Span::styled(config.editing_mode.to_string(), value_style),
             ]))
-            .style(if selected_index == 0 { selected_style } else { normal_style }),
+            .style(if selected_index == 0 {
+                selected_style
+            } else {
+                normal_style
+            }),
             // 1: Screensaver Enabled
             ListItem::new(Line::from(vec![
-                Span::raw(format!("{:<width$}", "Screensaver Enabled:", width = name_width)),
+                Span::raw(format!(
+                    "{:<width$}",
+                    "Screensaver Enabled:",
+                    width = name_width
+                )),
                 Span::styled(
-                    if config.screensaver_enabled { "[X]" } else { "[ ]" },
-                    if config.screensaver_enabled { value_style.fg(Color::Green) } else { value_style.fg(Color::Red) },
+                    if config.screensaver_enabled {
+                        "[X]"
+                    } else {
+                        "[ ]"
+                    },
+                    if config.screensaver_enabled {
+                        value_style.fg(Color::Green)
+                    } else {
+                        value_style.fg(Color::Red)
+                    },
                 ),
             ]))
-            .style(if selected_index == 1 { selected_style } else { normal_style }),
+            .style(if selected_index == 1 {
+                selected_style
+            } else {
+                normal_style
+            }),
             // 2: Sketch Duration
             ListItem::new(Line::from(vec![
-                Span::raw(format!("{:<width$}", "Sketch Duration (s):", width = name_width)),
+                Span::raw(format!(
+                    "{:<width$}",
+                    "Sketch Duration (s):",
+                    width = name_width
+                )),
                 Span::styled(config.sketch_duration_secs.to_string(), value_style),
             ]))
-             .style(if selected_index == 2 { selected_style } else { normal_style }),
+            .style(if selected_index == 2 {
+                selected_style
+            } else {
+                normal_style
+            }),
             // 3: Screensaver Timeout
             ListItem::new(Line::from(vec![
-                 Span::raw(format!("{:<width$}", "Screensaver Timeout (s):", width = name_width)),
+                Span::raw(format!(
+                    "{:<width$}",
+                    "Screensaver Timeout (s):",
+                    width = name_width
+                )),
                 Span::styled(config.screensaver_timeout_secs.to_string(), value_style),
             ]))
-             .style(if selected_index == 3 { selected_style } else { normal_style }),
+            .style(if selected_index == 3 {
+                selected_style
+            } else {
+                normal_style
+            }),
         ];
 
-        let options_list = List::new(options)
-            .highlight_symbol("> ");
+        let options_list = List::new(options).highlight_symbol("> ");
 
         let mut list_state = ListState::default();
         list_state.select(Some(selected_index));
@@ -334,7 +391,9 @@ impl Component for OptionsComponent {
         frame.render_stateful_widget(options_list, options_area, &mut list_state);
 
         let help_style = Style::default().fg(Color::DarkGray);
-        let key_style = Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD);
+        let key_style = Style::default()
+            .fg(Color::Gray)
+            .add_modifier(Modifier::BOLD);
         let help_text = Line::from(vec![
             Span::styled("↑↓", key_style),
             Span::styled(": Navigate, ", help_style),
@@ -351,17 +410,17 @@ impl Component for OptionsComponent {
 
         if components.is_editing_setting {
             let popup_width_percentage = 50;
-            let desired_height = 3; 
+            let desired_height = 3;
 
-            let centered_area = centered_rect(popup_width_percentage, 20, area); 
+            let centered_area = centered_rect(popup_width_percentage, 20, area);
 
             let popup_area = Rect {
                 x: centered_area.x,
                 y: area.y + (area.height.saturating_sub(desired_height)) / 2,
-                width: centered_area.width, 
-                height: desired_height, 
+                width: centered_area.width,
+                height: desired_height,
             };
-           let mut textarea_to_render = components.setting_input_area.clone();
+            let mut textarea_to_render = components.setting_input_area.clone();
             textarea_to_render.set_block(
                 Block::default()
                     .borders(Borders::ALL)
@@ -370,8 +429,8 @@ impl Component for OptionsComponent {
             );
             textarea_to_render.set_style(Style::default().fg(Color::White));
 
-            frame.render_widget(Clear, popup_area); 
-            frame.render_widget(&textarea_to_render, popup_area); 
+            frame.render_widget(Clear, popup_area);
+            frame.render_widget(&textarea_to_render, popup_area);
         }
     }
 }

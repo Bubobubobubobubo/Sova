@@ -1,23 +1,16 @@
 use crate::compiler::bali::bali_ast::{
-    loop_context::LoopContext,
+    AltVariableGenerator, ChoiceVariableGenerator, ConcreteFraction, LocalChoiceVariableGenerator,
     bali_context::BaliContext,
+    expression::Expression,
+    function::FunctionContent,
+    information::{
+        AltInformation, ChoiceInformation, Information, PickInformation, RampInformation,
+        TimingInformation,
+    },
+    loop_context::LoopContext,
     time_statement::TimeStatement,
     toplevel_effect::TopLevelEffect,
-    expression::Expression,
     value::Value,
-    ChoiceVariableGenerator,
-    LocalChoiceVariableGenerator,
-    AltVariableGenerator,
-    information::{
-        TimingInformation,
-        AltInformation,
-        PickInformation,
-        ChoiceInformation,
-        RampInformation,
-        Information,
-    },
-    ConcreteFraction,
-    function::FunctionContent,
 };
 use crate::lang::variable::Variable;
 use std::collections::HashMap;
@@ -70,7 +63,6 @@ pub enum Statement {
     ),
     FunctionDeclaration(Value, Vec<Value>, Vec<TopLevelEffect>, Box<Expression>),
 }
-
 
 impl Statement {
     /*
@@ -195,30 +187,36 @@ impl Statement {
         functions_map: &mut HashMap<String, FunctionContent>,
     ) -> Result<(), String> {
         match self {
-            Statement::FunctionDeclaration(func_name, func_args, toplevel_effects, return_expression) => {
+            Statement::FunctionDeclaration(
+                func_name,
+                func_args,
+                toplevel_effects,
+                return_expression,
+            ) => {
                 let key = func_name.to_str();
                 if functions_map.contains_key(&key) {
-                    return Err(format!("Duplicate definition of function {}", key))
+                    return Err(format!("Duplicate definition of function {}", key));
                 }
 
-                let mut check_args: Vec<String> = func_args.into_iter().map(|arg| arg.to_str()).collect();
+                let mut check_args: Vec<String> =
+                    func_args.into_iter().map(|arg| arg.to_str()).collect();
                 let num_args = check_args.len();
                 check_args.sort();
                 check_args.dedup();
                 if check_args.len() != num_args {
-                    return Err(format!("Duplicate argument names in function {}", key))
+                    return Err(format!("Duplicate argument names in function {}", key));
                 }
 
                 functions_map.insert(
                     key,
-                    FunctionContent{
+                    FunctionContent {
                         arg_list: func_args.into_iter().map(|arg| arg.to_str()).collect(),
                         return_expression: return_expression.clone(),
                         function_program: toplevel_effects.clone(),
                     },
                 );
                 Ok(())
-            },
+            }
             _ => Ok(()),
         }
     }
@@ -237,10 +235,15 @@ impl Statement {
             Statement::AfterFrac(_, _, ref cc) | Statement::BeforeFrac(_, _, ref cc) | Statement::Loop(_, _, _, ref cc) | Statement::After(_, ref cc) | Statement::Before(_, ref cc) | Statement::Effect(_, ref cc) => cc.clone().update(c),
         };*/
         match self {
-            Statement::FunctionDeclaration(_func_name, _func_args, _toplevel_effects, _return_expression) => {
+            Statement::FunctionDeclaration(
+                _func_name,
+                _func_args,
+                _toplevel_effects,
+                _return_expression,
+            ) => {
                 // function declarations do not generate any TimeStatement
                 Vec::new()
-            },
+            }
             Statement::AfterFrac(v, es, cc) => es
                 .into_iter()
                 .map(|e| {

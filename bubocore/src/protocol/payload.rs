@@ -1,11 +1,7 @@
-use serde::{Deserialize, Serialize};
-use crate::protocol::{
-    osc::OSCMessage,
-    midi::MIDIMessage,
-    log::LogMessage,
-};
-use std::fmt::Display;
 use crate::protocol::osc::Argument;
+use crate::protocol::{log::LogMessage, midi::MIDIMessage, osc::OSCMessage};
+use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 
 /// Represents the actual data payload for different protocols.
 ///
@@ -37,7 +33,12 @@ impl Display for ProtocolPayload {
             ProtocolPayload::OSC(m) => std::fmt::Display::fmt(m, f),
             ProtocolPayload::MIDI(m) => std::fmt::Display::fmt(m, f),
             ProtocolPayload::LOG(m) => std::fmt::Display::fmt(m, f),
-            ProtocolPayload::AudioEngine(m) => write!(f, "AudioEngine: {} args (device {})", m.args.len(), m.device_id),
+            ProtocolPayload::AudioEngine(m) => write!(
+                f,
+                "AudioEngine: {} args (device {})",
+                m.args.len(),
+                m.device_id
+            ),
             ProtocolPayload::Control(m) => write!(f, "Control: {:?}", m),
         }
     }
@@ -71,10 +72,7 @@ impl From<crate::lang::event::ConcreteEvent> for Option<AudioEnginePayload> {
     fn from(event: crate::lang::event::ConcreteEvent) -> Self {
         match event {
             crate::lang::event::ConcreteEvent::AudioEngine { args, device_id } => {
-                Some(AudioEnginePayload {
-                    args,
-                    device_id,
-                })
+                Some(AudioEnginePayload { args, device_id })
             }
             _ => None,
         }

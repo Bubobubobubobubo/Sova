@@ -27,8 +27,8 @@
 //! - Parameter descriptors are compile-time constants
 //! - Registry modification should occur during initialization only
 
-use crate::modules::{GlobalEffect, LocalEffect, ParameterDescriptor, Source};
 use crate::modulation::Modulation;
+use crate::modules::{GlobalEffect, LocalEffect, ParameterDescriptor, Source};
 use std::any::Any;
 use std::collections::HashMap;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -274,17 +274,17 @@ pub enum TimestampValidationError {
 /// - Configurable future limit for different use cases
 #[derive(Clone)]
 pub struct TimestampValidator {
-    /// Maximum allowed milliseconds into the future for scheduled messages
-    max_future_ms: u64,
+    /// Maximum allowed microseconds into the future for scheduled messages
+    max_future_micros: u64,
 }
 
 impl Default for TimestampValidator {
-    /// Creates a validator with default 5-second future limit.
+    /// Creates a validator with default 1-second future limit.
     ///
     /// This default provides a reasonable balance between flexibility
     /// and resource usage for most live coding scenarios.
     fn default() -> Self {
-        Self::new(1000)
+        Self::new(1_000_000) // 1 second in microseconds
     }
 }
 
@@ -293,14 +293,14 @@ impl TimestampValidator {
     ///
     /// # Arguments
     ///
-    /// * `max_future_ms` - Maximum milliseconds into the future to allow
+    /// * `max_future_micros` - Maximum microseconds into the future to allow
     ///
     /// # Performance Notes
     ///
     /// The future limit prevents unbounded memory growth in the message
     /// scheduler while still allowing reasonable scheduling flexibility.
-    pub fn new(max_future_ms: u64) -> Self {
-        Self { max_future_ms }
+    pub fn new(max_future_micros: u64) -> Self {
+        Self { max_future_micros }
     }
 
     /// Validates a message timestamp against current time and future limits.
@@ -312,11 +312,11 @@ impl TimestampValidator {
     ///
     /// # Arguments
     ///
-    /// * `parameters` - Message parameters containing "due" timestamp
+    /// * `parameters` - Message parameters containing "due" timestamp in seconds
     ///
     /// # Returns
     ///
-    /// `Ok(timestamp_ms)` with validated timestamp in milliseconds, or
+    /// `Ok(timestamp_micros)` with validated timestamp in microseconds, or
     /// `Err(TimestampValidationError)` describing the validation failure.
     ///
     /// # Performance Notes
@@ -337,21 +337,21 @@ impl TimestampValidator {
             .or_else(|| due.downcast_ref::<f32>().map(|&f| f as f64))
             .ok_or(TimestampValidationError::InvalidDueFormat)?;
 
-        let due_ms = (due_timestamp * 1000.0) as u64;
-        let now_ms = SystemTime::now()
+        let due_micros = (due_timestamp * 1_000_000.0) as u64;
+        let now_micros = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|_| TimestampValidationError::InvalidDueFormat)?
-            .as_millis() as u64;
+            .as_micros() as u64;
 
-        if due_ms <= now_ms {
+        if due_micros <= now_micros {
             return Err(TimestampValidationError::DueInPast);
         }
 
-        if due_ms > now_ms + self.max_future_ms {
+        if due_micros > now_micros + self.max_future_micros {
             return Err(TimestampValidationError::DueTooFarInFuture);
         }
 
-        Ok(due_ms)
+        Ok(due_micros)
     }
 }
 
@@ -605,8 +605,8 @@ impl ModuleRegistry {
     /// Registration involves importing and storing function pointers.
     /// This should only be called during initialization.
     pub fn register_default_modules(&mut self) {
-        use crate::modules::global::reverb::create_simple_reverb;
         use crate::modules::global::echo::create_echo_effect;
+        use crate::modules::global::reverb::create_simple_reverb;
         use crate::modules::local::bitcrusher::create_bitcrusher;
         use crate::modules::local::flanger::create_flanger;
         use crate::modules::local::mooglpf::create_mooglpf_filter;
@@ -748,14 +748,14 @@ impl ModuleRegistry {
     ///
     /// # Arguments
     ///
-    /// * `max_future_ms` - Maximum milliseconds into the future to allow
+    /// * `max_future_micros` - Maximum microseconds into the future to allow
     ///
     /// # Performance Notes
     ///
     /// This setting affects all future timestamp validations and should
     /// be configured during initialization.
-    pub fn set_timestamp_tolerance(&mut self, max_future_ms: u64) {
-        self.timestamp_validator = TimestampValidator::new(max_future_ms);
+    pub fn set_timestamp_tolerance(&mut self, max_future_micros: u64) {
+        self.timestamp_validator = TimestampValidator::new(max_future_micros);
     }
 
     /// Creates a new global effect module instance.
@@ -795,7 +795,11 @@ impl ModuleRegistry {
     /// # Returns
     ///
     /// The canonical parameter name, or the original name if no match is found.
-    pub fn normalize_parameter_name(&self, param: &str, source_name: Option<&String>) -> &'static str {
+    pub fn normalize_parameter_name(
+        &self,
+        param: &str,
+        source_name: Option<&String>,
+    ) -> &'static str {
         // Check engine parameters first
         for desc in &ENGINE_PARAM_DESCRIPTORS {
             if desc.name == param {
@@ -983,7 +987,7 @@ impl ModuleRegistry {
         source_name: Option<&String>,
     ) -> HashMap<String, Box<dyn Any + Send>> {
         let mut normalized_parameters = HashMap::with_capacity(raw_parameters.len());
-        
+
         for (key, value) in raw_parameters {
             if key == "s" {
                 // Source parameter passes through unchanged

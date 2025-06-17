@@ -1,6 +1,6 @@
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, Clear, Paragraph, Widget, Padding, BorderType},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph, Widget},
 };
 
 /// A widget that renders a help popup overlay for the grid component.
@@ -12,13 +12,15 @@ pub struct GridHelpPopupWidget;
 
 impl GridHelpPopupWidget {
     fn create_help_text() -> Vec<Line<'static>> {
-        let key_style = Style::default()
-            .fg(Color::Green);
+        let key_style = Style::default().fg(Color::Green);
         let desc_style = Style::default().fg(Color::White);
 
         vec![
             // --- Column 1 Start ---
-            Line::from(Span::styled("Navigation & Selection", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
+            Line::from(Span::styled(
+                "Navigation & Selection",
+                Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )),
             Line::from(vec![
                 Span::styled("  ↑↓←→       ", key_style),
                 Span::styled(": Move Cursor", desc_style),
@@ -36,9 +38,11 @@ impl GridHelpPopupWidget {
                 Span::styled(": Scroll Grid", desc_style),
             ]),
             Line::from(" "), // Spacer
-
-            Line::from(Span::styled("Frame Editing", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
-             Line::from(vec![
+            Line::from(Span::styled(
+                "Frame Editing",
+                Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )),
+            Line::from(vec![
                 Span::styled("  Enter     ", key_style),
                 Span::styled(": Edit Frame Script", desc_style),
             ]),
@@ -50,7 +54,7 @@ impl GridHelpPopupWidget {
                 Span::styled("  l         ", key_style),
                 Span::styled(": Set Frame Length", desc_style),
             ]),
-             Line::from(vec![
+            Line::from(vec![
                 Span::styled("  n         ", key_style),
                 Span::styled(": Set Frame Name", desc_style),
             ]),
@@ -63,12 +67,13 @@ impl GridHelpPopupWidget {
                 Span::styled(": Set Loop", desc_style),
             ]),
             Line::from(" "), // Spacer
-
             // --- Column 1 End ---
 
-
             // --- Column 2 Start ---
-             Line::from(Span::styled("Frame Manipulation", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
+            Line::from(Span::styled(
+                "Frame Manipulation",
+                Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )),
             Line::from(vec![
                 Span::styled("  i         ", key_style),
                 Span::styled(": Insert Frame", desc_style),
@@ -85,26 +90,29 @@ impl GridHelpPopupWidget {
                 Span::styled("  c / p     ", key_style),
                 Span::styled(": Copy / Paste Selected Frame(s)", desc_style),
             ]),
-             Line::from(" "), // Spacer
-
-
-            Line::from(Span::styled("Line Manipulation", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
-             Line::from(vec![
-                 Span::styled("  Shift+A ", key_style),
-                 Span::styled(": Add Line", desc_style),
-             ]),
+            Line::from(" "), // Spacer
+            Line::from(Span::styled(
+                "Line Manipulation",
+                Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )),
+            Line::from(vec![
+                Span::styled("  Shift+A ", key_style),
+                Span::styled(": Add Line", desc_style),
+            ]),
             Line::from(vec![
                 Span::styled("  Shift+X   ", key_style),
                 Span::styled(": Remove Current Line", desc_style),
             ]),
             Line::from(" "), // Spacer
-
-             Line::from(Span::styled("General", Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED))),
+            Line::from(Span::styled(
+                "General",
+                Style::default().add_modifier(Modifier::BOLD | Modifier::UNDERLINED),
+            )),
             Line::from(vec![
                 Span::styled("  L         ", key_style), // Changed from Shift+L
                 Span::styled(": Set Scene Length", desc_style),
             ]),
-             Line::from(vec![
+            Line::from(vec![
                 Span::styled("  ?         ", key_style),
                 Span::styled(": Toggle this Help", desc_style),
             ]),
@@ -128,8 +136,14 @@ impl Widget for GridHelpPopupWidget {
         let mut max_line_width: usize = 0;
 
         for i in 0..num_rows {
-            let left_line = left_col_lines.get(i).cloned().unwrap_or_else(|| Line::raw(""));
-            let right_line = right_col_lines.get(i).cloned().unwrap_or_else(|| Line::raw(""));
+            let left_line = left_col_lines
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| Line::raw(""));
+            let right_line = right_col_lines
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| Line::raw(""));
 
             let left_width = left_line.width();
             let padding_width = desired_left_col_width.saturating_sub(left_width);
@@ -152,10 +166,8 @@ impl Widget for GridHelpPopupWidget {
         let content_width = max_line_width;
         let content_height = num_rows;
 
-        let popup_width = (content_width + padding_and_border_width)
-            .min(area.width.into()); // Ensure it fits within the total area width
-        let popup_height = (content_height + padding_and_border_height)
-            .min(area.height.into()); // Ensure it fits within the total area height
+        let popup_width = (content_width + padding_and_border_width).min(area.width.into()); // Ensure it fits within the total area width
+        let popup_height = (content_height + padding_and_border_height).min(area.height.into()); // Ensure it fits within the total area height
 
         // --- Calculate centered rect using absolute dimensions ---
         let popup_area = {
@@ -164,7 +176,7 @@ impl Widget for GridHelpPopupWidget {
             Rect::new(
                 area.x + horizontal_margin,
                 area.y + vertical_margin,
-                popup_width as u16, // Use calculated width
+                popup_width as u16,  // Use calculated width
                 popup_height as u16, // Use calculated height
             )
         };
@@ -185,4 +197,4 @@ impl Widget for GridHelpPopupWidget {
         Clear.render(popup_area, buf);
         help_paragraph.render(popup_area, buf);
     }
-} 
+}

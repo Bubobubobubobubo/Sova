@@ -2,10 +2,10 @@ use crate::app::App;
 use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    prelude::*,
     layout::{Alignment, Rect},
+    prelude::*,
     style::{Color, Style},
-    widgets::{Block, Borders, Clear, Padding, Paragraph, BorderType},
+    widgets::{Block, BorderType, Borders, Clear, Padding, Paragraph},
 };
 
 pub fn render_editor_help_popup(app: &App, frame: &mut Frame, area: Rect) {
@@ -14,7 +14,9 @@ pub fn render_editor_help_popup(app: &App, frame: &mut Frame, area: Rect) {
     }
 
     // Apply bold white style to titles
-    let title_style = Style::default().fg(Color::White).add_modifier(Modifier::BOLD);
+    let title_style = Style::default()
+        .fg(Color::White)
+        .add_modifier(Modifier::BOLD);
     let key_style = Style::default().fg(Color::Green);
     let desc_style = Style::default().fg(Color::White);
 
@@ -99,8 +101,14 @@ pub fn render_editor_help_popup(app: &App, frame: &mut Frame, area: Rect) {
     let mut max_line_width: usize = 0;
 
     for i in 0..num_rows {
-        let left_line = left_col_lines.get(i).cloned().unwrap_or_else(|| Line::raw(""));
-        let right_line = right_col_lines.get(i).cloned().unwrap_or_else(|| Line::raw(""));
+        let left_line = left_col_lines
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| Line::raw(""));
+        let right_line = right_col_lines
+            .get(i)
+            .cloned()
+            .unwrap_or_else(|| Line::raw(""));
 
         let left_width = left_line.width();
         let padding_width = desired_left_col_width.saturating_sub(left_width);
@@ -123,10 +131,8 @@ pub fn render_editor_help_popup(app: &App, frame: &mut Frame, area: Rect) {
     let padding_and_border_width = 4; // 1 padding + 1 border each side
     let padding_and_border_height = 2; // 1 padding + 1 border top/bottom
 
-    let popup_width = (content_width + padding_and_border_width)
-        .min(area.width.into());
-    let popup_height = (content_height + padding_and_border_height)
-        .min(area.height.into());
+    let popup_width = (content_width + padding_and_border_width).min(area.width.into());
+    let popup_height = (content_height + padding_and_border_height).min(area.height.into());
 
     // --- Calculate centered rect using absolute dimensions ---
     let popup_area = {
@@ -193,4 +199,4 @@ pub fn handle_help_popup_input(app: &mut App, key_event: KeyEvent) -> EyreResult
         }
         _ => Ok(false), // Input not handled by the popup
     }
-} 
+}

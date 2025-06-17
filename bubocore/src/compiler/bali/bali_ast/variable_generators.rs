@@ -147,4 +147,3 @@ impl ChoiceVariableGenerator {
         (choice_res, target_res)
     }
 }
-

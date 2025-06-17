@@ -125,8 +125,11 @@ impl CommandPaletteComponent {
                         }
                     }
 
-                    if score == 0 && (keyword_lower.contains(&query)
-                            || aliases_lower.iter().any(|a| a.contains(&query)) || description_lower.contains(&query)) {
+                    if score == 0
+                        && (keyword_lower.contains(&query)
+                            || aliases_lower.iter().any(|a| a.contains(&query))
+                            || description_lower.contains(&query))
+                    {
                         score = 1;
                     }
 
@@ -198,7 +201,9 @@ impl CommandPaletteComponent {
                 Ok(None)
             }
             KeyCode::Enter => {
-                let action_to_execute = self.get_selected_command().map(|command| command.action.clone());
+                let action_to_execute = self
+                    .get_selected_command()
+                    .map(|command| command.action.clone());
                 self.hide();
                 Ok(action_to_execute)
             }
@@ -702,7 +707,7 @@ fn execute_load(app: &mut App, input: &str) -> EyreResult<()> {
     Ok(())
 }
 
-// --- Reinstated and Updated Command Execution --- 
+// --- Reinstated and Updated Command Execution ---
 fn execute_set_editor_mode(app: &mut App, input: &str) -> EyreResult<()> {
     let parts: Vec<&str> = input.split_whitespace().collect();
     if let Some(mode_arg) = parts.get(1) {

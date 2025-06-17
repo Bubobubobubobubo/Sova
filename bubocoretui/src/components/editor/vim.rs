@@ -1,9 +1,9 @@
+use crate::app::App;
+use arboard::Clipboard;
 use ratatui::prelude::*;
 use std::fmt;
 use tui_textarea::Input;
-use crate::app::App;
-use arboard::Clipboard;
-use tui_textarea::{Key, TextArea, CursorMove, Scrolling};
+use tui_textarea::{CursorMove, Key, Scrolling, TextArea};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum YankType {
@@ -157,7 +157,6 @@ impl Default for VimState {
 }
 
 impl VimState {
-
     pub fn new() -> Self {
         Self {
             mode: VimMode::Normal,
@@ -172,19 +171,19 @@ impl VimState {
 
     pub fn set_pending(&mut self, pending: Input) {
         self.pending = pending;
-        self.replace_pending = false; 
+        self.replace_pending = false;
         self.command_buffer.clear();
     }
 
     pub fn clear_pending(&mut self) {
         self.pending = Input::default();
-        self.replace_pending = false; 
+        self.replace_pending = false;
     }
 
     pub fn set_mode(&mut self, mode: VimMode) {
         self.mode = mode;
         self.pending = Input::default();
-        self.replace_pending = false; 
+        self.replace_pending = false;
         if !matches!(
             mode,
             VimMode::Command | VimMode::SearchForward | VimMode::SearchBackward
@@ -194,9 +193,9 @@ impl VimState {
     }
 
     pub fn set_replace_pending(&mut self) {
-        self.pending = Input::default(); 
+        self.pending = Input::default();
         self.replace_pending = true;
-        self.command_buffer.clear(); 
+        self.command_buffer.clear();
     }
 }
 
@@ -228,7 +227,7 @@ fn update_vim_state(
         VimTransition::Nop(msg_opt) => {
             status_msg = msg_opt;
             (true, status_msg) // Consumed (action performed, no mode change)
-        },
+        }
     }
 }
 
@@ -293,7 +292,8 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     vim_state,
                     VimTransition::Mode(VimMode::Normal, None),
                     textarea,
-                ).0; // Return only consumed bool
+                )
+                .0; // Return only consumed bool
             }
             Input { key: Key::Esc, .. } => {
                 // Cancel replace
@@ -301,7 +301,8 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     vim_state,
                     VimTransition::Mode(VimMode::Normal, None),
                     textarea,
-                ).0; // Return only consumed bool
+                )
+                .0; // Return only consumed bool
             }
             _ => {
                 // Invalid key after 'r', just cancel
@@ -309,7 +310,8 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     vim_state,
                     VimTransition::Mode(VimMode::Normal, None),
                     textarea,
-                ).0; // Return only consumed bool
+                )
+                .0; // Return only consumed bool
             }
         }
     }
@@ -732,7 +734,8 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                         vim_state,
                         VimTransition::Mode(VimMode::Operator(op), None),
                         textarea,
-                    ).0; // Return only consumed bool
+                    )
+                    .0; // Return only consumed bool
                 }
                 Input {
                     key: Key::Char('y'),
@@ -812,9 +815,10 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     ..
                 } if current_mode == VimMode::Normal => {
                     if !textarea.search_forward(false) {
-                         op_applied_transition = VimTransition::Nop(Some("Pattern not found".to_string()));
+                        op_applied_transition =
+                            VimTransition::Nop(Some("Pattern not found".to_string()));
                     } else {
-                         op_applied_transition = VimTransition::Nop(None); // Stay in normal
+                        op_applied_transition = VimTransition::Nop(None); // Stay in normal
                     }
                 }
                 Input {
@@ -822,7 +826,8 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     ..
                 } if current_mode == VimMode::Normal => {
                     if !textarea.search_back(false) {
-                         op_applied_transition = VimTransition::Nop(Some("Pattern not found".to_string()));
+                        op_applied_transition =
+                            VimTransition::Nop(Some("Pattern not found".to_string()));
                     } else {
                         op_applied_transition = VimTransition::Nop(None); // Stay in normal
                     }
@@ -845,7 +850,7 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                 // If a mode change or Nop(Some(...)) was already decided, use that
                 op_applied_transition
             } else {
-                 // Otherwise, check if an operator was pending and apply it
+                // Otherwise, check if an operator was pending and apply it
                 match current_mode {
                     VimMode::Operator('y') => {
                         // Type is already set in the operator handling above
@@ -888,7 +893,9 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                     // Cancel command, return to Normal mode
                     VimTransition::Mode(VimMode::Normal, None)
                 }
-                Input { key: Key::Enter, .. } => {
+                Input {
+                    key: Key::Enter, ..
+                } => {
                     // Execute command
                     let command = vim_state.command_buffer.trim();
                     let mut status_msg = None;
@@ -910,19 +917,28 @@ pub(super) fn handle_vim_input(app: &mut App, input: Input) -> bool {
                             status_msg = Some(format!("Invalid line number: {}", line_num));
                         }
                         // Return to normal mode after Jump or error
-                         VimTransition::Mode(VimMode::Normal, status_msg)
+                        VimTransition::Mode(VimMode::Normal, status_msg)
                     } else {
                         // Failed to parse as number or other command
-                         match command {
-                             "q" | "quit" => { /* TODO: Handle Quit command? Maybe VimTransition::Quit? */ status_msg = Some("Quit command not implemented yet".to_string())},
-                             "w" | "write" => { /* TODO: Handle Write command? */ status_msg = Some("Write command not implemented yet".to_string())},
-                             _ => status_msg = Some(format!("Not an editor command: {}", command)),
-                         }
+                        match command {
+                            "q" | "quit" => {
+                                /* TODO: Handle Quit command? Maybe VimTransition::Quit? */
+                                status_msg = Some("Quit command not implemented yet".to_string())
+                            }
+                            "w" | "write" => {
+                                /* TODO: Handle Write command? */
+                                status_msg = Some("Write command not implemented yet".to_string())
+                            }
+                            _ => status_msg = Some(format!("Not an editor command: {}", command)),
+                        }
                         // Always return to Normal mode after Enter for other commands
                         VimTransition::Mode(VimMode::Normal, status_msg)
                     }
                 }
-                Input { key: Key::Backspace, .. } => {
+                Input {
+                    key: Key::Backspace,
+                    ..
+                } => {
                     vim_state.command_buffer.pop();
                     // Stay in Command mode
                     VimTransition::Mode(VimMode::Command, None)

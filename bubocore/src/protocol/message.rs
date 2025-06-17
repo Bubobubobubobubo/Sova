@@ -1,13 +1,10 @@
-use std::sync::Arc;
-use serde::{Deserialize, Serialize};
-use crate::protocol::{
-    payload::ProtocolPayload,
-    device::ProtocolDevice,
-};
 use crate::clock::SyncTime;
 use crate::protocol::error::ProtocolError;
+use crate::protocol::{device::ProtocolDevice, payload::ProtocolPayload};
+use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::fmt::Display;
+use std::sync::Arc;
 
 /// Associates a protocol-specific payload with its target device.
 ///
@@ -52,7 +49,6 @@ impl Display for ProtocolMessage {
         write!(f, "[{}] -> Device: {}", self.payload, self.device)
     }
 }
-
 
 /// Associates a `ProtocolMessage` with a specific time (`SyncTime`).
 ///

@@ -1,12 +1,9 @@
+use crate::compiler::bali::bali_ast::{concrete_fraction::ConcreteFraction, constants::NOTE_MAP};
 use crate::lang::{
     Instruction,
     control_asm::ControlASM,
-    variable::{Variable, VariableValue},
     environment_func::EnvironmentFunc,
-};
-use crate::compiler::bali::bali_ast::{
-    constants::NOTE_MAP,
-    concrete_fraction::ConcreteFraction,
+    variable::{Variable, VariableValue},
 };
 
 #[derive(Debug, Clone)]
@@ -21,26 +18,26 @@ impl Value {
     pub fn as_asm(&self) -> Instruction {
         match self {
             Value::Number(n) => {
-                let (signe, n) = if *n < 0 {
-                    (-1, -*n)
-                } else {
-                    (1, *n)
-                };
+                let (signe, n) = if *n < 0 { (-1, -*n) } else { (1, *n) };
                 Instruction::Control(ControlASM::Push(Variable::Constant(
-                    VariableValue::Decimal(signe, n as u64, 1)
+                    VariableValue::Decimal(signe, n as u64, 1),
                 )))
-            },
+            }
             Value::Decimal(d) => {
                 let frac = ConcreteFraction::from_dec_string(d.clone());
                 Instruction::Control(ControlASM::Push(Variable::Constant(
-                    VariableValue::Decimal(frac.signe as i8, frac.numerator as u64, frac.denominator as u64)
+                    VariableValue::Decimal(
+                        frac.signe as i8,
+                        frac.numerator as u64,
+                        frac.denominator as u64,
+                    ),
                 )))
             }
             Value::Variable(s) => match Self::as_note(s) {
                 None => Instruction::Control(ControlASM::Push(Self::as_variable(s))),
                 Some(n) => Value::Number(*n).as_asm(),
             },
-            Value::String(s) => Instruction::Control(ControlASM::Push(s.clone().into()))
+            Value::String(s) => Instruction::Control(ControlASM::Push(s.clone().into())),
         }
     }
 

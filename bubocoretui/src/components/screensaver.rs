@@ -17,25 +17,25 @@ use std::time::Instant;
 
 /// Enum representing different bitfield patterns for the screensaver.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[allow(dead_code)] 
+#[allow(dead_code)]
 pub enum BitfieldPattern {
-    AndXorTime,     // (x & y) ^ t
-    XorXorTime,     // x ^ y ^ t
-    OrXorTime,      // (x | y) ^ t
-    AndAddOrTime,   // x.wrapping_add(y).wrapping_add(t_int),
-    XorAndOrTime,   // (x ^ y) & (x | y) & t_int,
-    XorAddTime,     // x.wrapping_add(y) ^ t_int,
-    MulXorTime,     // x.wrapping_mul(y) ^ t_int,
-    ShiftXorY,      // (x << (t % 4)) ^ y
-    AddSubXor,      // (x + t) ^ (y - t)
-    OrAndXor,       // (x | t) ^ (y & t)
-    ModXorY,        // (x % (t|1)) ^ y
-    MulAddXor,      // x.wrapping_mul(y.wrapping_add(t))
-    DiagWave,       // (x + y + t) % M (simple diagonal wave)
-    ExpandingSquare, // (x.max(y) + t) % M (expanding squares)
+    AndXorTime,        // (x & y) ^ t
+    XorXorTime,        // x ^ y ^ t
+    OrXorTime,         // (x | y) ^ t
+    AndAddOrTime,      // x.wrapping_add(y).wrapping_add(t_int),
+    XorAndOrTime,      // (x ^ y) & (x | y) & t_int,
+    XorAddTime,        // x.wrapping_add(y) ^ t_int,
+    MulXorTime,        // x.wrapping_mul(y) ^ t_int,
+    ShiftXorY,         // (x << (t % 4)) ^ y
+    AddSubXor,         // (x + t) ^ (y - t)
+    OrAndXor,          // (x | t) ^ (y & t)
+    ModXorY,           // (x % (t|1)) ^ y
+    MulAddXor,         // x.wrapping_mul(y.wrapping_add(t))
+    DiagWave,          // (x + y + t) % M (simple diagonal wave)
+    ExpandingSquare,   // (x.max(y) + t) % M (expanding squares)
     XorDistFromCenter, // ((dx*dx + dy*dy).sqrt() ^ t) % M (needs center calc)
-    TanXYT,         // ((tan(x*t*0.01) * tan(y*t*0.01)) * 100) % M (needs float calc)
-    PatternCount, // Helper (MUST BE LAST)
+    TanXYT,            // ((tan(x*t*0.01) * tan(y*t*0.01)) * 100) % M (needs float calc)
+    PatternCount,      // Helper (MUST BE LAST)
 }
 
 impl BitfieldPattern {
@@ -139,19 +139,27 @@ impl Component for ScreensaverComponent {
                         cell.set_style(cell_style);
                     }
                 } else {
-                     // Fallback for safety, should not happen with modulo
-                     let position: ratatui::layout::Position = (col, row).into();
-                     if let Some(cell) = buf.cell_mut(position) {
+                    // Fallback for safety, should not happen with modulo
+                    let position: ratatui::layout::Position = (col, row).into();
+                    if let Some(cell) = buf.cell_mut(position) {
                         cell.set_char('?');
                         cell.set_style(Style::default().fg(Color::Red));
-                     }
+                    }
                 }
             }
         }
     }
 }
 
-fn calculate_screensaver_value(pattern: BitfieldPattern, x: u16, y: u16, t_int: u16, center_x: u16, center_y: u16, max_val: u16) -> u16 {
+fn calculate_screensaver_value(
+    pattern: BitfieldPattern,
+    x: u16,
+    y: u16,
+    t_int: u16,
+    center_x: u16,
+    center_y: u16,
+    max_val: u16,
+) -> u16 {
     // Calculate the raw value based on the pattern
     let raw_val = match pattern {
         BitfieldPattern::AndXorTime => (x & y) ^ t_int,
@@ -174,13 +182,13 @@ fn calculate_screensaver_value(pattern: BitfieldPattern, x: u16, y: u16, t_int: 
             // Use f32 for sqrt, then cast back
             let dist = ((dx as f32 * dx as f32 + dy as f32 * dy as f32).sqrt()) as u16;
             dist ^ t_int
-        },
+        }
         BitfieldPattern::TanXYT => {
             let tan_x = (x as f32 * t_int as f32 * 0.01).tan();
             let tan_y = (y as f32 * t_int as f32 * 0.01).tan();
             // Multiply, scale, ensure it's positive before casting
-            ( (tan_x * tan_y * 100.0).abs() ) as u16
-        },
+            ((tan_x * tan_y * 100.0).abs()) as u16
+        }
         BitfieldPattern::PatternCount => 0, // Default/fallback
     };
 

@@ -1,19 +1,10 @@
-use std::cmp::Ordering;
 use crate::compiler::bali::bali_ast::{
-    concrete_fraction::ConcreteFraction,
-    toplevel_effect::TopLevelEffect,
-    bali_context::BaliContext,
-    LocalChoiceVariableGenerator,
-    AltVariableGenerator,
-    constants::LOCAL_TARGET_VAR,
-    information::Information,
-    function::FunctionContent,
+    AltVariableGenerator, LocalChoiceVariableGenerator, bali_context::BaliContext,
+    concrete_fraction::ConcreteFraction, constants::LOCAL_TARGET_VAR, function::FunctionContent,
+    information::Information, toplevel_effect::TopLevelEffect,
 };
-use crate::lang::{
-    Instruction,
-    control_asm::ControlASM,
-    variable::Variable,
-};
+use crate::lang::{Instruction, control_asm::ControlASM, variable::Variable};
+use std::cmp::Ordering;
 
 use std::collections::HashMap;
 
@@ -69,7 +60,12 @@ impl TimeStatement {
             | TimeStatement::JustBefore(t, x, context, infos)
             | TimeStatement::JustAfter(t, x, context, infos) => {
                 if infos.len() == 0 {
-                    return x.as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    return x.as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                 }
 
                 // handle choices (? ...), picks (pick ...), and alt (alt ...)
@@ -403,4 +399,3 @@ impl PartialEq for TimeStatement {
 }
 
 impl Eq for TimeStatement {}
-

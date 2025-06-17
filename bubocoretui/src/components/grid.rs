@@ -1,34 +1,33 @@
 use crate::app::App;
-use bubocorelib::shared_types::GridSelection;
 use crate::components::grid::{
-    utils::{GridCellData, GridRenderInfo},
-    input_prompt::InputPromptWidget,
     cell_renderer::GridCellRenderer,
-    table::GridTableWidget,
     help::GridHelpPopupWidget,
+    input_prompt::InputPromptWidget,
+    table::GridTableWidget,
+    utils::{GridCellData, GridRenderInfo},
 };
+use bubocorelib::shared_types::GridSelection;
 use ratatui::layout::{Alignment, Constraint, Direction, Layout, Rect};
 use ratatui::text::Line;
 use ratatui::{prelude::*, widgets::*};
 
-mod cell_style;
 mod cell_renderer;
-pub mod utils;
-mod input_prompt;
-mod table;
+mod cell_style;
 mod help;
 mod input;
-
+mod input_prompt;
+mod table;
+pub mod utils;
 
 /// A component that renders and manages the grid view of the timeline.
-/// 
+///
 /// This component is responsible for displaying the timeline grid, handling user interactions,
 /// and managing the visual representation of frames, lines, and their states. It coordinates
 /// with the application state to render the grid and process user input.
 pub struct GridComponent;
 
 /// Defines the layout areas for the grid component's various UI elements.
-/// 
+///
 /// This struct holds the rectangular areas (Rect) for different parts of the grid interface:
 /// - `table_area`: The main area where the grid table is rendered
 /// - `length_prompt_area`: Area for the frame length input prompt
@@ -102,19 +101,16 @@ impl GridComponent {
         self.render_outer_block(frame, area, scene_length, scroll_offset, Some(render_info));
         self.render_input_prompts(app, frame, &layout_areas);
         if let Some(scene) = &app.editor.scene {
-            let grid_table_widget = GridTableWidget::new(
-                app,
-                scene,
-                scroll_offset,
-                visible_height,
-            );
+            let grid_table_widget = GridTableWidget::new(app, scene, scroll_offset, visible_height);
             frame.render_widget(grid_table_widget, layout_areas.table_area);
         } else {
             // Render empty state directly in the table area if no scene
             // Note: GridTableWidget::render_empty_state is static, so we call it like this
             // We need a buffer though... rendering directly to frame might be easier here.
-            let empty_paragraph = Paragraph::new("No scene loaded from server.").yellow().centered();
-            frame.render_widget(empty_paragraph, layout_areas.table_area); 
+            let empty_paragraph = Paragraph::new("No scene loaded from server.")
+                .yellow()
+                .centered();
+            frame.render_widget(empty_paragraph, layout_areas.table_area);
             // Ensure render info is cleared if no scene
             app.interface.components.last_grid_render_info = None;
         }
@@ -161,11 +157,7 @@ impl GridComponent {
         }
     }
 
-    fn calculate_layout(
-        &self,
-        app: &App,
-        area: Rect,
-    ) -> Option<GridLayoutAreas> {
+    fn calculate_layout(&self, app: &App, area: Rect) -> Option<GridLayoutAreas> {
         // Need at least some space for borders + title + content (Thick border = 2 horiz, 2 vert)
         if area.width < 2 || area.height < 2 {
             return None;
@@ -296,8 +288,7 @@ impl GridComponent {
         frame.render_widget(outer_block.clone(), area);
 
         // Need at least some space to draw anything inside
-        if inner_area.width < 1 || inner_area.height < 2 {
-        }
+        if inner_area.width < 1 || inner_area.height < 2 {}
     }
 
     fn render_input_prompts(&self, app: &App, frame: &mut Frame, layout: &GridLayoutAreas) {
@@ -313,7 +304,7 @@ impl GridComponent {
 
         // Render input prompt for inserting frame if active
         if app.interface.components.is_inserting_frame_duration {
-             let prompt_widget = InputPromptWidget::new(
+            let prompt_widget = InputPromptWidget::new(
                 &app.interface.components.insert_duration_input,
                 "Insert Frame Duration (Enter: Confirm, Esc: Cancel)".to_string(),
                 Style::default().fg(Color::Cyan),
@@ -334,7 +325,7 @@ impl GridComponent {
             let prompt_widget = InputPromptWidget::new(
                 &app.interface.components.scene_length_input,
                 "Set Scene Length (Enter: Confirm, Esc: Cancel)".to_string(),
-                 Style::default().fg(Color::Yellow),
+                Style::default().fg(Color::Yellow),
             );
             frame.render_widget(prompt_widget, layout.scene_length_prompt_area);
         }

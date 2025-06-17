@@ -10,21 +10,11 @@
 */
 
 use crate::compiler::bali::bali_ast::constants::{
-    DEBUG_TIME_STATEMENTS,
-    DEBUG_FUNCTIONS,
-    DEFAULT_CHAN,
-    DEFAULT_DEVICE,
-    DEFAULT_VELOCITY,
-    DEFAULT_DURATION,
-    LOCAL_TARGET_VAR,
-    LOCAL_PICK_VAR,
-    LOCAL_ALT_VAR,
+    DEBUG_FUNCTIONS, DEBUG_TIME_STATEMENTS, DEFAULT_CHAN, DEFAULT_DEVICE, DEFAULT_DURATION,
+    DEFAULT_VELOCITY, LOCAL_ALT_VAR, LOCAL_PICK_VAR, LOCAL_TARGET_VAR,
 };
 use crate::lang::{
-    Instruction, Program,
-    control_asm::ControlASM,
-    environment_func::EnvironmentFunc,
-    event::Event,
+    Instruction, Program, control_asm::ControlASM, environment_func::EnvironmentFunc, event::Event,
     variable::Variable,
 };
 use std::collections::HashMap;
@@ -32,43 +22,41 @@ use std::collections::HashMap;
 pub type BaliProgram = Vec<Statement>;
 pub type BaliPreparedProgram = Vec<TimeStatement>;
 
-pub mod fraction;
-pub mod bali_context;
-pub mod concrete_fraction;
-pub mod expression;
-pub mod loop_context;
-pub mod time_statement;
-pub mod information;
-pub mod statement;
-pub mod effect;
-pub mod boolean;
-pub mod value;
-pub mod toplevel_effect;
-pub mod constants;
-pub mod variable_generators;
 pub mod abstract_effect;
-pub mod args;
 pub mod abstract_statement;
+pub mod args;
+pub mod bali_context;
+pub mod boolean;
+pub mod concrete_fraction;
+pub mod constants;
+pub mod effect;
+pub mod expression;
+pub mod fraction;
 pub mod function;
+pub mod information;
+pub mod loop_context;
+pub mod statement;
+pub mod time_statement;
+pub mod toplevel_effect;
+pub mod value;
+pub mod variable_generators;
 
-pub use fraction::Fraction;
-pub use variable_generators::{
-    ChoiceVariableGenerator,
-    LocalChoiceVariableGenerator,
-    AltVariableGenerator,
-};
 pub use bali_context::BaliContext;
-pub use concrete_fraction::ConcreteFraction;
-pub use expression::Expression;
-pub use loop_context::LoopContext;
-pub use time_statement::TimeStatement;
-pub use information::TimingInformation;
-pub use statement::Statement;
-pub use effect::Effect;
 pub use boolean::BooleanExpression;
-pub use value::Value;
-pub use toplevel_effect::TopLevelEffect;
+pub use concrete_fraction::ConcreteFraction;
+pub use effect::Effect;
+pub use expression::Expression;
+pub use fraction::Fraction;
 pub use function::FunctionContent;
+pub use information::TimingInformation;
+pub use loop_context::LoopContext;
+pub use statement::Statement;
+pub use time_statement::TimeStatement;
+pub use toplevel_effect::TopLevelEffect;
+pub use value::Value;
+pub use variable_generators::{
+    AltVariableGenerator, ChoiceVariableGenerator, LocalChoiceVariableGenerator,
+};
 
 pub fn bali_as_asm(prog: BaliProgram) -> Result<Program, String> {
     let mut res: Program = Vec::new();
@@ -99,7 +87,7 @@ pub fn bali_as_asm(prog: BaliProgram) -> Result<Program, String> {
 
     // Ensure there is no invalid function
     if let Err(info) = functions {
-        return Err(info)
+        return Err(info);
     }
     let functions = functions.unwrap();
 
@@ -109,7 +97,12 @@ pub fn bali_as_asm(prog: BaliProgram) -> Result<Program, String> {
             print!("Function {}: {:?}\n", func_name, func_content);
         }
 
-        res.push(func_content.as_asm(func_name, &mut local_choice_variables, &mut local_alt_variables, &functions));
+        res.push(func_content.as_asm(
+            func_name,
+            &mut local_choice_variables,
+            &mut local_alt_variables,
+            &functions,
+        ));
     }
 
     // Transform Statements into TimeStatements in order to handle timings
@@ -120,7 +113,6 @@ pub fn bali_as_asm(prog: BaliProgram) -> Result<Program, String> {
         &mut pick_variables,
         &mut alt_variables,
     );
-
 
     let mut set_pick_variables: Vec<bool> = Vec::new();
     for _i in 0..pick_variables.get_num_variables() {
@@ -284,14 +276,12 @@ pub fn expend_prog(
         .collect()
 }
 
-pub fn get_functions(
-    prog: &BaliProgram,
-) -> Result<HashMap<String, FunctionContent>, String> {
+pub fn get_functions(prog: &BaliProgram) -> Result<HashMap<String, FunctionContent>, String> {
     let mut functions_map = HashMap::new();
     for statement in prog.iter() {
         let result = statement.get_function(&mut functions_map);
         if let Err(e) = result {
-            return Err(e)
+            return Err(e);
         }
     }
     Ok(functions_map)

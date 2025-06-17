@@ -1,16 +1,16 @@
-use ratatui::{
-    widgets::{Block, Borders, Cell, Row, Table, Widget}, 
-    prelude::{Constraint, Color, Rect, Style, Modifier}
-};
 use bubocorelib::shared_types::DeviceInfo;
+use ratatui::{
+    prelude::{Color, Constraint, Modifier, Rect, Style},
+    widgets::{Block, Borders, Cell, Row, Table, Widget},
+};
 
 /// A widget that displays a table of devices (MIDI or OSC) with their properties.
-/// 
+///
 /// The table shows different columns and styling based on the device type (MIDI or OSC).
 /// It supports selection highlighting and connection/disconnection animations.
-/// 
+///
 /// # Fields
-/// 
+///
 /// * `devices` - A slice of device information to display in the table
 /// * `selected_index` - The index of the currently selected device in the list
 /// * `tab_index` - The active tab (0 for MIDI, 1 for OSC) which determines table layout
@@ -25,13 +25,13 @@ pub struct DeviceTable<'a> {
 }
 
 impl<'a> Widget for DeviceTable<'a> {
-
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         let headers: Vec<&str>;
         let col_widths: Vec<Constraint>;
         let highlight_color: Color;
 
-        if self.tab_index == 0 { // MIDI
+        if self.tab_index == 0 {
+            // MIDI
             headers = vec!["Slot", "Status", "Name", "Type"];
             col_widths = vec![
                 Constraint::Length(6),
@@ -40,9 +40,10 @@ impl<'a> Widget for DeviceTable<'a> {
                 Constraint::Length(10),
             ];
             highlight_color = Color::Yellow;
-        } else { // OSC
+        } else {
+            // OSC
             headers = vec!["Slot", "Status", "Name", "Address"];
-             col_widths = vec![
+            col_widths = vec![
                 Constraint::Length(6),
                 Constraint::Length(8),
                 Constraint::Min(15),
@@ -62,7 +63,8 @@ impl<'a> Widget for DeviceTable<'a> {
             .style(Style::default().bg(Color::DarkGray))
             .height(1);
 
-        let rows = self.devices
+        let rows = self
+            .devices
             .iter()
             .enumerate()
             .map(|(visual_index, device)| {
@@ -86,8 +88,8 @@ impl<'a> Widget for DeviceTable<'a> {
                 let slot_cell = Cell::from(slot_display);
                 let name_cell = Cell::from(device.name.as_str());
 
-
-                if self.tab_index == 0 { // MIDI specific cells
+                if self.tab_index == 0 {
+                    // MIDI specific cells
                     let status_text = if is_animated {
                         self.animation_char.unwrap_or("◯")
                     } else if device.is_connected {
@@ -103,14 +105,14 @@ impl<'a> Widget for DeviceTable<'a> {
                     let status_cell =
                         Cell::from(status_text).style(Style::default().fg(status_color));
                     let type_cell = Cell::from("MIDI");
-                     Row::new(vec![slot_cell, status_cell, name_cell, type_cell])
+                    Row::new(vec![slot_cell, status_cell, name_cell, type_cell])
                         .style(row_style)
                         .height(1)
-
-                } else { // OSC specific cells
-                     let status_text = "Active"; // Assuming OSC is always "Active" if listed
-                     let status_color = Color::Cyan;
-                     let status_cell =
+                } else {
+                    // OSC specific cells
+                    let status_text = "Active"; // Assuming OSC is always "Active" if listed
+                    let status_color = Color::Cyan;
+                    let status_cell =
                         Cell::from(status_text).style(Style::default().fg(status_color));
                     let addr_display = device.address.clone().unwrap_or_else(|| "N/A".to_string());
                     let addr_cell = Cell::from(addr_display);

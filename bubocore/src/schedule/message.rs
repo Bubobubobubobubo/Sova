@@ -1,10 +1,9 @@
-use crate::scene::{Scene, line::Line};
+use super::DuplicatedFrameData;
 use crate::scene::script::Script;
+use crate::scene::{Scene, line::Line};
 use crate::schedule::action_timing::ActionTiming;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use super::DuplicatedFrameData;
-
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SchedulerMessage {

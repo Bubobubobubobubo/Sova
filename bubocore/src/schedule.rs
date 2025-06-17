@@ -1,3 +1,22 @@
+use crate::{
+    clock::{Clock, ClockServer, SyncTime},
+    device_map::DeviceMap,
+    lang::event::ConcreteEvent,
+    lang::variable::VariableStore,
+    protocol::{
+        message::{ProtocolMessage, TimedMessage},
+        payload::{AudioEnginePayload, ProtocolPayload},
+    },
+    scene::{
+        Scene,
+        line::Line,
+        script::{Script, ScriptExecution},
+    },
+    schedule::{
+        action_timing::ActionTiming, message::SchedulerMessage, notification::SchedulerNotification,
+    },
+};
+use serde::{Deserialize, Serialize};
 use std::{
     sync::{
         Arc,
@@ -8,34 +27,12 @@ use std::{
     time::Duration,
     usize,
 };
-use serde::{Deserialize, Serialize};
 use thread_priority::ThreadBuilder;
-use crate::{
-    clock::{Clock, ClockServer, SyncTime},
-    device_map::DeviceMap,
-    lang::event::ConcreteEvent,
-    lang::variable::VariableStore,
-    protocol::{
-        message::{TimedMessage, ProtocolMessage},
-        payload::{ProtocolPayload, AudioEnginePayload},
-    },
-    scene::{
-        line::Line,
-        script::{Script, ScriptExecution},
-        Scene,
-    },
-    schedule::{
-        notification::SchedulerNotification,
-        action_timing::ActionTiming,
-        message::SchedulerMessage,
-    },
-};
 pub mod action_timing;
-pub mod notification;
 pub mod message;
+pub mod notification;
 
 pub const SCHEDULED_DRIFT: SyncTime = 30_000;
-
 
 // Helper struct for InternalDuplicateFrame
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,11 +41,8 @@ pub struct DuplicatedFrameData {
     pub is_enabled: bool,
     pub script: Option<Arc<Script>>,
     pub name: Option<String>, // Added frame name
-    pub repetitions: usize, // Added frame repetitions
+    pub repetitions: usize,   // Added frame repetitions
 }
-
-
-
 
 /// Internal playback state for the scheduler
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -215,9 +209,8 @@ impl Scheduler {
 
                 // Calculate which repetition we are currently in (0-based)
                 let beat_within_frame = beat_in_effective_loop - cumulative_beats_in_line;
-                let current_repetition_index = (beat_within_frame / single_rep_len_beats)
-                    .floor()
-                    .max(0.0) as usize;
+                let current_repetition_index =
+                    (beat_within_frame / single_rep_len_beats).floor().max(0.0) as usize;
                 // Clamp to max possible index
                 let current_repetition_index = current_repetition_index.min(total_repetitions - 1);
 
@@ -248,7 +241,7 @@ impl Scheduler {
                 return (
                     absolute_frame_index,
                     loop_iteration,
-                    current_repetition_index, // Return 0-based index
+                    current_repetition_index,      // Return 0-based index
                     current_repetition_start_date, // Start date of the *current* repetition
                     next_event_delay,
                 );
@@ -542,7 +535,7 @@ impl Scheduler {
                             line.set_script(current_insert_idx, default_script);
                         }
                         line.set_frame_name(current_insert_idx, frame_data.name);
-                        // --- Add frame repetition setting --- 
+                        // --- Add frame repetition setting ---
                         line.frame_repetitions[current_insert_idx] = frame_data.repetitions.max(1); // Ensure at least 1
                         // ----------------------------------
                         current_insert_idx += 1; // Increment index for the next frame
@@ -668,7 +661,8 @@ impl Scheduler {
                                 // --- Add frame name setting ---
                                 line.set_frame_name(current_insert_idx, frame_data.name); // Use frame_data.name here
                                 // --- Add frame repetition setting ---
-                                line.frame_repetitions[current_insert_idx] = frame_data.repetitions.max(1);
+                                line.frame_repetitions[current_insert_idx] =
+                                    frame_data.repetitions.max(1);
                                 // ----------------------------------
                                 // ------------------------------
                                 current_insert_idx += 1;
@@ -730,15 +724,17 @@ impl Scheduler {
                     if frame_idx < line.frame_repetitions.len() {
                         line.frame_repetitions[frame_idx] = repetitions.max(1); // Ensure at least 1 repetition
                         self.processed_scene_modification = true;
-                        let _ = self.update_notifier.send(SchedulerNotification::UpdatedLine(line_idx, line.clone()));
+                        let _ = self
+                            .update_notifier
+                            .send(SchedulerNotification::UpdatedLine(line_idx, line.clone()));
                     } else {
-                         eprintln!(
+                        eprintln!(
                             "[!] Scheduler::set_frame_repetitions: Invalid frame index {} for line {}",
                             frame_idx, line_idx
                         );
                     }
                 } else {
-                     eprintln!(
+                    eprintln!(
                         "[!] Scheduler::set_frame_repetitions: Invalid line index {}",
                         line_idx
                     );
@@ -769,7 +765,9 @@ impl Scheduler {
             | SchedulerMessage::SetLineLength(_, _, t)
             | SchedulerMessage::SetLineSpeedFactor(_, _, t) => *t,
             SchedulerMessage::SetScene(_, t) => *t,
-            SchedulerMessage::UploadScene(_) | SchedulerMessage::AddLine | SchedulerMessage::Shutdown => ActionTiming::Immediate,
+            SchedulerMessage::UploadScene(_)
+            | SchedulerMessage::AddLine
+            | SchedulerMessage::Shutdown => ActionTiming::Immediate,
             SchedulerMessage::TransportStart(t) | SchedulerMessage::TransportStop(t) => *t,
             SchedulerMessage::InternalDuplicateFrame { timing, .. } => *timing,
             SchedulerMessage::InternalDuplicateFrameRange { timing, .. } => *timing,
@@ -881,7 +879,7 @@ impl Scheduler {
             if self.shutdown_requested {
                 break;
             }
-            
+
             self.processed_scene_modification = false;
             self.clock.capture_app_state();
 
@@ -1004,7 +1002,8 @@ impl Scheduler {
                                     Self::frame_index(&self.clock, scene_len, line, start_date);
                                 if frame == line.get_effective_start_frame()
                                     && line.is_frame_enabled(frame)
-                                    && iter == 0 && rep == 0
+                                    && iter == 0
+                                    && rep == 0
                                 {
                                     let script = Arc::clone(&line.scripts[frame]);
                                     self.executions.push(ScriptExecution::execute_at(
@@ -1065,8 +1064,7 @@ impl Scheduler {
                             // Store frame and repetition index
                             current_positions.push((frame, rep));
 
-                            let has_changed =
-                                (frame != line.current_frame)
+                            let has_changed = (frame != line.current_frame)
                                 || (iter != line.current_iteration)
                                 || (rep != line.current_repetition);
 
@@ -1079,10 +1077,7 @@ impl Scheduler {
                             }
 
                             // Queue script if frame/iter/rep changed and frame is valid/enabled
-                            if frame < usize::MAX
-                                && has_changed
-                                && line.is_frame_enabled(frame)
-                            {
+                            if frame < usize::MAX && has_changed && line.is_frame_enabled(frame) {
                                 let script = Arc::clone(&line.scripts[frame]);
                                 self.executions.push(ScriptExecution::execute_at(
                                     script,
@@ -1091,7 +1086,7 @@ impl Scheduler {
                                 ));
                                 // Only increment executed if frame or iteration changed
                                 if frame != line.current_frame || iter != line.current_iteration {
-                                     line.frames_executed += 1;
+                                    line.frames_executed += 1;
                                 }
                             }
                             // Update state *after* checks
@@ -1201,7 +1196,7 @@ impl Scheduler {
                         // Collect AudioEngine events to handle outside closure
                         audio_engine_events.push((event.clone(), date));
                         None
-                    },
+                    }
                     ConcreteEvent::Nop => None,
                 };
 
@@ -1273,10 +1268,7 @@ impl Scheduler {
     fn handle_audio_engine_event(&self, event: ConcreteEvent, date: SyncTime) {
         if let ConcreteEvent::AudioEngine { args, device_id } = event {
             // Convert ConcreteEvent::AudioEngine to AudioEnginePayload
-            let audio_payload = AudioEnginePayload {
-                args,
-                device_id,
-            };
+            let audio_payload = AudioEnginePayload { args, device_id };
 
             // Create a ProtocolMessage with AudioEngine device and payload
             let protocol_message = ProtocolMessage {

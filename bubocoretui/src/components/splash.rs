@@ -49,7 +49,6 @@ pub enum ConnectionField {
 }
 
 impl ConnectionState {
-
     pub fn new(initial_ip: &str, initial_port: u16, initial_username: &str) -> Self {
         let mut ip_input = TextArea::new(vec![initial_ip.to_string()]);
 
@@ -99,7 +98,7 @@ impl ConnectionState {
     ///
     /// # Returns
     ///
-    /// * `Result<(), String>`: 
+    /// * `Result<(), String>`:
     ///     - `Ok(())` if the IP address is valid
     ///     - `Err(String)` with an error message if the IP address is invalid
     ///
@@ -130,7 +129,7 @@ impl ConnectionState {
     ///
     /// # Returns
     ///
-    /// * `Result<u16, String>`: 
+    /// * `Result<u16, String>`:
     ///     - `Ok(u16)` containing the valid port number if validation succeeds
     ///     - `Err(String)` with an error message if the port is invalid
     ///
@@ -162,7 +161,7 @@ impl ConnectionState {
     ///
     /// # Returns
     ///
-    /// * `Result<(), String>`: 
+    /// * `Result<(), String>`:
     ///     - `Ok(())` if the username is valid
     ///     - `Err(String)` with an error message if the username is invalid
     ///
@@ -272,11 +271,11 @@ impl ConnectionState {
 }
 
 /// A component that handles the initial connection screen of the application.
-/// 
+///
 /// The `SplashComponent` manages the user interface for connecting to a server,
 /// including input fields for IP address, port, and username. It provides
 /// validation of connection parameters and handles the connection process.
-/// 
+///
 /// This component is typically the first screen shown to users when they launch
 /// the application, allowing them to establish their initial connection to a
 /// BuboCore server.
@@ -295,7 +294,6 @@ impl SplashComponent {
 }
 
 impl Component for SplashComponent {
-
     fn handle_key_event(&mut self, app: &mut App, key_event: KeyEvent) -> EyreResult<bool> {
         if app.server.connection_state.is_none() {
             app.init_connection_state();

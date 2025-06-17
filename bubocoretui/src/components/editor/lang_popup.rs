@@ -1,14 +1,11 @@
 use crate::app::App;
-use bubocorelib::{
-    schedule::action_timing::ActionTiming,
-    server::client::ClientMessage
-};
+use bubocorelib::{schedule::action_timing::ActionTiming, server::client::ClientMessage};
 use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
-    prelude::{Constraint, Layout, Modifier, Rect, Color, Style},
-    widgets::{Block, Borders, Clear, List, ListItem, ListState, BorderType},
     Frame,
+    prelude::{Color, Constraint, Layout, Modifier, Rect, Style},
+    widgets::{Block, BorderType, Borders, Clear, List, ListItem, ListState},
 };
 use std::cmp::min;
 
@@ -49,8 +46,7 @@ pub fn handle_lang_popup_input(app: &mut App, key_event: KeyEvent) -> EyreResult
             Ok(true)
         }
         KeyCode::Up | KeyCode::Char('k') => {
-            app.editor.selected_lang_index =
-                app.editor.selected_lang_index.saturating_sub(1);
+            app.editor.selected_lang_index = app.editor.selected_lang_index.saturating_sub(1);
             Ok(true)
         }
         KeyCode::Down | KeyCode::Char('j') => {
@@ -103,7 +99,7 @@ pub fn handle_lang_popup_input(app: &mut App, key_event: KeyEvent) -> EyreResult
 /// * `area` - The `Rect` defining the total area available for the editor, within which
 ///   the popup will be centered.
 pub fn render_lang_popup(app: &App, frame: &mut Frame, area: Rect) {
-     if !app.editor.is_lang_popup_active {
+    if !app.editor.is_lang_popup_active {
         return;
     }
 
@@ -141,7 +137,6 @@ pub fn render_lang_popup(app: &App, frame: &mut Frame, area: Rect) {
     frame.render_stateful_widget(list, popup_area, &mut list_state);
 }
 
-
 /// Helper function to create a centered rectangle with a fixed width and height.
 /// Calculates margins to center the inner rectangle within the outer rectangle `r`.
 ///
@@ -174,4 +169,4 @@ fn centered_rect_fixed(width: u16, height: u16, r: Rect) -> Rect {
         Constraint::Length(horizontal_margin),
     ])
     .split(popup_layout[1])[1]
-} 
+}

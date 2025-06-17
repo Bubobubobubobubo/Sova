@@ -66,7 +66,7 @@ impl TimeSpan {
         }
     }
 
-     /// Divides one `TimeSpan` by another, converting them to a common unit based on the most specific type.
+    /// Divides one `TimeSpan` by another, converting them to a common unit based on the most specific type.
     /// Returns zero if the divisor is zero.
     ///
     /// The result type prioritizes `Frames`, then `Beats`, then `Micros`.
@@ -286,11 +286,13 @@ impl Clock {
     /// * `beats` - The number of beats relative to the current beat position.
     pub fn date_at_relative_beats(&self, beats: f64) -> SyncTime {
         let current_micros = self.server.link.clock_micros();
-        let current_beat = self.session_state.beat_at_time(current_micros, self.server.quantum);
+        let current_beat = self
+            .session_state
+            .beat_at_time(current_micros, self.server.quantum);
         let target_beat = current_beat + beats;
-        self.session_state.time_at_beat(target_beat, self.server.quantum) as SyncTime
+        self.session_state
+            .time_at_beat(target_beat, self.server.quantum) as SyncTime
     }
-
 
     /// Calculates the beat position corresponding to a specific absolute Link time (microseconds).
     ///
@@ -335,9 +337,9 @@ impl Clock {
     /// * `micros` - The duration in microseconds.
     pub fn micros_to_beats(&self, micros: SyncTime) -> f64 {
         let tempo = self.session_state.tempo();
-         // Avoid division by zero if tempo is somehow zero
+        // Avoid division by zero if tempo is somehow zero
         if tempo == 0.0 {
-             return 0.0; // Or perhaps return f64::INFINITY or NaN depending on desired behavior
+            return 0.0; // Or perhaps return f64::INFINITY or NaN depending on desired behavior
         }
         let beat_duration_micros = (60.0f64 / tempo) * 1_000_000.0;
         // Avoid division by zero if calculated beat duration is zero

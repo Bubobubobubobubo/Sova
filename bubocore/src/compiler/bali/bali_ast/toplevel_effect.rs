@@ -1,27 +1,15 @@
 use crate::{
-    lang::{
-        Instruction,
-        control_asm::ControlASM,
-        variable::Variable,
-        environment_func::EnvironmentFunc,
-    },
     compiler::bali::bali_ast::{
-        bali_context::BaliContext,
-        expression::Expression,
-        boolean::BooleanExpression,
-        effect::Effect,
-        LOCAL_PICK_VAR,
-        LOCAL_TARGET_VAR,
-        LOCAL_ALT_VAR,
-        LocalChoiceVariableGenerator,
-        AltVariableGenerator,
-        function::FunctionContent,
+        AltVariableGenerator, LOCAL_ALT_VAR, LOCAL_PICK_VAR, LOCAL_TARGET_VAR,
+        LocalChoiceVariableGenerator, bali_context::BaliContext, boolean::BooleanExpression,
+        effect::Effect, expression::Expression, function::FunctionContent,
+    },
+    lang::{
+        Instruction, control_asm::ControlASM, environment_func::EnvironmentFunc, variable::Variable,
     },
 };
 
-
 use std::collections::HashMap;
-
 
 #[derive(Debug, Clone)]
 pub enum TopLevelEffect {
@@ -39,7 +27,9 @@ impl TopLevelEffect {
     pub fn set_context(self, c: BaliContext) -> TopLevelEffect {
         match self {
             TopLevelEffect::Seq(es, seq_context) => TopLevelEffect::Seq(es, seq_context.update(c)),
-            TopLevelEffect::With(es, with_context) => TopLevelEffect::With(es, with_context.update(c)),
+            TopLevelEffect::With(es, with_context) => {
+                TopLevelEffect::With(es, with_context.update(c))
+            }
             TopLevelEffect::For(cond, es, for_context) => {
                 TopLevelEffect::For(cond, es, for_context.update(c))
             }
@@ -75,7 +65,12 @@ impl TopLevelEffect {
                 let mut res = Vec::new();
                 let context = seq_context.clone().update(context.clone());
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    let to_add = s[i].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                     res.extend(to_add);
                 }
                 res
@@ -98,7 +93,12 @@ impl TopLevelEffect {
                 let context = for_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    let to_add = s[i].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                     effects.extend(to_add);
                 }
 
@@ -135,7 +135,12 @@ impl TopLevelEffect {
                 let context = if_context.clone().update(context.clone());
                 let mut effects = Vec::new();
                 for i in 0..s.len() {
-                    let to_add = s[i].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    let to_add = s[i].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                     effects.extend(to_add);
                 }
 
@@ -236,8 +241,12 @@ impl TopLevelEffect {
                     }
 
                     // jump over effects if the choice don't select them
-                    let effect_prog =
-                        es[effect_pos].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    let effect_prog = es[effect_pos].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                     res.push(Instruction::Control(ControlASM::RelJump(
                         (effect_prog.len() + 1) as i64,
                     )));
@@ -282,7 +291,12 @@ impl TopLevelEffect {
                 let mut distance_to_effect = num_pick_instructions - num_pick_instruction_per_step;
                 let mut distance_to_end = 0;
                 for e in es.iter() {
-                    effect_progs.push(e.as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions));
+                    effect_progs.push(e.as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    ));
                     let new_effect_len = effect_progs[effect_number as usize].len() as i64 + 1; // +1 for the jumps that will be added later
                     distance_to_end += new_effect_len;
 
@@ -318,7 +332,12 @@ impl TopLevelEffect {
 
                 // no alt if only one effect
                 if es.len() == 1 {
-                    return es[0].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    return es[0].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                 }
 
                 let alt_variable = frame_variable;
@@ -340,8 +359,12 @@ impl TopLevelEffect {
                 for pos in 0..es.len() {
                     effect_progs.push(Vec::new());
 
-                    let this_effect_prog =
-                        es[pos].as_asm(context.clone(), local_choice_vars, local_alt_vars, &functions);
+                    let this_effect_prog = es[pos].as_asm(
+                        context.clone(),
+                        local_choice_vars,
+                        local_alt_vars,
+                        &functions,
+                    );
                     let distance_to_next_effect = this_effect_prog.len() as i64 + 1; // +1 for the jump after the effects
 
                     // Jump after the effects if they are not selected

@@ -16,10 +16,10 @@
 //! - `error`: Defines the unified `ProtocolError` type for handling errors
 //!   related to the different protocols.
 
+pub mod device;
+pub mod error;
 pub mod log;
+pub mod message;
 pub mod midi;
 pub mod osc;
 pub mod payload;
-pub mod message;
-pub mod device;
-pub mod error;

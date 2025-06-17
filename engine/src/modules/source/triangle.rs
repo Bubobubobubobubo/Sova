@@ -79,9 +79,9 @@ faust_macro::dsp!(
 
     drift_noise = no.noise : fi.lowpass(1, 0.5) : *(z3 * freq * 0.05);
     wobble_lfo = os.lf_triangle(0.2 + z4 * 3.8) * z4 * freq * 0.01;
-    
+
     modulated_freq = freq + drift_noise + wobble_lfo;
-    
+
     triangle_osc = os.triangle(modulated_freq);
 
     wavefolder = _ : *(1 + z1 * 5) : wavefold_process

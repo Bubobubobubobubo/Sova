@@ -3,7 +3,7 @@ use bubocorelib::{
     device_map::DeviceMap,
     lang::{Instruction, Program, event::Event},
     protocol::midi::{MidiInterface, MidiOut},
-    scene::{line::Line, Scene},
+    scene::{Scene, line::Line},
     schedule::{Scheduler, message::SchedulerMessage},
     world::World,
 };

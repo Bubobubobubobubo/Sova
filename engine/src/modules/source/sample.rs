@@ -134,40 +134,50 @@ impl StereoSampler {
         (begin_sample, end_sample)
     }
 
-    fn interpolate_sample(&self, sample_data: &[f32], pos: f32, begin_sample: usize, effective_length: usize) -> Frame {
+    fn interpolate_sample(
+        &self,
+        sample_data: &[f32],
+        pos: f32,
+        begin_sample: usize,
+        effective_length: usize,
+    ) -> Frame {
         let sample_pos = pos * effective_length as f32;
         let pos_int = sample_pos.floor() as usize;
         let pos_frac = sample_pos - pos_int as f32;
 
-        let current_idx = (begin_sample + pos_int).min(begin_sample + effective_length.saturating_sub(1));
+        let current_idx =
+            (begin_sample + pos_int).min(begin_sample + effective_length.saturating_sub(1));
         let next_idx = if pos_int + 1 < effective_length {
             (begin_sample + pos_int + 1).min(begin_sample + effective_length.saturating_sub(1))
         } else if self.should_loop() {
-            begin_sample  // Loop back to beginning
+            begin_sample // Loop back to beginning
         } else {
-            current_idx  // Use current sample to avoid clicks
+            current_idx // Use current sample to avoid clicks
         };
 
         // Graceful boundary handling - avoid abrupt cutoffs
         let (left1, right1) = if current_idx * 2 + 1 < sample_data.len() {
-            (sample_data[current_idx * 2], sample_data[current_idx * 2 + 1])
+            (
+                sample_data[current_idx * 2],
+                sample_data[current_idx * 2 + 1],
+            )
         } else if current_idx * 2 < sample_data.len() {
-            (sample_data[current_idx * 2], sample_data[current_idx * 2])  // Mono fallback
+            (sample_data[current_idx * 2], sample_data[current_idx * 2]) // Mono fallback
         } else {
-            (0.0, 0.0)  // Silence only if completely out of bounds
+            (0.0, 0.0) // Silence only if completely out of bounds
         };
 
         let (left2, right2) = if next_idx * 2 + 1 < sample_data.len() {
             (sample_data[next_idx * 2], sample_data[next_idx * 2 + 1])
         } else if next_idx * 2 < sample_data.len() {
-            (sample_data[next_idx * 2], sample_data[next_idx * 2])  // Mono fallback
+            (sample_data[next_idx * 2], sample_data[next_idx * 2]) // Mono fallback
         } else {
-            (left1, right1)  // Use current sample to avoid clicks
+            (left1, right1) // Use current sample to avoid clicks
         };
 
         let left = left1 + (left2 - left1) * pos_frac;
         let right = right1 + (right2 - right1) * pos_frac;
-        
+
         Frame::new(left, right)
     }
 
@@ -181,7 +191,7 @@ impl StereoSampler {
         // But we need to account for sample rate conversion if the sample has a different rate
         // For now, assume sample is at the same rate as the engine
         let position_increment = speed / effective_length as f32;
-        
+
         self.playback_position += position_increment;
 
         // Don't immediately deactivate - let handle_looping deal with boundaries
@@ -268,7 +278,7 @@ impl Source for StereoSampler {
 
         let (begin_sample, end_sample) = self.get_sample_bounds(sample_length);
         let effective_length = end_sample.saturating_sub(begin_sample);
-        
+
         if effective_length == 0 {
             buffer.fill(Frame::ZERO);
             return;
@@ -295,7 +305,12 @@ impl Source for StereoSampler {
             };
 
             let sample_data = self.sample_data.as_ref().unwrap();
-            *frame = self.interpolate_sample(sample_data, normalized_pos, begin_sample, effective_length);
+            *frame = self.interpolate_sample(
+                sample_data,
+                normalized_pos,
+                begin_sample,
+                effective_length,
+            );
 
             // Only stop if inactive after processing this frame
             if !self.is_active {

@@ -151,21 +151,22 @@ impl ClientMessage {
     pub fn compression_strategy(&self) -> CompressionStrategy {
         match self {
             // Real-time/frequent messages that should never be compressed
-            ClientMessage::UpdateGridSelection(_) |
-            ClientMessage::StartedEditingFrame(_, _) |
-            ClientMessage::StoppedEditingFrame(_, _) |
-            ClientMessage::GetClock |
-            ClientMessage::GetPeers |
-            ClientMessage::GetScript(_, _) |
-            ClientMessage::GetScene |
-            ClientMessage::GetSnapshot |
-            ClientMessage::GetSceneLength |
-            ClientMessage::RequestDeviceList => CompressionStrategy::Never,
-            
-            // Large content messages that should always be compressed if beneficial  
-            ClientMessage::SetScript(_, _, _, _) |
-            ClientMessage::SetScene(_, _) => CompressionStrategy::Always,
-            
+            ClientMessage::UpdateGridSelection(_)
+            | ClientMessage::StartedEditingFrame(_, _)
+            | ClientMessage::StoppedEditingFrame(_, _)
+            | ClientMessage::GetClock
+            | ClientMessage::GetPeers
+            | ClientMessage::GetScript(_, _)
+            | ClientMessage::GetScene
+            | ClientMessage::GetSnapshot
+            | ClientMessage::GetSceneLength
+            | ClientMessage::RequestDeviceList => CompressionStrategy::Never,
+
+            // Large content messages that should always be compressed if beneficial
+            ClientMessage::SetScript(_, _, _, _) | ClientMessage::SetScene(_, _) => {
+                CompressionStrategy::Always
+            }
+
             // Everything else uses adaptive compression
             _ => CompressionStrategy::Adaptive,
         }
@@ -174,8 +175,8 @@ impl ClientMessage {
 
 /// Simple buffer pool to reduce allocations
 struct BufferPool {
-    small_buffers: Vec<Vec<u8>>,  // < 1KB buffers
-    large_buffers: Vec<Vec<u8>>,  // >= 1KB buffers
+    small_buffers: Vec<Vec<u8>>, // < 1KB buffers
+    large_buffers: Vec<Vec<u8>>, // >= 1KB buffers
 }
 
 impl BufferPool {
@@ -188,17 +189,23 @@ impl BufferPool {
 
     fn get_buffer(&mut self, size: usize) -> Vec<u8> {
         if size < 1024 {
-            self.small_buffers.pop().map(|mut buf| {
-                buf.clear();
-                buf.reserve(size);
-                buf
-            }).unwrap_or_else(|| Vec::with_capacity(size.max(512)))
+            self.small_buffers
+                .pop()
+                .map(|mut buf| {
+                    buf.clear();
+                    buf.reserve(size);
+                    buf
+                })
+                .unwrap_or_else(|| Vec::with_capacity(size.max(512)))
         } else {
-            self.large_buffers.pop().map(|mut buf| {
-                buf.clear();
-                buf.reserve(size);
-                buf
-            }).unwrap_or_else(|| Vec::with_capacity(size.max(2048)))
+            self.large_buffers
+                .pop()
+                .map(|mut buf| {
+                    buf.clear();
+                    buf.reserve(size);
+                    buf
+                })
+                .unwrap_or_else(|| Vec::with_capacity(size.max(2048)))
         }
     }
 
@@ -266,7 +273,7 @@ impl BuboCoreClient {
 
         // Use intelligent compression based on message type
         let (final_bytes, is_compressed) = self.compress_intelligently(&message, &msgpack_bytes)?;
-        
+
         // Use old 4-byte header format for compatibility: [length_with_compression_flag: u32]
         let mut length = final_bytes.len() as u32;
         if is_compressed {
@@ -292,21 +299,29 @@ impl BuboCoreClient {
     }
 
     /// Intelligently compress message based on type and content, using buffer pool
-    fn compress_intelligently(&mut self, message: &ClientMessage, msgpack_bytes: &[u8]) -> io::Result<(Vec<u8>, bool)> {
+    fn compress_intelligently(
+        &mut self,
+        message: &ClientMessage,
+        msgpack_bytes: &[u8],
+    ) -> io::Result<(Vec<u8>, bool)> {
         match message.compression_strategy() {
             CompressionStrategy::Never => {
                 // Never compress frequent/small messages - reuse buffer
                 let mut buffer = self.buffer_pool.get_buffer(msgpack_bytes.len());
                 buffer.extend_from_slice(msgpack_bytes);
                 Ok((buffer, false))
-            },
+            }
             CompressionStrategy::Always => {
                 // Always compress large content, but only if beneficial
                 if msgpack_bytes.len() > 64 {
                     let compression_level = if msgpack_bytes.len() < 1024 { 1 } else { 3 };
-                    let compressed = zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
-                        io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
-                    })?;
+                    let compressed =
+                        zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
+                            io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Compression failed: {}", e),
+                            )
+                        })?;
                     // Only use compressed if it's actually smaller
                     if compressed.len() < msgpack_bytes.len() {
                         Ok((compressed, true))
@@ -320,7 +335,7 @@ impl BuboCoreClient {
                     buffer.extend_from_slice(msgpack_bytes);
                     Ok((buffer, false))
                 }
-            },
+            }
             CompressionStrategy::Adaptive => {
                 // Original size-based logic - use buffer pool
                 if msgpack_bytes.len() < 256 {
@@ -329,9 +344,13 @@ impl BuboCoreClient {
                     Ok((buffer, false))
                 } else {
                     let compression_level = if msgpack_bytes.len() < 1024 { 1 } else { 3 };
-                    let compressed = zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
-                        io::Error::new(io::ErrorKind::Other, format!("Compression failed: {}", e))
-                    })?;
+                    let compressed =
+                        zstd::encode_all(msgpack_bytes, compression_level).map_err(|e| {
+                            io::Error::new(
+                                io::ErrorKind::Other,
+                                format!("Compression failed: {}", e),
+                            )
+                        })?;
                     Ok((compressed, true))
                 }
             }

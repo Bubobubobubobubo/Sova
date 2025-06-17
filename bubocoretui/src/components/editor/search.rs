@@ -1,12 +1,12 @@
 use crate::app::App;
-use tui_textarea::{TextArea, Input, Key, CursorMove};
-use ratatui::{
-    Frame,
-    prelude::{Rect, Color, Style},
-    widgets::{Block, Borders},
-};
 use color_eyre::Result as EyreResult;
 use crossterm::event::KeyEvent;
+use ratatui::{
+    Frame,
+    prelude::{Color, Rect, Style},
+    widgets::{Block, Borders},
+};
+use tui_textarea::{CursorMove, Input, Key, TextArea};
 
 #[derive(Clone)]
 /// Represents the state of the search functionality in the editor.
@@ -42,7 +42,6 @@ impl Default for SearchState {
 }
 
 impl SearchState {
-
     pub fn new() -> Self {
         let mut textarea = TextArea::default();
         textarea.set_block(
@@ -167,7 +166,8 @@ pub fn handle_search_input(app: &mut App, key_event: KeyEvent) -> EyreResult<boo
                 // Handle empty query correctly - should clear pattern
                 let query = search_state
                     .query_textarea
-                    .lines().first()
+                    .lines()
+                    .first()
                     .map_or("", |s| s.as_str());
                 match tui_textarea::TextArea::set_search_pattern(main_textarea, query) {
                     Ok(_) => {
@@ -201,15 +201,13 @@ pub fn render_search_panel(app: &App, frame: &mut Frame, area: Rect) {
     }
     let search_state = &app.editor.search_state;
     let mut query_textarea = search_state.query_textarea.clone();
-    let search_block_title = if let Some(err_msg) = &search_state.error_message
-    {
+    let search_block_title = if let Some(err_msg) = &search_state.error_message {
         format!(
             " Search (Error: {}) (Esc:Cancel Enter:Find ^N/↓:Next ^P/↑:Prev) ",
             err_msg
         )
     } else {
-        " Search Query (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) "
-            .to_string()
+        " Search Query (Esc: Cancel, Enter: Find, ^N/↓: Next, ^P/↑: Prev) ".to_string()
     };
     let search_block_style = if search_state.error_message.is_some() {
         Style::default().fg(Color::Red)
@@ -225,4 +223,4 @@ pub fn render_search_panel(app: &App, frame: &mut Frame, area: Rect) {
     );
 
     frame.render_widget(&query_textarea, area);
-} 
+}

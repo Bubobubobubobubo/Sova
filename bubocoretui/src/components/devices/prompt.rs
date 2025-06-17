@@ -1,20 +1,20 @@
 use crate::components::devices::DevicesState;
 use ratatui::{
     layout::Rect,
-    widgets::{Block, BorderType, Borders, Paragraph},
     prelude::Widget,
-    style::{Style, Color},
+    style::{Color, Style},
+    widgets::{Block, BorderType, Borders, Paragraph},
 };
 
 /// A widget that displays interactive prompts for various device management operations.
-/// 
+///
 /// The widget handles different types of prompts:
 /// - Naming a new virtual MIDI port
 /// - Assigning a slot number to a device
 /// - Creating a new OSC device (multi-step process)
-/// 
+///
 /// # Fields
-/// 
+///
 /// * `state` - A reference to the current state of the devices component, containing
 ///   the necessary input fields and flags to determine which prompt to display
 pub struct PromptWidget<'a> {
@@ -24,7 +24,7 @@ pub struct PromptWidget<'a> {
 impl<'a> Widget for PromptWidget<'a> {
     fn render(self, area: Rect, buf: &mut ratatui::buffer::Buffer) {
         let state = self.state;
-        if state.confirmation_prompt.is_none() { 
+        if state.confirmation_prompt.is_none() {
             if state.is_naming_virtual {
                 let input_widget = &state.virtual_port_input;
                 let block = Block::default()
@@ -61,10 +61,24 @@ impl<'a> Widget for PromptWidget<'a> {
                 let inner_input_area = block.inner(area);
 
                 match state.osc_creation_step {
-                    0 => ratatui::widgets::Widget::render(&state.osc_name_input, inner_input_area, buf),
-                    1 => ratatui::widgets::Widget::render(&state.osc_ip_input, inner_input_area, buf),
-                    2 => ratatui::widgets::Widget::render(&state.osc_port_input, inner_input_area, buf),
-                    _ => ratatui::widgets::Widget::render(Paragraph::new("Error"), inner_input_area, buf),
+                    0 => ratatui::widgets::Widget::render(
+                        &state.osc_name_input,
+                        inner_input_area,
+                        buf,
+                    ),
+                    1 => {
+                        ratatui::widgets::Widget::render(&state.osc_ip_input, inner_input_area, buf)
+                    }
+                    2 => ratatui::widgets::Widget::render(
+                        &state.osc_port_input,
+                        inner_input_area,
+                        buf,
+                    ),
+                    _ => ratatui::widgets::Widget::render(
+                        Paragraph::new("Error"),
+                        inner_input_area,
+                        buf,
+                    ),
                 }
             }
         }

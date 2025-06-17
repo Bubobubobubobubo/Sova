@@ -12,12 +12,12 @@ use chrono::{DateTime, Local, Utc};
 use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, BorderType, Borders, Clear, List, ListItem, Padding, Paragraph, Widget},
-    Frame,
 };
 use tui_textarea::TextArea;
 
@@ -599,13 +599,14 @@ impl Component for SaveLoadComponent {
             Rect {
                 height: inner_list_area.height - 1, // Reserve bottom line for help text
                 ..inner_list_area
-            } 
+            }
         } else {
             inner_list_area
         };
 
         // Render the project list using the custom widget
-        let project_list_widget = ProjectListWidget::new(&filtered_projects, current_selected_index);
+        let project_list_widget =
+            ProjectListWidget::new(&filtered_projects, current_selected_index);
         frame.render_widget(project_list_widget, list_render_area);
 
         // --- Render Input Area (Search or Save) ---
@@ -625,18 +626,21 @@ impl Component for SaveLoadComponent {
 
                 frame.render_widget(search_paragraph, input_render_area);
 
-                 // Set cursor position for search input
-                 if state.is_searching { 
-                    let cursor_x = input_render_area.x + 1 + state.search_query.chars().count() as u16;
+                // Set cursor position for search input
+                if state.is_searching {
+                    let cursor_x =
+                        input_render_area.x + 1 + state.search_query.chars().count() as u16;
                     let cursor_y = input_render_area.y + 1;
                     // Ensure cursor stays within input area bounds
-                    if cursor_x < input_render_area.right() -1 && cursor_y < input_render_area.bottom() -1 {
-                         frame.set_cursor_position(Rect::new(cursor_x, cursor_y, 1, 1));
+                    if cursor_x < input_render_area.right() - 1
+                        && cursor_y < input_render_area.bottom() - 1
+                    {
+                        frame.set_cursor_position(Rect::new(cursor_x, cursor_y, 1, 1));
                     }
-                 }
+                }
             } else if state.is_saving {
                 // Render Save Input Area using tui-textarea
-                let mut save_textarea = state.input_area.clone(); 
+                let mut save_textarea = state.input_area.clone();
                 save_textarea.set_block(
                     Block::default()
                         .borders(Borders::ALL)
@@ -644,7 +648,7 @@ impl Component for SaveLoadComponent {
                         .style(Style::default().fg(Color::Yellow)),
                 );
                 save_textarea.set_style(Style::default().fg(Color::White));
-                frame.render_widget(&save_textarea, input_render_area); 
+                frame.render_widget(&save_textarea, input_render_area);
                 // Cursor visibility/position is handled by the TextArea widget itself
             }
         }
@@ -658,14 +662,14 @@ impl Component for SaveLoadComponent {
             // Ensure there is space to render the help text
             if inner_list_area.width >= actual_width && inner_list_area.height > 0 {
                 let help_text_area = Rect::new(
-                    inner_list_area.right().saturating_sub(actual_width), 
-                    inner_list_area.bottom().saturating_sub(1), // Position on the last line          
-                    actual_width,                                        
-                    1,                                                   
+                    inner_list_area.right().saturating_sub(actual_width),
+                    inner_list_area.bottom().saturating_sub(1), // Position on the last line
+                    actual_width,
+                    1,
                 );
                 let help_spans = vec![
-                    Span::styled("?", Style::default().fg(Color::White)), 
-                    Span::styled(": Help ", key_style), 
+                    Span::styled("?", Style::default().fg(Color::White)),
+                    Span::styled(": Help ", key_style),
                 ];
                 let help_paragraph =
                     Paragraph::new(Line::from(help_spans)).alignment(Alignment::Right);
@@ -676,15 +680,15 @@ impl Component for SaveLoadComponent {
         // --- Render Help Popup (Overlay) ---
         if state.show_help {
             let popup_area = centered_rect(60, 50, area); // Calculate centered area
-            let help_lines = create_help_text(state);      // Generate help text content
+            let help_lines = create_help_text(state); // Generate help text content
             let help_widget = HelpPopupWidget::new(help_lines); // Create help widget
-            
+
             frame.render_widget(Clear, popup_area); // Clear background before drawing popup
             frame.render_widget(help_widget, popup_area);
 
             // Hide the main cursor when help popup is visible (unless in save mode)
             if !state.is_saving {
-                frame.set_cursor_position(Rect::default()); 
+                frame.set_cursor_position(Rect::default());
             }
         }
 
@@ -702,7 +706,7 @@ impl Component for SaveLoadComponent {
             frame.render_widget(confirm_widget, popup_area);
             frame.set_cursor_position(Rect::default()); // Hide main cursor
         } else if state.show_save_overwrite_confirmation {
-            let popup_area = centered_rect(40, 20, area); 
+            let popup_area = centered_rect(40, 20, area);
             let project_name = state.project_to_overwrite.as_deref().unwrap_or("Error");
             let confirm_widget = ConfirmationPopupWidget::new(
                 " Confirm Overwrite ".to_string(),
@@ -753,30 +757,37 @@ impl<'a> ProjectListWidget<'a> {
 impl<'a> Widget for ProjectListWidget<'a> {
     /// Renders the project list into the buffer.
     fn render(self, area: Rect, buf: &mut Buffer) {
-        let list_items: Vec<ListItem> = self.projects
+        let list_items: Vec<ListItem> = self
+            .projects
             .iter()
             .enumerate()
             .map(|(i, (name, created_at, updated_at, tempo, line_count))| {
                 // Format project name (left-aligned)
                 let mut spans = vec![Span::styled(
                     format!("{:<25}", name),
-                    Style::default().fg(if i == self.selected_index { Color::Black } else { Color::White }),
+                    Style::default().fg(if i == self.selected_index {
+                        Color::Black
+                    } else {
+                        Color::White
+                    }),
                 )];
                 let meta_style_label = Style::default().fg(Color::DarkGray);
-                let meta_style_value = Style::default().fg(
-                    if i == self.selected_index { Color::Black } else { Color::Gray }
-                );
+                let meta_style_value = Style::default().fg(if i == self.selected_index {
+                    Color::Black
+                } else {
+                    Color::Gray
+                });
 
                 // Format tempo
                 spans.push(Span::styled(" Tempo: ", meta_style_label));
                 let tempo_str = tempo.map_or_else(|| "N/A".to_string(), |t| format!("{:.1}", t));
                 spans.push(Span::styled(format!("{:<6}", tempo_str), meta_style_value));
-                
+
                 // Format line count
                 spans.push(Span::styled(" Lines: ", meta_style_label));
                 let lines_str = line_count.map_or_else(|| "N/A".to_string(), |lc| lc.to_string());
                 spans.push(Span::styled(format!("{:<4}", lines_str), meta_style_value));
-                
+
                 // Format timestamp (Saved or Created)
                 let time_style = Style::default().fg(Color::DarkGray).italic();
                 let time_format = "%Y-%m-%d %H:%M";
@@ -808,7 +819,7 @@ impl<'a> Widget for ProjectListWidget<'a> {
         // Create the Ratatui List widget
         let list = List::new(list_items);
         // Render the list using fully qualified syntax to avoid ambiguity
-        ratatui::widgets::Widget::render(list, area, buf); 
+        ratatui::widgets::Widget::render(list, area, buf);
     }
 }
 
@@ -823,7 +834,12 @@ struct ConfirmationPopupWidget {
 impl ConfirmationPopupWidget {
     /// Creates a new `ConfirmationPopupWidget`.
     fn new(title: String, prompt: String, style: Style, is_destructive: bool) -> Self {
-        Self { title, prompt, style, is_destructive }
+        Self {
+            title,
+            prompt,
+            style,
+            is_destructive,
+        }
     }
 }
 
@@ -833,19 +849,22 @@ impl Widget for ConfirmationPopupWidget {
         // Determine styles based on whether the action is destructive
         let (yes_style, no_style) = if self.is_destructive {
             (
-                Style::default().bold().fg(Color::LightRed), 
-                Style::default().bold().fg(Color::Gray),    
+                Style::default().bold().fg(Color::LightRed),
+                Style::default().bold().fg(Color::Gray),
             )
         } else {
             (
                 Style::default().bold().fg(Color::LightGreen),
-                Style::default().bold().fg(Color::Gray),       
+                Style::default().bold().fg(Color::Gray),
             )
         };
 
         // Construct the text lines for the popup
         let text = vec![
-            Line::from(Span::styled(self.prompt, Style::default().fg(Color::Yellow))),
+            Line::from(Span::styled(
+                self.prompt,
+                Style::default().fg(Color::Yellow),
+            )),
             Line::from(""),
             Line::from(vec![
                 Span::styled(" Enter", yes_style),
@@ -872,7 +891,7 @@ impl Widget for ConfirmationPopupWidget {
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         // Clear the area before rendering the popup
-        Clear.render(area, buf); 
+        Clear.render(area, buf);
         paragraph.render(area, buf);
     }
 }
@@ -908,7 +927,7 @@ impl Widget for HelpPopupWidget {
             .wrap(ratatui::widgets::Wrap { trim: true });
 
         // Clear the area before rendering the popup
-        Clear.render(area, buf); 
+        Clear.render(area, buf);
         help_paragraph.render(area, buf);
     }
 }
@@ -918,9 +937,7 @@ impl Widget for HelpPopupWidget {
 /// The displayed keybindings change depending on whether the user is in the list view,
 /// saving, searching, or confirming an action.
 fn create_help_text(state: &SaveLoadState) -> Vec<Line<'static>> {
-    let key_style = Style::default()
-        .fg(Color::Green)
-        .bold();
+    let key_style = Style::default().fg(Color::Green).bold();
     let desc_style = Style::default().fg(Color::White);
 
     let mut lines = vec![];

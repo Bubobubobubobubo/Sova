@@ -159,7 +159,6 @@ pub enum EditingMode {
     Vim,
 }
 
-
 impl fmt::Display for EditingMode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -414,16 +413,14 @@ async fn check_path_metadata_map_err(path: &Path) -> Result<std::fs::Metadata> {
 async fn read_project_metadata(project_name: &str) -> Result<Option<ProjectMetadata>> {
     let metadata_path = get_metadata_path(project_name).await?;
     match read_to_string_map_err(&metadata_path).await {
-        Ok(content) => {
-            match serde_json::from_str::<ProjectMetadata>(&content) {
-                Ok(meta) => Ok(Some(meta)),
-                Err(_) => Ok(None), 
-            }
-        }
+        Ok(content) => match serde_json::from_str::<ProjectMetadata>(&content) {
+            Ok(meta) => Ok(Some(meta)),
+            Err(_) => Ok(None),
+        },
         Err(DiskError::FileReadFailed { source, .. }) if source.kind() == ErrorKind::NotFound => {
-            Ok(None) 
+            Ok(None)
         }
-        Err(e) => Err(e), 
+        Err(e) => Err(e),
     }
 }
 

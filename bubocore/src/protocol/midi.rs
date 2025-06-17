@@ -128,57 +128,56 @@ impl MIDIMessage {
     }
 }
 
-
 /// Enumerates the supported types of MIDI message payloads.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum MIDIMessageType {
     /// Note On message: Starts a note playing.
-    NoteOn { 
+    NoteOn {
         /// MIDI note number (0-127).
-        note: u8, 
+        note: u8,
         /// Velocity (0-127), typically indicating loudness.
-        velocity: u8 
+        velocity: u8,
     },
     /// Note Off message: Stops a note playing.
-    NoteOff { 
+    NoteOff {
         /// MIDI note number (0-127).
-        note: u8, 
+        note: u8,
         /// Release velocity (0-127), sometimes used for release characteristics.
-        velocity: u8 
+        velocity: u8,
     },
     /// Control Change (CC) message: Modifies various parameters.
-    ControlChange { 
+    ControlChange {
         /// Control number (0-127).
-        control: u8, 
+        control: u8,
         /// Control value (0-127).
-        value: u8 
+        value: u8,
     },
     /// Program Change message: Selects an instrument or patch.
-    ProgramChange { 
+    ProgramChange {
         /// Program number (0-127).
-        program: u8 
+        program: u8,
     },
     /// Pitch Bend message: Adjusts the pitch of sounding notes on a channel.
-    PitchBend { 
+    PitchBend {
         /// 14-bit pitch bend value (0-16383). 8192 is typically center (no bend).
-        value: u16 
+        value: u16,
     },
     /// Polyphonic Aftertouch message: Pressure applied to individual keys after initial strike.
-    Aftertouch { 
+    Aftertouch {
         /// MIDI note number (0-127).
-        note: u8, 
+        note: u8,
         /// Pressure value (0-127).
-        value: u8 
+        value: u8,
     },
     /// Channel Pressure (Channel Aftertouch) message: Overall pressure applied after initial strike for the channel.
-    ChannelPressure { 
+    ChannelPressure {
         /// Pressure value (0-127).
-        value: u8 
+        value: u8,
     },
     /// System Exclusive (SysEx) message: Manufacturer-specific data.
-    SystemExclusive { 
+    SystemExclusive {
         /// The raw SysEx data bytes, excluding the starting `F0` and ending `F7`.
-        data: Vec<u8> 
+        data: Vec<u8>,
     },
     /// MIDI Clock message: Used for timing synchronization.
     Clock,

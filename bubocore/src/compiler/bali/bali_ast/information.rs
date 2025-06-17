@@ -1,6 +1,6 @@
 use crate::compiler::bali::bali_ast::concrete_fraction::ConcreteFraction;
-use crate::lang::variable::Variable;
 use crate::compiler::bali::bali_ast::expression::Expression;
+use crate::lang::variable::Variable;
 
 #[derive(Debug, Clone)]
 pub enum Information {
@@ -9,7 +9,6 @@ pub enum Information {
     Pick(PickInformation),
     Ramp(RampInformation),
 }
-
 
 #[derive(Debug, Clone)]
 pub enum TimingInformation {

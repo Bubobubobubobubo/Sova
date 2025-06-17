@@ -2,10 +2,8 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::clock::SyncTime;
-use crate::protocol::osc::{OSCMessage, Argument};
+use crate::protocol::osc::{Argument, OSCMessage};
 use crate::util::decimal_operations::float64_from_decimal;
-
-
 
 use super::variable::VariableValue;
 use super::{evaluation_context::EvaluationContext, variable::Variable};
@@ -146,11 +144,15 @@ impl Event {
                 let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
                 ConcreteEvent::MidiClock(dev_id)
             }
-            Event::Dirt { sound, params, device_id } => {
+            Event::Dirt {
+                sound,
+                params,
+                device_id,
+            } => {
                 // get device
-                let device_id = ctx
-                    .evaluate(device_id)
-                    .as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let device_id =
+                    ctx.evaluate(device_id)
+                        .as_integer(ctx.clock, ctx.frame_len()) as usize;
 
                 // get args
                 let mut args = Vec::new();
@@ -161,7 +163,9 @@ impl Event {
                 let sound = match sound {
                     VariableValue::Integer(i) => Argument::Int(i as i32),
                     VariableValue::Float(f) => Argument::Float(f as f32),
-                    VariableValue::Decimal(sig, num, den) => Argument::Float(float64_from_decimal(sig, num, den) as f32),
+                    VariableValue::Decimal(sig, num, den) => {
+                        Argument::Float(float64_from_decimal(sig, num, den) as f32)
+                    }
                     VariableValue::Str(s) => Argument::String(s),
                     _ => todo!(),
                 };
@@ -173,7 +177,9 @@ impl Event {
                     let param_arg = match ctx.evaluate(value) {
                         VariableValue::Integer(i) => Argument::Int(i as i32),
                         VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => Argument::Float(float64_from_decimal(sig, num, den) as f32),
+                        VariableValue::Decimal(sig, num, den) => {
+                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
+                        }
                         VariableValue::Str(s) => Argument::String(s),
                         _ => {
                             eprintln!(
@@ -186,12 +192,13 @@ impl Event {
                     args.push(param_arg);
                 }
 
-                ConcreteEvent::Dirt {
-                    args,
-                    device_id,
-                }
+                ConcreteEvent::Dirt { args, device_id }
             }
-            Event::Osc { addr, args, device_id } => {
+            Event::Osc {
+                addr,
+                args,
+                device_id,
+            } => {
                 let dev_id = ctx
                     .evaluate(device_id)
                     .as_integer(ctx.clock, ctx.frame_len()) as usize;
@@ -202,7 +209,9 @@ impl Event {
                     let arg = match arg {
                         VariableValue::Integer(i) => Argument::Int(i as i32),
                         VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => Argument::Float(float64_from_decimal(sig, num, den) as f32),
+                        VariableValue::Decimal(sig, num, den) => {
+                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
+                        }
                         VariableValue::Str(s) => Argument::String(s),
                         _ => todo!(),
                     };
@@ -217,29 +226,39 @@ impl Event {
                     device_id: dev_id,
                 }
             }
-            Event::AudioEngine { source, params, device_id } => {
-                let device_id = ctx.evaluate(device_id).as_integer(ctx.clock, ctx.frame_len()) as usize;
+            Event::AudioEngine {
+                source,
+                params,
+                device_id,
+            } => {
+                let device_id =
+                    ctx.evaluate(device_id)
+                        .as_integer(ctx.clock, ctx.frame_len()) as usize;
                 let mut args = Vec::new();
-                
+
                 // Add source as first argument (like Dirt)
                 args.push(Argument::String("s".to_string()));
                 let source = ctx.evaluate(source);
                 let source = match source {
                     VariableValue::Integer(i) => Argument::Int(i as i32),
                     VariableValue::Float(f) => Argument::Float(f as f32),
-                    VariableValue::Decimal(sig, num, den) => Argument::Float(float64_from_decimal(sig, num, den) as f32),
+                    VariableValue::Decimal(sig, num, den) => {
+                        Argument::Float(float64_from_decimal(sig, num, den) as f32)
+                    }
                     VariableValue::Str(s) => Argument::String(s),
                     _ => Argument::String("unknown".to_string()),
                 };
                 args.push(source);
-                
+
                 // Add all parameters generically (like Dirt)
                 for (key, value) in params {
                     args.push(Argument::String(key.clone()));
                     let param_arg = match ctx.evaluate(value) {
                         VariableValue::Integer(i) => Argument::Int(i as i32),
                         VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => Argument::Float(float64_from_decimal(sig, num, den) as f32),
+                        VariableValue::Decimal(sig, num, den) => {
+                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
+                        }
                         VariableValue::Str(s) => Argument::String(s),
                         _ => {
                             eprintln!(
@@ -251,11 +270,8 @@ impl Event {
                     };
                     args.push(param_arg);
                 }
-                
-                ConcreteEvent::AudioEngine {
-                    args,
-                    device_id,
-                }
+
+                ConcreteEvent::AudioEngine { args, device_id }
             }
         }
     }

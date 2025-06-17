@@ -1,9 +1,9 @@
 use crate::app::App;
 use ratatui::{
     Frame,
-    prelude::{Rect, Color, Style, Modifier},
-    widgets::{Block, Borders, List, ListItem, Paragraph},
+    prelude::{Color, Modifier, Rect, Style},
     text::{Line, Span},
+    widgets::{Block, Borders, List, ListItem, Paragraph},
 };
 use unicode_width::UnicodeWidthStr;
 
@@ -78,10 +78,8 @@ pub fn render_single_line_view(
                     let playhead_width = 1;
                     let index_width = 3; // " {:<2}" -> " 1", " 10", "100" might need adjustment
                     let fixed_spacers_width = 2; // Spacer between bar/playhead, and playhead/name
-                    let total_fixed_width = playhead_width
-                        + bar_width
-                        + index_width
-                        + fixed_spacers_width;
+                    let total_fixed_width =
+                        playhead_width + bar_width + index_width + fixed_spacers_width;
                     let max_name_width =
                         (inner_area.width as usize).saturating_sub(total_fixed_width);
 
@@ -114,7 +112,9 @@ pub fn render_single_line_view(
 
                     let bar_char = if is_in_range { "▐" } else { " " };
                     let bar_style = if is_in_range {
-                        Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
+                        Style::default()
+                            .fg(Color::White)
+                            .add_modifier(Modifier::BOLD)
                     } else {
                         Style::default() // Default style for inactive bar
                     };
@@ -143,7 +143,7 @@ pub fn render_single_line_view(
                         playhead_span,
                         name_span,      // Truncated Name
                         Span::raw(" "), // Spacer 1 (Playhead <-> Name)
-                        bar_span,         // Start/End Bar (Moved)
+                        bar_span,       // Start/End Bar (Moved)
                         Span::raw(" "), // Spacer 2 (Bar <-> Index)
                         styled_index_span,
                     ]))
@@ -156,7 +156,8 @@ pub fn render_single_line_view(
             // Reserve space for the language name at the bottom if possible
             let mut list_area = inner_area;
             let mut lang_area: Option<Rect> = None;
-            if inner_area.height > 1 { // Check if there's space for the language row
+            if inner_area.height > 1 {
+                // Check if there's space for the language row
                 let chunks = ratatui::prelude::Layout::vertical([
                     ratatui::prelude::Constraint::Min(1),
                     ratatui::prelude::Constraint::Length(1),
@@ -182,7 +183,6 @@ pub fn render_single_line_view(
                 .centered();
                 frame.render_widget(lang_text, area);
             }
-
         } else {
             frame.render_widget(
                 Paragraph::new("Invalid Line")
@@ -199,4 +199,4 @@ pub fn render_single_line_view(
             inner_area,
         );
     }
-} 
+}

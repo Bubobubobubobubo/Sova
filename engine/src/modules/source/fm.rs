@@ -79,37 +79,37 @@ faust_macro::dsp!(
 
     // Modulation index
     mod_index = z1;
-    
+
     // Modulator frequency ratio (defaults to 1:1 when z2=0)
     mod_ratio = 1.0 + z2;
     mod_freq = freq * mod_ratio;
-    
+
     // Feedback amount for self-modulation (map 0-1 to 0-0.6 range)
     feedback_amount = z4 * 0.6;
-    
+
     // Carrier detune amount (-50 to +50 cents)
     detune_amount = (z3 - 0.5) * 0.1;
 
     // Detuned carrier frequency
     carrier_freq = freq * (1.0 + detune_amount);
-    
+
     // Modulator oscillator
     modulator = os.osc(mod_freq) * mod_index * carrier_freq * 2 * ma.PI;
-    
+
     // Feedback delay for self-modulation
     feedback_delay = _ <: _, mem : + : *(feedback_amount);
-    
+
     // Carrier with modulation and feedback
     fm_core = modulator + feedback_delay ~ _ : os.osc(carrier_freq + _);
-    
+
     // Output gain compensation based on modulation index
     output_gain = 1.0 / (1.0 + mod_index * 0.1);
-    
+
     // Basic FM signal
     fm_signal = fm_core * output_gain;
-    
+
     // Secondary detuned oscillator for stereo width
-    detune_osc = (os.osc(mod_freq) * mod_index * (carrier_freq * 1.005) * 2 * ma.PI) : 
+    detune_osc = (os.osc(mod_freq) * mod_index * (carrier_freq * 1.005) * 2 * ma.PI) :
                  os.osc((carrier_freq * 1.005) + _) * output_gain;
 
     // Stereo processing with detuned oscillator

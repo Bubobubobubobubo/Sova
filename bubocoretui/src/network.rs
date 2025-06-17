@@ -220,7 +220,10 @@ async fn run_network_task(
         if should_run && !client.connected {
             tokio::time::sleep(std::time::Duration::from_millis(100)).await;
             if client.connect().await.is_ok() {
-                if let Err(_e) = client.send(ClientMessage::SetName(current_username.clone())).await {
+                if let Err(_e) = client
+                    .send(ClientMessage::SetName(current_username.clone()))
+                    .await
+                {
                     client.connected = false;
                 }
             } else {
