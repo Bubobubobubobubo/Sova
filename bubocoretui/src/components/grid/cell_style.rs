@@ -1,10 +1,9 @@
 use ratatui::prelude::*;
 use ratatui::style::Color;
 
-
 #[derive(Clone)]
 /// Defines the visual styles for different states of grid cells in the timeline view.
-/// 
+///
 /// Each field represents a different cell state:
 /// - `enabled`: Style for active frames that are currently playing
 /// - `disabled`: Style for inactive frames that are not playing

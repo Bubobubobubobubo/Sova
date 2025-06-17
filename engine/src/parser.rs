@@ -221,7 +221,8 @@ pub fn parse_command_with_pool(
         }
     };
 
-    let track_id = parameters.get("track")
+    let track_id = parameters
+        .get("track")
         .and_then(|t| t.downcast_ref::<f32>())
         .map(|&f| f as TrackId)
         .unwrap_or(1);

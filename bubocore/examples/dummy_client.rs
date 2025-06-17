@@ -1,9 +1,7 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use bubocorelib::schedule::{
-    Scheduler, 
-    message::SchedulerMessage, 
-    notification::SchedulerNotification
+    Scheduler, message::SchedulerMessage, notification::SchedulerNotification,
 };
 use bubocorelib::{
     clock::{ClockServer, TimeSpan},

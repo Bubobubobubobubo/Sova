@@ -21,16 +21,8 @@ impl ConcreteFraction {
         for _i in 0..num_dec {
             denominator = denominator * 10;
         }
-        let signe = if int_part < 0 {
-            -1
-        } else {
-            1
-        };
-        let int_part = if int_part < 0 {
-            -int_part
-        } else {
-            int_part
-        };
+        let signe = if int_part < 0 { -1 } else { 1 };
+        let int_part = if int_part < 0 { -int_part } else { int_part };
         let numerator = int_part * denominator + dec_part;
         ConcreteFraction {
             signe,

@@ -4,6 +4,7 @@ use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use markdownparser::parse_markdown;
 use ratatui::{
+    Frame,
     buffer::Buffer,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -11,7 +12,6 @@ use ratatui::{
     widgets::{
         Block, BorderType, Borders, List, ListItem, ListState, Paragraph, StatefulWidget, Widget,
     },
-    Frame,
 };
 
 pub mod markdownparser;
@@ -128,7 +128,6 @@ impl HelpComponent {
 }
 
 impl Component for HelpComponent {
-
     fn handle_key_event(&mut self, app: &mut App, key_event: KeyEvent) -> EyreResult<bool> {
         if let Some(help_state) = &mut app.interface.components.help_state {
             // Handle Searching Input Mode first if active
@@ -278,9 +277,7 @@ impl HelpComponent {
                     true // Show all if search is empty
                 } else {
                     topic_name.to_lowercase().contains(&search_term)
-                        || state.contents[*index]
-                            .to_lowercase()
-                            .contains(&search_term)
+                        || state.contents[*index].to_lowercase().contains(&search_term)
                 }
             })
             .collect();
@@ -368,9 +365,7 @@ impl HelpComponent {
                     true
                 } else {
                     topic_name.to_lowercase().contains(&search_term)
-                        || state.contents[*index]
-                            .to_lowercase()
-                            .contains(&search_term)
+                        || state.contents[*index].to_lowercase().contains(&search_term)
                 }
             })
             .collect();
@@ -402,7 +397,9 @@ impl HelpComponent {
     /// Renders the footer help text with keybindings.
     fn render_footer(&self, buf: &mut Buffer, area: Rect) {
         let help_style = Style::default().fg(Color::DarkGray);
-        let key_style = Style::default().fg(Color::Gray).add_modifier(Modifier::BOLD);
+        let key_style = Style::default()
+            .fg(Color::Gray)
+            .add_modifier(Modifier::BOLD);
         let help_spans = vec![
             Span::styled("↑↓", key_style),
             Span::styled(": Topics | ", help_style),

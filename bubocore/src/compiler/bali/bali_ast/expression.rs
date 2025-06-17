@@ -1,17 +1,10 @@
 use crate::{
-    lang::{
-        Instruction,
-        control_asm::ControlASM,
-        variable::Variable,
-    },
     compiler::bali::bali_ast::{
-        value::Value,
-        constants::FUNCTION_PREFIX,
-        function::FunctionContent,
+        constants::FUNCTION_PREFIX, function::FunctionContent, value::Value,
     },
+    lang::{Instruction, control_asm::ControlASM, variable::Variable},
 };
 use std::collections::HashMap;
-
 
 #[derive(Debug, Clone)]
 pub enum Expression {
@@ -103,7 +96,7 @@ impl Expression {
                         _ => unreachable!(), // Should not happen due to outer match
                     }
                     asm
-                },
+                }
                 Expression::Function(name, args) => {
                     print!("Call function {} with args {:?}\n", name, args);
 
@@ -114,7 +107,6 @@ impl Expression {
 
                     if let Some(function) = function {
                         if function.arg_list.len() == args.len() {
-
                             // put each variable corresponding to an argument name of the function on the stack
                             let mut arg_order = Vec::new();
                             for arg in &function.arg_list {
@@ -129,7 +121,8 @@ impl Expression {
                             }
 
                             // call function
-                            let func_var = Variable::Instance(format!("{}{}", FUNCTION_PREFIX, name));
+                            let func_var =
+                                Variable::Instance(format!("{}{}", FUNCTION_PREFIX, name));
                             asm.push(Instruction::Control(ControlASM::CallFunction(func_var)));
 
                             // get result from stack
@@ -140,14 +133,20 @@ impl Expression {
                                 asm.push(Instruction::Control(ControlASM::Pop(arg_var)));
                             }
                         } else {
-                            asm.push(Instruction::Control(ControlASM::Mov(0.into(), var_out.clone())));
+                            asm.push(Instruction::Control(ControlASM::Mov(
+                                0.into(),
+                                var_out.clone(),
+                            )));
                         }
                     } else {
-                        asm.push(Instruction::Control(ControlASM::Mov(0.into(), var_out.clone())));
+                        asm.push(Instruction::Control(ControlASM::Mov(
+                            0.into(),
+                            var_out.clone(),
+                        )));
                     }
 
                     asm
-                },
+                }
                 Expression::Scale(val, old_min, old_max, new_min, new_max) => {
                     let mut asm = val.as_asm(&functions);
                     asm.extend(old_min.as_asm(&functions));

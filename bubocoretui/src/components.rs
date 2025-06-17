@@ -35,8 +35,8 @@ pub mod help;
 pub mod logs;
 pub mod options;
 pub mod saveload;
-pub mod splash;
 pub mod screensaver;
+pub mod splash;
 
 /// A trait defining the core interface for UI components in the application.
 ///

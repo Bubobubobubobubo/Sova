@@ -1,5 +1,5 @@
-use std::sync::Arc;
 use crate::scene::default_speed_factor;
+use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
 

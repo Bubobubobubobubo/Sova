@@ -92,7 +92,6 @@ pub enum AppEvent {
     // --- Contrôle de l'application ---
     /// Quitter l'application.
     Quit,
-
     // Editor Mode Events (Removed)
     // SetEditorModeNormal,
     // SetEditorModeVim,

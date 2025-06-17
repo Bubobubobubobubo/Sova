@@ -1,15 +1,9 @@
 use crate::{
-    lang::{
-        Instruction,
-        control_asm::ControlASM,
-        variable::Variable,
-    },
     compiler::bali::bali_ast::{
+        concrete_fraction::ConcreteFraction, expression::Expression, function::FunctionContent,
         value::Value,
-        expression::Expression,
-        concrete_fraction::ConcreteFraction,
-        function::FunctionContent,
     },
+    lang::{Instruction, control_asm::ControlASM, variable::Variable},
 };
 
 use std::collections::HashMap;

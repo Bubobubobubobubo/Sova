@@ -116,7 +116,7 @@ impl ControlASM {
         match value {
             VariableValue::Integer(i) => i,
             VariableValue::Float(f) => f.round() as i64,
-            VariableValue::Decimal(sign, num, den) => (sign as i64) * ((num/den) as i64),
+            VariableValue::Decimal(sign, num, den) => (sign as i64) * ((num / den) as i64),
             _ => default,
         }
     }

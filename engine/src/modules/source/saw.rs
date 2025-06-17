@@ -79,24 +79,24 @@ faust_macro::dsp!(
 
     // Map z1 to number of voices (1-7)
     num_voices = 1 + z1 * 6;
-    
+
     // Detune spread - maximum 50 cents
     detune_spread = z2 * 0.05;
-    
+
     // Octave layering mix
     octave_mix = z3;
-    
+
     // Phase spread for stereo width
     phase_spread = z4 * ma.PI;
 
     // Basic saw oscillator
     saw_osc(f) = os.sawtooth(f);
-    
+
     // Supersaw generator with variable voices
     supersaw = saw_main + saw_voices : *(1.0 / sqrt(num_voices))
     with {
         saw_main = saw_osc(freq);
-        
+
         // Detuned voices with phase offset
         saw_voices = voice1 + voice2 + voice3 + voice4 + voice5 + voice6
         with {

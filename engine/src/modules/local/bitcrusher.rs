@@ -33,7 +33,7 @@ pub struct BitCrusher {
     bits: f32,
     rate: f32,
     is_active: bool,
-    
+
     left_hold_sample: f32,
     right_hold_sample: f32,
     accumulator: f32,
@@ -64,10 +64,10 @@ impl BitCrusher {
         if self.bits >= 32.0 {
             return input;
         }
-        
+
         let levels = (1 << (self.bits as u32)).min(16777216) as f32;
         let step = 2.0 / levels;
-        
+
         let quantized = ((input + 1.0) / step).floor() * step - 1.0;
         quantized.clamp(-1.0, 1.0)
     }
@@ -77,10 +77,10 @@ impl BitCrusher {
         if self.rate >= 1.0 {
             return true;
         }
-        
+
         let rate_hz = self.rate * self.sample_rate;
         let samples_per_hold = self.sample_rate / rate_hz;
-        
+
         self.accumulator += 1.0;
         if self.accumulator >= samples_per_hold {
             self.accumulator -= samples_per_hold;
@@ -122,13 +122,13 @@ impl AudioModule for BitCrusher {
 impl LocalEffect for BitCrusher {
     fn process(&mut self, buffer: &mut [Frame], sample_rate: f32) {
         self.sample_rate = sample_rate;
-        
+
         for frame in buffer.iter_mut() {
             if self.should_update_sample() {
                 self.left_hold_sample = self.crush_bits(frame.left);
                 self.right_hold_sample = self.crush_bits(frame.right);
             }
-            
+
             frame.left = self.left_hold_sample;
             frame.right = self.right_hold_sample;
         }

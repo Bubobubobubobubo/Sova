@@ -217,4 +217,3 @@ impl Source for SquareOscillator {
 pub fn create_square_oscillator() -> Box<dyn Source> {
     Box::new(SquareOscillator::new())
 }
-

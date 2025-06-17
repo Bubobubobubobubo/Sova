@@ -25,7 +25,11 @@ pub struct InputPromptWidget<'a> {
 
 impl<'a> InputPromptWidget<'a> {
     pub fn new(textarea: &'a TextArea<'a>, title: String, style: Style) -> Self {
-        Self { textarea, title, style }
+        Self {
+            textarea,
+            title,
+            style,
+        }
     }
 }
 

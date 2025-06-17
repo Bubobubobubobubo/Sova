@@ -1,6 +1,6 @@
-use crate::scene::{line::Line, Scene};
-use crate::scene::script::Script;
 use crate::protocol::message::TimedMessage;
+use crate::scene::script::Script;
+use crate::scene::{Scene, line::Line};
 use crate::shared_types::{DeviceInfo, GridSelection};
 
 /// Enum representing notifications broadcast by the Scheduler.

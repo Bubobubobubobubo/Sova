@@ -5,7 +5,7 @@ use std::{
         mpsc::{self, Receiver, RecvTimeoutError, Sender},
     },
     thread::JoinHandle,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 use thread_priority::{ThreadBuilder, ThreadPriority};
 
@@ -13,14 +13,38 @@ use crate::lang::event::ConcreteEvent;
 use crate::{
     clock::{Clock, ClockServer, SyncTime},
     protocol::{
-        payload::{ProtocolPayload, AudioEnginePayload},
         message::TimedMessage,
+        payload::{AudioEnginePayload, ProtocolPayload},
     },
 };
-use bubo_engine::{types::EngineMessage, server::ScheduledEngineMessage, registry::ModuleRegistry};
+use bubo_engine::{
+    registry::ModuleRegistry,
+    server::ScheduledEngineMessage,
+    types::{EngineMessage, ScheduledMessage},
+};
 use std::collections::HashMap;
 
 const WORLD_TIME_MARGIN: u64 = 300;
+
+/// High-precision Link ↔ SystemTime conversion calibration
+struct TimebaseCalibration {
+    /// SystemTime - LinkTime offset at calibration point
+    link_to_system_offset: i64,
+    /// When we last calibrated (Link time in microseconds)
+    last_calibration: u64,
+    /// Recalibrate every N microseconds (1 second)
+    calibration_interval: u64,
+}
+
+impl TimebaseCalibration {
+    fn new() -> Self {
+        Self {
+            link_to_system_offset: 0,
+            last_calibration: 0,
+            calibration_interval: 1_000_000, // 1 second in microseconds
+        }
+    }
+}
 
 pub struct World {
     queue: BinaryHeap<TimedMessage>,
@@ -31,6 +55,7 @@ pub struct World {
     voice_id_counter: u32,
     registry: ModuleRegistry,
     shutdown_requested: bool,
+    timebase_calibration: TimebaseCalibration,
 }
 
 impl World {
@@ -53,6 +78,7 @@ impl World {
                     voice_id_counter: 0,
                     registry,
                     shutdown_requested: false,
+                    timebase_calibration: TimebaseCalibration::new(),
                 };
                 world.live();
             })
@@ -62,13 +88,15 @@ impl World {
 
     pub fn live(&mut self) {
         let start_date = self.get_clock_micros();
+        // Initialize timebase calibration
+        self.calibrate_timebase();
         println!("[+] Starting world at {start_date}");
         loop {
             // Check for shutdown request
             if self.shutdown_requested {
                 break;
             }
-            
+
             let remaining = self
                 .next_timeout
                 .saturating_sub(Duration::from_micros(WORLD_TIME_MARGIN));
@@ -101,7 +129,9 @@ impl World {
 
     fn handle_timed_message(&mut self, timed_message: TimedMessage) {
         // Check if this is a control message
-        if let crate::protocol::payload::ProtocolPayload::Control(control_msg) = &timed_message.message.payload {
+        if let crate::protocol::payload::ProtocolPayload::Control(control_msg) =
+            &timed_message.message.payload
+        {
             match control_msg {
                 crate::protocol::payload::ControlMessage::Shutdown => {
                     println!("[-] World received shutdown signal");
@@ -110,7 +140,7 @@ impl World {
                 }
             }
         }
-        
+
         // Regular message - add to queue for timed execution
         self.add_message(timed_message);
     }
@@ -161,22 +191,36 @@ impl World {
                 );
             }
             ProtocolPayload::AudioEngine(audio_payload) => {
-                // DEBUG: Print all audio engine messages with their arguments
-                println!("[DEBUG AUDIO ENGINE] Device: {}, Args count: {}", 
-                    audio_payload.device_id, 
-                    audio_payload.args.len());
-                println!("  Arguments:");
-                for (i, arg) in audio_payload.args.iter().enumerate() {
-                    println!("    [{}] {:?}", i, arg);
+                // Handle timebase calibration first, outside of any borrows
+                let current_link_time = self.clock.micros();
+                if current_link_time - self.timebase_calibration.last_calibration > 
+                   self.timebase_calibration.calibration_interval {
+                    self.calibrate_timebase();
                 }
                 
                 if let Some(ref tx) = self.audio_engine_tx {
-                    let (engine_message, new_voice_id_counter) = self.convert_audio_engine_payload_to_engine_message(
-                        &audio_payload,
-                        self.voice_id_counter,
-                    );
+                    let (engine_message, new_voice_id_counter) = self
+                        .convert_audio_engine_payload_to_engine_message(
+                            &audio_payload,
+                            self.voice_id_counter,
+                        );
                     self.voice_id_counter = new_voice_id_counter;
-                    let scheduled_msg = ScheduledEngineMessage::Immediate(engine_message);
+
+                    let current_sync_time = self.get_clock_micros();
+                    
+                    let scheduled_msg =
+                        if time <= current_sync_time || (time - current_sync_time) < 5000 {
+                            // For messages in the past or within 5ms, execute immediately for efficiency
+                            ScheduledEngineMessage::Immediate(engine_message)
+                        } else {
+                            // High-precision Link→SystemTime conversion
+                            let system_due_time = (time as i64 + self.timebase_calibration.link_to_system_offset) as u64;
+                            
+                            ScheduledEngineMessage::Scheduled(ScheduledMessage {
+                                due_time_micros: system_due_time,
+                                message: engine_message,
+                            })
+                        };
                     let _ = tx.send(scheduled_msg);
                 }
             }
@@ -190,6 +234,23 @@ impl World {
         self.clock.micros()
     }
 
+    /// Calibrate the Link↔SystemTime offset with maximum precision
+    fn calibrate_timebase(&mut self) {
+        // Capture both timestamps as close together as possible
+        let link_time = self.clock.micros();
+        let system_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_micros() as u64;
+        
+        // Calculate offset: SystemTime - LinkTime
+        self.timebase_calibration.link_to_system_offset = 
+            system_time as i64 - link_time as i64;
+        self.timebase_calibration.last_calibration = link_time;
+    }
+    
+
+
     fn convert_audio_engine_payload_to_engine_message(
         &self,
         payload: &AudioEnginePayload,
@@ -200,7 +261,7 @@ impl World {
 
         let mut raw_parameters: HashMap<String, Box<dyn Any + Send>> = HashMap::new();
         let mut source_name = String::new();
-        
+
         // Parse arguments generically (like OSC parsing)
         let mut i = 0;
         while i + 1 < payload.args.len() {
@@ -217,7 +278,7 @@ impl World {
                         Argument::String(s) => {
                             // Use registry parsing to handle modulations (same as OSC route)
                             self.registry.parse_parameter_value(s)
-                        },
+                        }
                         _ => Box::new(0.0f32),
                     };
                     raw_parameters.insert(key.clone(), param_value);
@@ -228,25 +289,31 @@ impl World {
 
         // Add source name for parameter normalization context
         raw_parameters.insert("s".to_string(), Box::new(source_name.clone()));
-        
-        // Normalize parameters using registry (this resolves aliases like fd->sample_name, nb->sample_number)  
-        let parameters = self.registry.normalize_parameters(raw_parameters, Some(&source_name));
+
+        // Normalize parameters using registry (this resolves aliases like fd->sample_name, nb->sample_number)
+        let parameters = self
+            .registry
+            .normalize_parameters(raw_parameters, Some(&source_name));
 
         // Extract track_id from parameters (let engine handle defaults)
-        let track_id = parameters.get("track")
+        let track_id = parameters
+            .get("track")
             .and_then(|t| t.downcast_ref::<f32>())
             .map(|&f| f as u8)
-            .unwrap_or(0);  // Default to track 0
-        
+            .unwrap_or(0); // Default to track 0
+
         // Always create new voice (simplified - no voice_id tracking)
         let voice_id = voice_id_counter;
         let new_voice_id_counter = voice_id_counter.wrapping_add(1);
-        
-        (EngineMessage::Play {
-            voice_id,
-            track_id,
-            source_name,
-            parameters,
-        }, new_voice_id_counter)
+
+        (
+            EngineMessage::Play {
+                voice_id,
+                track_id,
+                source_name,
+                parameters,
+            },
+            new_voice_id_counter,
+        )
     }
 }

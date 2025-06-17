@@ -116,8 +116,6 @@ pub(super) fn handle_normal_input(app: &mut App, key_event: KeyEvent) -> bool {
         }
         // Note: Redo (e.g., Ctrl+Shift+Z or Alt+/) is not standardly bound here.
         // Fallback to default textarea input handling
-        _ => {
-            textarea.input(key_event)
-        }
+        _ => textarea.input(key_event),
     }
-} 
+}

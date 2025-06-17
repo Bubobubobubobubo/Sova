@@ -1,5 +1,5 @@
-use std::fmt::{self, Display};
 use crate::protocol::midi::MidiError;
+use std::fmt::{self, Display};
 
 /// A general error type for operations within the `protocol` module.
 ///

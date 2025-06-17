@@ -41,8 +41,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     }
                     Tag::Heading { level, .. } => {
                         current_heading_level = Some(level);
-                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty())
-                        {
+                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty()) {
                             lines.push(Line::raw(""));
                         }
                         let heading_text_style = match level {
@@ -80,8 +79,7 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     }
                     Tag::CodeBlock(_) => {
                         style_stack.push(Style::default().fg(Color::Cyan));
-                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty())
-                        {
+                        if !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty()) {
                             lines.push(Line::raw(""));
                         }
                     }
@@ -127,9 +125,12 @@ pub fn parse_markdown<'a>(markdown_input: &'a str) -> Text<'a> {
                     TagEnd::List(_) => {
                         list_level = list_level.saturating_sub(1);
                         if list_level == 0
-                            && !lines.is_empty() && lines.last().is_some_and(|l| !l.spans.is_empty()) && lines.last().is_some_and(|l| {
-                                !l.spans.is_empty() || l.style != Style::default()
-                            }) {
+                            && !lines.is_empty()
+                            && lines.last().is_some_and(|l| !l.spans.is_empty())
+                            && lines
+                                .last()
+                                .is_some_and(|l| !l.spans.is_empty() || l.style != Style::default())
+                        {
                             lines.push(Line::raw(""));
                         }
                     }

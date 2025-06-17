@@ -1,11 +1,11 @@
 use crate::app::App;
 use crate::app::{ClipboardFrameData, ClipboardState};
 use crate::components::logs::LogLevel;
-use bubocorelib::schedule::action_timing::ActionTiming;
-use bubocorelib::server::client::ClientMessage;
-use bubocorelib::schedule::message::SchedulerMessage;
 use bubocorelib::scene::Scene;
-use bubocorelib::shared_types::{PastedFrameData, GridSelection};
+use bubocorelib::schedule::action_timing::ActionTiming;
+use bubocorelib::schedule::message::SchedulerMessage;
+use bubocorelib::server::client::ClientMessage;
+use bubocorelib::shared_types::{GridSelection, PastedFrameData};
 use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use std::cmp::min;
@@ -62,7 +62,7 @@ impl GridComponent {
                         app.interface.components.bottom_message_timestamp =
                             Some(std::time::Instant::now());
                         status_msg_to_set = Some(error_message); // Also set status bar briefly
-                                                                  // Don't exit mode on error, allow user to correct
+                        // Don't exit mode on error, allow user to correct
                     }
                 }
             }
@@ -340,7 +340,8 @@ impl GridComponent {
                 let input_str = textarea.lines()[0].trim();
                 match input_str.parse::<usize>() {
                     Ok(new_repetitions) if new_repetitions > 0 => {
-                        let (row_idx, col_idx) = app.interface.components.grid_selection.cursor_pos();
+                        let (row_idx, col_idx) =
+                            app.interface.components.grid_selection.cursor_pos();
                         app.send_client_message(ClientMessage::SetFrameRepetitions(
                             col_idx,
                             row_idx,
@@ -370,7 +371,7 @@ impl GridComponent {
                 // Only allow digits in the input
                 let is_digit = matches!(key_event.code, KeyCode::Char(c) if c.is_ascii_digit());
                 if is_digit || matches!(key_event.code, KeyCode::Backspace) {
-                     handled_textarea = textarea.input(key_event);
+                    handled_textarea = textarea.input(key_event);
                 } else {
                     // Ignore other keys like letters, symbols etc.
                     handled_textarea = true; // Mark as handled to prevent other actions
@@ -393,7 +394,7 @@ impl GridComponent {
     }
 
     pub fn handle_key_event(&mut self, app: &mut App, key_event: KeyEvent) -> EyreResult<bool> {
-        // --- REMOVE TEMPORARY DEBUG LOG --- 
+        // --- REMOVE TEMPORARY DEBUG LOG ---
         // app.add_log(...); // Removed this block
         // --- END REMOVE DEBUG LOG ---
 
@@ -431,9 +432,7 @@ impl GridComponent {
         // Handle 'a' regardless of whether lines exist
         if key_event.code == KeyCode::Char('A') && key_event.modifiers.contains(KeyModifiers::SHIFT)
         {
-            app.send_client_message(ClientMessage::SchedulerControl(
-                SchedulerMessage::AddLine,
-            ));
+            app.send_client_message(ClientMessage::SchedulerControl(SchedulerMessage::AddLine));
             app.set_status_message("Requested adding line".to_string());
             return Ok(true);
         }
@@ -463,9 +462,7 @@ impl GridComponent {
                 if !current_selection.is_single() {
                     current_selection =
                         GridSelection::single(current_selection.start.0, current_selection.start.1);
-                    app.set_status_message(
-                        "Selection reset to single cell (at start)".to_string(),
-                    );
+                    app.set_status_message("Selection reset to single cell (at start)".to_string());
                 } else {
                     handled = false; // Esc doesn't do anything if selection is already single
                 }
@@ -479,16 +476,22 @@ impl GridComponent {
                 if let Some(scene) = &app.editor.scene {
                     if let Some(line) = scene.lines.get(col_idx) {
                         if row_idx < line.frames.len() {
-                            let is_same_frame_as_editor = app.editor.active_line.line_index == col_idx
+                            let is_same_frame_as_editor = app.editor.active_line.line_index
+                                == col_idx
                                 && app.editor.active_line.frame_index == row_idx;
 
                             if is_same_frame_as_editor {
                                 // Just switch back to the editor, no need to fetch script
                                 app.events
                                     .sender
-                                    .send(crate::event::Event::App(crate::event::AppEvent::SwitchToEditor))
+                                    .send(crate::event::Event::App(
+                                        crate::event::AppEvent::SwitchToEditor,
+                                    ))
                                     .map_err(|e| {
-                                        color_eyre::eyre::eyre!("Send Error (SwitchToEditor): {}", e)
+                                        color_eyre::eyre::eyre!(
+                                            "Send Error (SwitchToEditor): {}",
+                                            e
+                                        )
                                     })?;
                                 status_update = Some(format!(
                                     "Returning to editor for Line {}, Frame {}",
@@ -499,8 +502,7 @@ impl GridComponent {
                                 app.send_client_message(ClientMessage::GetScript(col_idx, row_idx));
                                 // Also notify server that we START editing this frame
                                 app.send_client_message(ClientMessage::StartedEditingFrame(
-                                    col_idx,
-                                    row_idx,
+                                    col_idx, row_idx,
                                 ));
                                 status_update = Some(format!(
                                     "Requested script for Line {}, Frame {}",
@@ -556,8 +558,8 @@ impl GridComponent {
                     // Pre-fill with the length of the first selected frame, or empty if none
                     let initial_text =
                         first_frame_length.map_or(String::new(), |len| format!("{:.2}", len));
-                     let mut textarea = TextArea::new(vec![initial_text]);
-                     textarea.move_cursor(tui_textarea::CursorMove::End);
+                    let mut textarea = TextArea::new(vec![initial_text]);
+                    textarea.move_cursor(tui_textarea::CursorMove::End);
                     app.interface.components.frame_length_input = textarea;
                     app.set_status_message("Enter new frame length (e.g., 1.5):".to_string());
                 } else {
@@ -591,19 +593,23 @@ impl GridComponent {
                     }
 
                     if lines_affected > 0 {
-                         app.set_status_message(format!(
+                        app.set_status_message(format!(
                             "Requested setting Start={} End={} for Lines {}..{}",
                             top, bottom, left, right
                         ));
                     } else {
                         // This case should ideally not happen if left <= right,
                         // but handle defensively.
-                        app.set_status_message("No lines in selection to set start/end.".to_string());
+                        app.set_status_message(
+                            "No lines in selection to set start/end.".to_string(),
+                        );
                     }
                     handled = true;
                 } else {
-                     app.set_status_message("Cannot set start/end frames: Scene not loaded.".to_string());
-                     handled = false;
+                    app.set_status_message(
+                        "Cannot set start/end frames: Scene not loaded.".to_string(),
+                    );
+                    handled = false;
                 }
             }
             // Enable / Disable frames
@@ -652,33 +658,28 @@ impl GridComponent {
                 }
 
                 if frames_toggled > 0 {
-                    app.set_status_message(format!(
-                        "Requested toggling {} frames",
-                        frames_toggled
-                    ));
+                    app.set_status_message(format!("Requested toggling {} frames", frames_toggled));
                 } else {
                     app.set_status_message("No valid frames in selection to toggle".to_string());
                     handled = false;
                 }
             }
             // --- Copy Action ---
-            KeyCode::Char('c') => {
-                match self.handle_copy_action(current_selection, scene) {
-                    Ok((new_clipboard_state, status_msg, messages_to_send)) => {
-                        app.clipboard = new_clipboard_state;
-                        app.set_status_message(status_msg);
-                        for msg in messages_to_send {
-                            app.send_client_message(msg);
-                        }
-                        handled = true;
+            KeyCode::Char('c') => match self.handle_copy_action(current_selection, scene) {
+                Ok((new_clipboard_state, status_msg, messages_to_send)) => {
+                    app.clipboard = new_clipboard_state;
+                    app.set_status_message(status_msg);
+                    for msg in messages_to_send {
+                        app.send_client_message(msg);
                     }
-                    Err(status_msg) => {
-                        app.set_status_message(status_msg);
-                        app.clipboard = ClipboardState::Empty;
-                        handled = false;
-                    }
+                    handled = true;
                 }
-            }
+                Err(status_msg) => {
+                    app.set_status_message(status_msg);
+                    app.clipboard = ClipboardState::Empty;
+                    handled = false;
+                }
+            },
             // --- Paste Action ---
             KeyCode::Char('p') => {
                 handled = self.handle_paste_action(app, &mut current_selection);
@@ -711,8 +712,7 @@ impl GridComponent {
                             LogLevel::Warn,
                             format!(
                                 "Cannot insert frame at invalid position {} in line {}",
-                                insert_pos,
-                                col_idx
+                                insert_pos, col_idx
                             ),
                         );
                         app.set_status_message(
@@ -742,14 +742,21 @@ impl GridComponent {
                 if num_cols > 1 {
                     // Calculate new position info *before* mutable borrows
                     let new_line_idx = line_idx_to_delete.saturating_sub(1); // Moves to line before
-                    let frames_in_new_line = scene.lines.get(new_line_idx).map_or(0, |l| l.frames.len());
-                    let new_row_idx = cursor_pos.0.min(frames_in_new_line.saturating_sub(1)).max(0); // Clamp row >= 0
+                    let frames_in_new_line =
+                        scene.lines.get(new_line_idx).map_or(0, |l| l.frames.len());
+                    let new_row_idx = cursor_pos
+                        .0
+                        .min(frames_in_new_line.saturating_sub(1))
+                        .max(0); // Clamp row >= 0
 
                     // Now perform mutable operations
                     app.send_client_message(ClientMessage::SchedulerControl(
                         SchedulerMessage::RemoveLine(line_idx_to_delete, ActionTiming::Immediate),
                     ));
-                    app.set_status_message(format!("Requested removing line {}", line_idx_to_delete));
+                    app.set_status_message(format!(
+                        "Requested removing line {}",
+                        line_idx_to_delete
+                    ));
 
                     // Update selection using pre-calculated values
                     current_selection = GridSelection::single(new_row_idx, new_line_idx); // Jumps cursor
@@ -828,8 +835,8 @@ impl GridComponent {
                             .unwrap_or_default();
 
                         app.interface.components.is_setting_frame_name = true;
-                         let mut textarea = TextArea::new(vec![existing_name]);
-                         textarea.move_cursor(tui_textarea::CursorMove::End);
+                        let mut textarea = TextArea::new(vec![existing_name]);
+                        textarea.move_cursor(tui_textarea::CursorMove::End);
                         app.interface.components.frame_name_input = textarea;
                         app.set_status_message("Enter new frame name (empty clears):".to_string());
                         handled = true;
@@ -841,7 +848,7 @@ impl GridComponent {
                     app.set_status_message("Cannot name frame: Invalid line.".to_string());
                     handled = false;
                 }
-                 return Ok(handled); // Return handled state
+                return Ok(handled); // Return handled state
             }
             KeyCode::Char('?') => {
                 app.interface.components.grid_show_help = true;
@@ -852,20 +859,18 @@ impl GridComponent {
                 if let Some(scene) = scene_opt {
                     app.interface.components.is_setting_scene_length = true;
                     let initial_text = format!("{}", scene.length());
-                    app.interface.components.scene_length_input =
-                        TextArea::new(vec![initial_text]);
+                    app.interface.components.scene_length_input = TextArea::new(vec![initial_text]);
                     app.set_status_message("Enter new scene length (beats):".to_string());
                     handled = true;
                 } else {
-                    app.set_status_message("Cannot set scene length: Scene not loaded.".to_string());
+                    app.set_status_message(
+                        "Cannot set scene length: Scene not loaded.".to_string(),
+                    );
                     handled = false;
                 }
             }
-            // --- Arrow Key Navigation --- 
-            KeyCode::Down |
-            KeyCode::Up |
-            KeyCode::Left |
-            KeyCode::Right => {
+            // --- Arrow Key Navigation ---
+            KeyCode::Down | KeyCode::Up | KeyCode::Left | KeyCode::Right => {
                 let (next_selection, changed) = self.calculate_next_selection(
                     current_selection,
                     key_event.code, // Pass the specific arrow key code
@@ -881,7 +886,7 @@ impl GridComponent {
             }
             // --- End Arrow Key Navigation ---
             KeyCode::Char('r') => {
-                 if let Some(scene) = &app.editor.scene {
+                if let Some(scene) = &app.editor.scene {
                     let (row_idx, col_idx) = app.interface.components.grid_selection.cursor_pos();
                     if let Some(line) = scene.lines.get(col_idx) {
                         if let Some(repetitions) = line.frame_repetitions.get(row_idx) {
@@ -889,16 +894,18 @@ impl GridComponent {
                             textarea.move_cursor(tui_textarea::CursorMove::End);
                             app.interface.components.frame_repetitions_input = textarea;
                         } else {
-                             // Default to 1 if index out of bounds (should not happen with consistent scene)
-                            app.interface.components.frame_repetitions_input = TextArea::from(vec!["1"]);
+                            // Default to 1 if index out of bounds (should not happen with consistent scene)
+                            app.interface.components.frame_repetitions_input =
+                                TextArea::from(vec!["1"]);
                         }
                     } else {
                         // Default to 1 if line index out of bounds
-                         app.interface.components.frame_repetitions_input = TextArea::from(vec!["1"]);
+                        app.interface.components.frame_repetitions_input =
+                            TextArea::from(vec!["1"]);
                     }
                 } else {
                     // Default to 1 if no scene loaded
-                     app.interface.components.frame_repetitions_input = TextArea::from(vec!["1"]);
+                    app.interface.components.frame_repetitions_input = TextArea::from(vec!["1"]);
                 }
 
                 app.interface.components.is_setting_frame_repetitions = true;
@@ -927,8 +934,7 @@ impl GridComponent {
                 desired_offset = final_cursor_row;
             } else if visible_height > 0 && final_cursor_row >= desired_offset + visible_height {
                 // Cursor moved below visible area
-                desired_offset =
-                    final_cursor_row.saturating_sub(visible_height.saturating_sub(1));
+                desired_offset = final_cursor_row.saturating_sub(visible_height.saturating_sub(1));
             }
 
             // Clamp desired_offset
@@ -1240,16 +1246,14 @@ impl GridComponent {
 
                         // --- Check if trying to delete the last frame ---
                         if line_len == 1 && top == 0 && bottom == 0 {
-                             // Only block if the selection *is* the last frame
-                             cannot_delete_last_frame = true;
-                             status_msg = format!(
-                                 "Cannot delete the last frame of line {}.",
-                                 col_idx
-                             );
-                             lines_and_indices_to_remove.clear(); // Prevent deletion if this occurs
-                             total_frames_deleted = 0;
-                             break; // Stop processing other lines in the selection
-                         }
+                            // Only block if the selection *is* the last frame
+                            cannot_delete_last_frame = true;
+                            status_msg =
+                                format!("Cannot delete the last frame of line {}.", col_idx);
+                            lines_and_indices_to_remove.clear(); // Prevent deletion if this occurs
+                            total_frames_deleted = 0;
+                            break; // Stop processing other lines in the selection
+                        }
                         // --- End Check ---
                     } else {
                         status_msg = format!("Cannot delete: Invalid column index {}", col_idx);
@@ -1267,7 +1271,8 @@ impl GridComponent {
                         lines_and_indices_to_remove.len()
                     );
                     handled_delete = true;
-                } else if handled_delete && !cannot_delete_last_frame { // Use the flag here
+                } else if handled_delete && !cannot_delete_last_frame {
+                    // Use the flag here
                     // Check renamed variable
                     status_msg = "Cannot delete: Selection contains no valid frames.".to_string();
                     handled_delete = false;
@@ -1290,4 +1295,4 @@ impl GridComponent {
 
         handled_delete
     }
-} 
+}

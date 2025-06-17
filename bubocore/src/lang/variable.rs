@@ -1,7 +1,7 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr},
-    cmp::Ordering,
 };
 
 use serde::{Deserialize, Serialize};
@@ -11,7 +11,10 @@ use crate::{
     lang::Program,
 };
 
-use crate::util::decimal_operations::{add_decimal, sub_decimal, mul_decimal, div_decimal, decimal_from_float64, string_from_decimal, lt_decimal, leq_decimal, eq_decimal, neq_decimal, float64_from_decimal, rem_decimal};
+use crate::util::decimal_operations::{
+    add_decimal, decimal_from_float64, div_decimal, eq_decimal, float64_from_decimal, leq_decimal,
+    lt_decimal, mul_decimal, neq_decimal, rem_decimal, string_from_decimal, sub_decimal,
+};
 
 use super::{environment_func::EnvironmentFunc, evaluation_context::EvaluationContext};
 
@@ -116,13 +119,16 @@ impl PartialOrd for VariableValue {
             (VariableValue::Integer(x), VariableValue::Float(y)) => (*x as f64).partial_cmp(y),
             (VariableValue::Float(x), VariableValue::Integer(y)) => x.partial_cmp(&(*y as f64)),
 
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
                 if *x_sign < 0 && *y_sign >= 0 {
-                    return Some(Ordering::Less)
+                    return Some(Ordering::Less);
                 }
 
                 if *x_sign >= 0 && *y_sign < 0 {
-                    return Some(Ordering::Greater)
+                    return Some(Ordering::Greater);
                 }
 
                 let x_for_cmp = *x_num * *y_den;
@@ -131,55 +137,39 @@ impl PartialOrd for VariableValue {
                 // both positive
                 if *x_sign >= 0 {
                     if x_for_cmp < y_for_cmp {
-                        return Some(Ordering::Less)
+                        return Some(Ordering::Less);
                     }
 
                     if x_for_cmp > y_for_cmp {
-                        return Some(Ordering::Greater)
+                        return Some(Ordering::Greater);
                     }
 
-                    return Some(Ordering::Equal)
+                    return Some(Ordering::Equal);
                 }
 
                 // both negative
                 if x_for_cmp < y_for_cmp {
-                    return Some(Ordering::Greater)
+                    return Some(Ordering::Greater);
                 }
 
                 if x_for_cmp > y_for_cmp {
-                    return Some(Ordering::Less)
+                    return Some(Ordering::Less);
                 }
 
                 Some(Ordering::Equal)
-            },
+            }
             (VariableValue::Integer(x), VariableValue::Decimal(_, _, _)) => {
-                let x_sign = if *x < 0 {
-                    -1
-                } else {
-                    1
-                };
-                let x_num  = if *x < 0 {
-                    (-*x) as u64
-                } else {
-                    *x as u64
-                };
+                let x_sign = if *x < 0 { -1 } else { 1 };
+                let x_num = if *x < 0 { (-*x) as u64 } else { *x as u64 };
                 let x_den = 1;
                 VariableValue::Decimal(x_sign, x_num, x_den).partial_cmp(other)
-            },
+            }
             (VariableValue::Decimal(_, _, _), VariableValue::Integer(y)) => {
-                let y_sign = if *y < 0 {
-                    -1
-                } else {
-                    1
-                };
-                let y_num = if *y < 0 {
-                    (-*y) as u64
-                } else {
-                    *y as u64
-                };
+                let y_sign = if *y < 0 { -1 } else { 1 };
+                let y_num = if *y < 0 { (-*y) as u64 } else { *y as u64 };
                 let y_den = 1;
                 self.partial_cmp(&VariableValue::Decimal(y_sign, y_num, y_den))
-            },
+            }
             (VariableValue::Float(x), VariableValue::Decimal(y_sign, y_num, y_den)) => {
                 let mut y = (*y_num as f64) / (*y_den as f64);
                 if *y_sign < 0 {
@@ -258,7 +248,10 @@ impl VariableValue {
                 VariableValue::Bool(i1 < i2)
             }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 < f2),
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => VariableValue::Bool(lt_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => VariableValue::Bool(lt_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
             _ => panic!("Comparison (lt or gt) with wrong types, this should never happen"),
         }
@@ -272,8 +265,11 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => {
                 VariableValue::Bool(i1 <= i2)
-            },
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => VariableValue::Bool(leq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
+            }
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => VariableValue::Bool(leq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 <= f2),
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
             _ => panic!("Comparison (leq or geq) with wrong types, this should never happen"),
@@ -288,8 +284,11 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => {
                 VariableValue::Bool(i1 == i2)
-            },
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => VariableValue::Bool(eq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
+            }
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => VariableValue::Bool(eq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 == f2),
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
             _ => panic!("Comparison (eq) with wrong types, this should never happen"),
@@ -300,8 +299,11 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => {
                 VariableValue::Bool(i1 != i2)
-            },
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => VariableValue::Bool(neq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
+            }
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => VariableValue::Bool(neq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 != f2),
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
             _ => panic!("Comparison (neq) with wrong types, this should never happen"),
@@ -312,12 +314,16 @@ impl VariableValue {
         match (self, other) {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => {
                 VariableValue::Integer(i1 + i2)
-            },
+            }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 + f2),
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
-                let (z_sign, z_num, z_den) = add_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
+                let (z_sign, z_num, z_den) =
+                    add_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
-            },
+            }
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
                 VariableValue::Dur(_d1.add(_d2, ctx.clock, ctx.frame_len()))
             }
@@ -333,21 +339,25 @@ impl VariableValue {
                 } else {
                     VariableValue::Integer(0)
                 }
-            },
+            }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => {
                 if f2 != 0.0 {
                     VariableValue::Float(f1 / f2)
                 } else {
                     VariableValue::Float(0.0)
                 }
-            },
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
-                let (z_sign, z_num, z_den) = div_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
+            }
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
+                let (z_sign, z_num, z_den) =
+                    div_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
-            },
+            }
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
                 VariableValue::Dur(_d1.div(_d2, ctx.clock, ctx.frame_len()))
-            },
+            }
             _ => panic!("Division with wrong types, this should never happen"),
         }
     }
@@ -360,21 +370,25 @@ impl VariableValue {
                 } else {
                     VariableValue::Integer(i1)
                 }
-            },
+            }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => {
                 if f2 != 0.0 {
                     VariableValue::Float(f1.rem_euclid(f2))
                 } else {
                     VariableValue::Float(f1)
                 }
-            },
+            }
             (VariableValue::Dur(d1), VariableValue::Dur(d2)) => {
                 VariableValue::Dur(d1.rem(d2, ctx.clock, ctx.frame_len()))
-            },
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
-                let (z_sign, z_num, z_den) = rem_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
+            }
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
+                let (z_sign, z_num, z_den) =
+                    rem_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
-            },
+            }
             _ => panic!("Reminder (modulo) with wrong types, this should never happen"),
         }
     }
@@ -385,10 +399,14 @@ impl VariableValue {
                 VariableValue::Integer(i1 * i2)
             }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 * f2),
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
-                let (z_sign, z_num, z_den) = mul_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
+                let (z_sign, z_num, z_den) =
+                    mul_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
-            },
+            }
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
                 VariableValue::Dur(_d1.mul(_d2, ctx.clock, ctx.frame_len()))
             }
@@ -402,10 +420,14 @@ impl VariableValue {
                 VariableValue::Integer(i1 - i2)
             }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1 - f2),
-            (VariableValue::Decimal(x_sign, x_num, x_den), VariableValue::Decimal(y_sign, y_num, y_den)) => {
-                let (z_sign, z_num, z_den) = sub_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
+            (
+                VariableValue::Decimal(x_sign, x_num, x_den),
+                VariableValue::Decimal(y_sign, y_num, y_den),
+            ) => {
+                let (z_sign, z_num, z_den) =
+                    sub_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
-            },
+            }
             (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
                 VariableValue::Dur(_d1.sub(_d2, ctx.clock, ctx.frame_len()))
             }
@@ -547,21 +569,11 @@ impl VariableValue {
     pub fn as_decimal(&self, clock: &Clock, frame_len: f64) -> (i8, u64, u64) {
         match self {
             VariableValue::Integer(i) => {
-                let sign = if *i < 0 {
-                    -1
-                } else {
-                    1
-                };
-                let num = if *i < 0 {
-                    (-*i) as u64
-                } else {
-                    *i as u64
-                };
+                let sign = if *i < 0 { -1 } else { 1 };
+                let num = if *i < 0 { (-*i) as u64 } else { *i as u64 };
                 (sign, num, 1)
-            },
-            VariableValue::Float(f) => {
-                decimal_from_float64(*f)
-            },
+            }
+            VariableValue::Float(f) => decimal_from_float64(*f),
             VariableValue::Decimal(sign, num, den) => (*sign, *num, *den),
             VariableValue::Bool(b) => {
                 if *b {
@@ -569,10 +581,10 @@ impl VariableValue {
                 } else {
                     (1, 0, 1)
                 }
-            },
+            }
             VariableValue::Str(s) => match s.parse::<f64>() {
                 Ok(n) => decimal_from_float64(n),
-                Err(_) => (1, 0, 1)
+                Err(_) => (1, 0, 1),
             },
             VariableValue::Dur(d) => (1, d.as_micros(clock, frame_len), 1),
             VariableValue::Func(_) => todo!(),

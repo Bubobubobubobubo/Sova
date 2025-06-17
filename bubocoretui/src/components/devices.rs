@@ -1,30 +1,28 @@
 use crate::app::App;
 use crate::components::Component;
+use crate::components::{
+    devices::device_table::DeviceTable, devices::help::HelpTextWidget,
+    devices::prompt::PromptWidget, devices::utils::centered_rect,
+};
 use bubocorelib::server::client::ClientMessage;
 use bubocorelib::shared_types::{DeviceInfo, DeviceKind};
 use color_eyre::Result as EyreResult;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use crate::components::{
-    devices::device_table::DeviceTable,
-    devices::utils::centered_rect,
-    devices::prompt::PromptWidget,
-    devices::help::HelpTextWidget,
-};
 use ratatui::{
     Frame,
     layout::{Alignment, Constraint, Direction, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs, Wrap, Widget},
+    widgets::{Block, BorderType, Borders, Clear, Paragraph, Tabs, Widget, Wrap},
 };
 use std::collections::HashMap;
 use std::time::Instant;
 use tui_textarea::TextArea;
 
 mod device_table;
-mod utils;
-mod prompt;
 mod help;
+mod prompt;
+mod utils;
 
 /// Maximum user-assignable slot ID (1-based). Slot 0 is used for logging.
 const MAX_ASSIGNABLE_SLOT: usize = 16;
@@ -906,7 +904,9 @@ impl Component for DevicesComponent {
         }
 
         if let Some(status_render_area) = status_area {
-            let status_widget = StatusBarWidget { message: &state.status_message };
+            let status_widget = StatusBarWidget {
+                message: &state.status_message,
+            };
             frame.render_widget(status_widget, status_render_area);
         }
 
@@ -918,7 +918,10 @@ impl Component for DevicesComponent {
         frame.render_widget(help_widget, help_area);
 
         if let Some(prompt) = &state.confirmation_prompt {
-            let dialog_widget = ConfirmationDialogWidget { prompt, full_area: area };
+            let dialog_widget = ConfirmationDialogWidget {
+                prompt,
+                full_area: area,
+            };
             frame.render_widget(dialog_widget, area); // Pass the full area
 
             // Still need to manage cursor position outside the widget

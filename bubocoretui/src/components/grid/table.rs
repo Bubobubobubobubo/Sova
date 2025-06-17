@@ -1,27 +1,27 @@
 use crate::app::App;
+use crate::components::grid::{GridCellData, GridCellRenderer};
 use bubocorelib::scene::Scene;
 use ratatui::prelude::*;
-use ratatui::widgets::{Widget, Block, Table, Paragraph, Row, Cell};
-use ratatui::text::Line;
 use ratatui::style::Color;
-use crate::components::grid::{GridCellData, GridCellRenderer};
+use ratatui::text::Line;
+use ratatui::widgets::{Block, Cell, Paragraph, Row, Table, Widget};
 use std::iter::once;
 
 /// A widget that renders the grid table in the timeline view.
-/// 
+///
 /// This struct holds the necessary data to render the grid table, including:
 /// - A reference to the application state for styling and configuration
 /// - A reference to the scene data containing the timeline content
 /// - The current scroll offset for vertical scrolling
 /// - The visible height of the grid in the current viewport
-/// 
+///
 /// The widget implements the `Widget` trait to render the grid table within a specified area.
-/// 
+///
 /// # Lifetime Parameters
-/// 
+///
 /// * `'a` - The lifetime of the references to `App` and `Scene`
 pub struct GridTableWidget<'a> {
-    pub app: &'a App, 
+    pub app: &'a App,
     pub scene: &'a Scene,
     pub scroll_offset: usize,
     pub visible_height: usize,
@@ -83,13 +83,14 @@ impl<'a> Widget for GridTableWidget<'a> {
                 .map_or("(Scene)".to_string(), |len| format!("({:.1}b)", len));
             let speed_display = format!("x{:.1}", line.speed_factor);
             let text = format!("LINE {} {} {}", i + 1, length_display, speed_display);
-            Cell::from(Line::from(text).alignment(Alignment::Center))
-                .style(header_style)
+            Cell::from(Line::from(text).alignment(Alignment::Center)).style(header_style)
         });
         let header = Row::new(header_cells).height(1).style(header_style);
 
-        let padding_cells =
-            std::iter::repeat_n(Cell::from("").style(Style::default().bg(Color::Reset)), num_lines);
+        let padding_cells = std::iter::repeat_n(
+            Cell::from("").style(Style::default().bg(Color::Reset)),
+            num_lines,
+        );
         let padding_row = Row::new(padding_cells).height(1);
 
         // Data Rows - Iterate over the *entire visible range*, not just max_frames
@@ -109,7 +110,7 @@ impl<'a> Widget for GridTableWidget<'a> {
                     col_width,
                 };
 
-                cell_renderer.render(cell_data, self.app) 
+                cell_renderer.render(cell_data, self.app)
             });
             Row::new(cells).height(1)
         });
@@ -119,18 +120,18 @@ impl<'a> Widget for GridTableWidget<'a> {
 
         // Calculate Column Widths using area.width
         let col_width_constraint = if num_lines > 0 {
-             Constraint::Min((area.width / num_lines as u16).max(6))
+            Constraint::Min((area.width / num_lines as u16).max(6))
         } else {
             Constraint::Min(area.width)
         };
-        let widths: Vec<Constraint> = std::iter::repeat_n(col_width_constraint, num_lines)
-            .collect();
+        let widths: Vec<Constraint> =
+            std::iter::repeat_n(col_width_constraint, num_lines).collect();
 
         // Create Table
         let table = Table::new(combined_rows, &widths)
             .header(header)
             .column_spacing(1)
-            .block(Block::default()); 
+            .block(Block::default());
 
         ratatui::widgets::Widget::render(table, area, buf);
     }

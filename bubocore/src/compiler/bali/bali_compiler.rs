@@ -1,15 +1,12 @@
-use crate::{
-    compiler::{CompilationError, Compiler},
-};
+use crate::compiler::{CompilationError, Compiler};
 use std::borrow::Cow;
 
+use crate::lang::{Program, debug_print};
 
-use crate::lang::{
-    Program, 
-    debug_print,
+use crate::compiler::bali::{
+    bali_ast::{AltVariableGenerator, bali_as_asm, constants::DEBUG_INSTRUCTIONS},
+    the_grammar_of_bali,
 };
-
-use crate::compiler::bali::{the_grammar_of_bali, bali_ast::{bali_as_asm, AltVariableGenerator, constants::DEBUG_INSTRUCTIONS}};
 
 use lalrpop_util::ParseError;
 
@@ -20,7 +17,7 @@ impl Compiler for BaliCompiler {
         "bali".to_string()
     }
 
-    fn compile(&self, script : &str) -> Result<Program, CompilationError> {
+    fn compile(&self, script: &str) -> Result<Program, CompilationError> {
         let mut alt_variables = AltVariableGenerator::new("_alt".to_string());
         match the_grammar_of_bali::ProgramParser::new().parse(&mut alt_variables, script) {
             Ok(parsed) => {
@@ -32,15 +29,15 @@ impl Compiler for BaliCompiler {
                             debug_print(&res, "PROGRAM".to_string(), "".to_string());
                         }
                         Ok(res)
-                    },
-                    Err(info) => Err(CompilationError{
+                    }
+                    Err(info) => Err(CompilationError {
                         lang: "BaLi".to_string(),
                         info,
                         from: 0,
                         to: 0,
                     }),
                 }
-            },
+            }
             Err(parse_error) => {
                 let mut from = 0;
                 let mut to = 0;

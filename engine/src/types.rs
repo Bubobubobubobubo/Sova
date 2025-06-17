@@ -22,7 +22,7 @@ pub type TrackId = u8;
 
 /// Time-scheduled message wrapper for deferred execution of engine commands.
 ///
-/// This structure enables precise timing control for audio events by storing
+/// This structure enables microsecond-precision timing control for audio events by storing
 /// messages with their execution timestamps. It implements a reverse-ordered
 /// priority queue to ensure messages are processed in chronological order.
 ///
@@ -31,26 +31,27 @@ pub type TrackId = u8;
 /// - Zero heap allocation during creation and comparison
 /// - Optimized for use in `BinaryHeap` with reverse ordering
 /// - Deterministic comparison operations for real-time safety
+/// - Microsecond precision for sample-accurate audio scheduling
 ///
 /// # Usage
 ///
 /// ```rust
 /// let scheduled = ScheduledMessage {
-///     due_time_ms: 1000, // Execute in 1 second
+///     due_time_micros: 1_000_000, // Execute in 1 second (1M microseconds)
 ///     message: EngineMessage::Play { /* ... */ },
 /// };
 /// ```
 #[derive(Debug)]
 pub struct ScheduledMessage {
-    /// Absolute timestamp in milliseconds when this message should be executed
-    pub due_time_ms: u64,
+    /// Absolute timestamp in microseconds when this message should be executed
+    pub due_time_micros: u64,
     /// The engine command to execute at the scheduled time
     pub message: EngineMessage,
 }
 
 impl PartialEq for ScheduledMessage {
     fn eq(&self, other: &Self) -> bool {
-        self.due_time_ms == other.due_time_ms
+        self.due_time_micros == other.due_time_micros
     }
 }
 
@@ -64,7 +65,7 @@ impl PartialOrd for ScheduledMessage {
 
 impl Ord for ScheduledMessage {
     fn cmp(&self, other: &Self) -> Ordering {
-        other.due_time_ms.cmp(&self.due_time_ms)
+        other.due_time_micros.cmp(&self.due_time_micros)
     }
 }
 
@@ -76,38 +77,36 @@ impl Ord for ScheduledMessage {
 #[derive(Debug, Clone)]
 pub enum EngineError {
     /// An invalid or unknown source module was requested.
-    InvalidSource { 
-        source_name: String, 
+    InvalidSource {
+        source_name: String,
         voice_id: VoiceId,
         available_sources: Vec<String>,
     },
     /// A sample folder or specific sample was not found.
-    SampleNotFound { 
-        folder: String, 
-        index: usize, 
+    SampleNotFound {
+        folder: String,
+        index: usize,
         voice_id: VoiceId,
         available_folders: Vec<String>,
     },
     /// Sample loading failed due to file format or other issues.
-    SampleLoadFailed { 
-        path: String, 
-        reason: String, 
-        voice_id: VoiceId 
+    SampleLoadFailed {
+        path: String,
+        reason: String,
+        voice_id: VoiceId,
     },
     /// Invalid parameter name or value provided.
-    ParameterError { 
-        param: String, 
-        value: String, 
-        reason: String, 
+    ParameterError {
+        param: String,
+        value: String,
+        reason: String,
         voice_id: VoiceId,
         valid_params: Vec<String>,
     },
     /// Audio device or stream error.
-    AudioDeviceError { 
-        reason: String 
-    },
+    AudioDeviceError { reason: String },
     /// Memory allocation failed.
-    MemoryAllocationFailed { 
+    MemoryAllocationFailed {
         voice_id: VoiceId,
         requested_size: usize,
     },
@@ -116,27 +115,75 @@ pub enum EngineError {
 impl std::fmt::Display for EngineError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            EngineError::InvalidSource { source_name, voice_id, available_sources } => {
-                write!(f, "Unknown source '{}' for voice {}. Available sources: [{}]", 
-                    source_name, voice_id, available_sources.join(", "))
-            },
-            EngineError::SampleNotFound { folder, index, voice_id, available_folders } => {
-                write!(f, "Sample folder '{}' (index {}) not found for voice {}. Available folders: [{}]", 
-                    folder, index, voice_id, available_folders.join(", "))
-            },
-            EngineError::SampleLoadFailed { path, reason, voice_id } => {
-                write!(f, "Failed to load sample '{}' for voice {}: {}", path, voice_id, reason)
-            },
-            EngineError::ParameterError { param, value, reason, voice_id, valid_params } => {
-                write!(f, "Invalid parameter '{}' = '{}' for voice {}: {}. Valid parameters: [{}]", 
-                    param, value, voice_id, reason, valid_params.join(", "))
-            },
+            EngineError::InvalidSource {
+                source_name,
+                voice_id,
+                available_sources,
+            } => {
+                write!(
+                    f,
+                    "Unknown source '{}' for voice {}. Available sources: [{}]",
+                    source_name,
+                    voice_id,
+                    available_sources.join(", ")
+                )
+            }
+            EngineError::SampleNotFound {
+                folder,
+                index,
+                voice_id,
+                available_folders,
+            } => {
+                write!(
+                    f,
+                    "Sample folder '{}' (index {}) not found for voice {}. Available folders: [{}]",
+                    folder,
+                    index,
+                    voice_id,
+                    available_folders.join(", ")
+                )
+            }
+            EngineError::SampleLoadFailed {
+                path,
+                reason,
+                voice_id,
+            } => {
+                write!(
+                    f,
+                    "Failed to load sample '{}' for voice {}: {}",
+                    path, voice_id, reason
+                )
+            }
+            EngineError::ParameterError {
+                param,
+                value,
+                reason,
+                voice_id,
+                valid_params,
+            } => {
+                write!(
+                    f,
+                    "Invalid parameter '{}' = '{}' for voice {}: {}. Valid parameters: [{}]",
+                    param,
+                    value,
+                    voice_id,
+                    reason,
+                    valid_params.join(", ")
+                )
+            }
             EngineError::AudioDeviceError { reason } => {
                 write!(f, "Audio device error: {}", reason)
-            },
-            EngineError::MemoryAllocationFailed { voice_id, requested_size } => {
-                write!(f, "Memory allocation failed for voice {} ({} bytes)", voice_id, requested_size)
-            },
+            }
+            EngineError::MemoryAllocationFailed {
+                voice_id,
+                requested_size,
+            } => {
+                write!(
+                    f,
+                    "Memory allocation failed for voice {} ({} bytes)",
+                    voice_id, requested_size
+                )
+            }
         }
     }
 }

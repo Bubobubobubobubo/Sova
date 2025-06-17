@@ -211,14 +211,14 @@ impl Effect {
                         _ => format!("_osc_float_arg_{}", i),
                     };
                     let temp_var = Variable::Instance(temp_var_name.to_string());
-                    
+
                     // Optimization: Handle string literals directly without stack operations
                     match arg_expr {
                         Expression::Value(Value::String(s)) => {
                             // Direct assignment for string literals - avoid unnecessary stack operations
                             res.push(Instruction::Control(ControlASM::Mov(
                                 Variable::Constant(s.clone().into()),
-                                temp_var.clone()
+                                temp_var.clone(),
                             )));
                         }
                         _ => {
@@ -268,14 +268,14 @@ impl Effect {
                 let mut params_map = HashMap::new();
                 for (key, val) in params.iter() {
                     let param_value_var = Variable::Instance(format!("_dirt_param_{}_val", key));
-                    
+
                     // Optimization: Handle string literals directly without stack operations
                     match val.as_ref() {
                         Expression::Value(Value::String(s)) => {
                             // Direct assignment for string literals - avoid unnecessary stack operations
                             res.push(Instruction::Control(ControlASM::Mov(
                                 Variable::Constant(s.clone().into()),
-                                param_value_var.clone()
+                                param_value_var.clone(),
                             )));
                         }
                         _ => {
@@ -407,13 +407,13 @@ impl Effect {
                 let mut params_map = HashMap::new();
                 for (key, val) in params.iter() {
                     let param_value_var = Variable::Instance(format!("_audio_param_{}_val", key));
-                    
+
                     // Handle string literals directly without stack operations
                     match val.as_ref() {
                         Expression::Value(Value::String(s)) => {
                             res.push(Instruction::Control(ControlASM::Mov(
                                 Variable::Constant(s.clone().into()),
-                                param_value_var.clone()
+                                param_value_var.clone(),
                             )));
                         }
                         _ => {
@@ -442,7 +442,7 @@ impl Effect {
                 // Create generic Event::AudioEngine
                 let event = Event::AudioEngine {
                     source: audio_sound_var,
-                    params: params_map,           // All params including track
+                    params: params_map, // All params including track
                     device_id: target_device_id_var,
                 };
 

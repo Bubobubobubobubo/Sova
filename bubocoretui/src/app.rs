@@ -1,3 +1,4 @@
+use crate::components::screensaver::BitfieldPattern;
 use crate::components::{
     Component,
     command_palette::{CommandPaletteComponent, PaletteAction},
@@ -19,9 +20,9 @@ use crate::network::NetworkManager;
 use crate::ui::Flash;
 use bubocorelib::compiler::CompilationError;
 use bubocorelib::scene::Scene;
+use bubocorelib::schedule::action_timing::ActionTiming;
 use bubocorelib::server::{ServerMessage, client::ClientMessage};
 use bubocorelib::shared_types::{DeviceInfo, DeviceKind, GridSelection};
-use bubocorelib::schedule::action_timing::ActionTiming;
 use chrono::Local;
 use color_eyre::Result as EyreResult;
 use ratatui::{
@@ -39,7 +40,6 @@ use syntect::{
     parsing::{SyntaxDefinition, SyntaxSetBuilder},
 };
 use tui_textarea::{SyntaxHighlighter, TextArea};
-use crate::components::screensaver::BitfieldPattern;
 
 /// Maximum number of log entries to keep.
 const MAX_LOGS: usize = 100;
@@ -302,9 +302,9 @@ impl App {
                 vim_state: VimState::new(),
                 is_lang_popup_active: false,
                 is_help_popup_active: false,
-                available_languages: vec![], 
+                available_languages: vec![],
                 selected_lang_index: 0,
-                syntax_highlighter: None, // Initialize as None
+                syntax_highlighter: None,        // Initialize as None
                 syntax_name_map: HashMap::new(), // Initialize as empty
             },
             server: ServerState {
@@ -357,12 +357,14 @@ impl App {
             // Process the event
             match event {
                 Event::Tick => self.tick(),
-                Event::Crossterm(event) => if let CrosstermEvent::Key(key_event) = event {
-                    if key_event.kind == KeyEventKind::Release {
-                        continue;
+                Event::Crossterm(event) => {
+                    if let CrosstermEvent::Key(key_event) = event {
+                        if key_event.kind == KeyEventKind::Release {
+                            continue;
+                        }
+                        let _ = self.handle_key_events(key_event)?;
                     }
-                    let _ = self.handle_key_events(key_event)?;
-                },
+                }
                 Event::App(app_event) => self.handle_app_event(app_event)?,
                 Event::Network(message) => self.handle_server_message(message),
             }
@@ -388,9 +390,17 @@ impl App {
         let default_port = 8080;
         let default_username = self.server.username.clone(); // Use initial username if config is empty
 
-        let ip = self.client_config.last_ip_address.as_deref().unwrap_or(&default_ip);
+        let ip = self
+            .client_config
+            .last_ip_address
+            .as_deref()
+            .unwrap_or(&default_ip);
         let port = self.client_config.last_port.unwrap_or(default_port);
-        let username = self.client_config.last_username.as_deref().unwrap_or(&default_username);
+        let username = self
+            .client_config
+            .last_username
+            .as_deref()
+            .unwrap_or(&default_username);
 
         // DO NOT update network manager here. Only populate the display state.
         // The actual connection info will be set when the user hits Enter.
@@ -476,7 +486,11 @@ impl App {
                     let mut successfully_loaded_any = false;
 
                     for (compiler_name, syntax_content) in &syntax_definitions {
-                        match SyntaxDefinition::load_from_str(syntax_content, true, Some(compiler_name)) {
+                        match SyntaxDefinition::load_from_str(
+                            syntax_content,
+                            true,
+                            Some(compiler_name),
+                        ) {
                             Ok(syntax_def) => {
                                 builder.add(syntax_def);
                                 successfully_loaded_any = true;
@@ -494,7 +508,9 @@ impl App {
                     }
 
                     if !successfully_loaded_any {
-                         eprintln!("Warning: No syntax definitions were successfully loaded from the server.");
+                        eprintln!(
+                            "Warning: No syntax definitions were successfully loaded from the server."
+                        );
                         (None, syntax_map) // Return None for highlighter if nothing loaded
                     } else {
                         let ss = builder.build();
@@ -503,7 +519,7 @@ impl App {
                             if let Some(syntax) = ss.find_syntax_by_extension(compiler_name) {
                                 syntax_map.insert(compiler_name.clone(), syntax.name.clone());
                             } else {
-                                 eprintln!(
+                                eprintln!(
                                     "Warning: Could not find loaded syntax definition for extension '{}' after loading.",
                                     compiler_name
                                 );
@@ -1099,8 +1115,15 @@ impl App {
         // --- Screensaver Activation Check ---
         let screensaver_timeout = Duration::from_secs(self.client_config.screensaver_timeout_secs);
         if self.client_config.screensaver_enabled
-            && self.interface.screen.mode != Mode::Screensaver && self.last_interaction_time.elapsed() >= screensaver_timeout && self.interface.screen.mode != Mode::Splash && screensaver_timeout > Duration::ZERO {
-            self.add_log(LogLevel::Info, "Activating screensaver due to inactivity.".to_string());
+            && self.interface.screen.mode != Mode::Screensaver
+            && self.last_interaction_time.elapsed() >= screensaver_timeout
+            && self.interface.screen.mode != Mode::Splash
+            && screensaver_timeout > Duration::ZERO
+        {
+            self.add_log(
+                LogLevel::Info,
+                "Activating screensaver due to inactivity.".to_string(),
+            );
             self.interface.screen.previous_mode = self.interface.screen.mode;
             self.interface.screen.mode = Mode::Screensaver;
             // Reset screensaver specific timers/state upon activation
@@ -1420,7 +1443,7 @@ impl App {
                 self.set_status_message("Requested transport start (Immediate)".to_string());
             }
             // self.last_interaction_time = Instant::now(); // Interaction détectée
-            return Ok(true); 
+            return Ok(true);
         }
 
         // 4. Global function key shortcuts for switching modes.
@@ -1462,7 +1485,8 @@ impl App {
                     .send(Event::App(AppEvent::SwitchToLogs))?;
                 mode_changed = true;
             }
-            KeyCode::F(7) | KeyCode::F(8) => { // F7 and F8 map to SaveLoad
+            KeyCode::F(7) | KeyCode::F(8) => {
+                // F7 and F8 map to SaveLoad
                 self.events
                     .sender
                     .send(Event::App(AppEvent::SwitchToSaveLoad))?;
@@ -1471,7 +1495,7 @@ impl App {
             _ => {} // Continue if not an F-key
         }
         if mode_changed {
-             // self.last_interaction_time = Instant::now(); // Interaction détectée
+            // self.last_interaction_time = Instant::now(); // Interaction détectée
             return Ok(true);
         }
 
@@ -1487,7 +1511,8 @@ impl App {
             Mode::SaveLoad => SaveLoadComponent::new().handle_key_event(self, key_event)?,
             Mode::Screensaver => {
                 // Le composant Screensaver gérera sa propre sortie et la mise à jour de last_interaction_time
-                crate::components::screensaver::ScreensaverComponent::new().handle_key_event(self, key_event)?
+                crate::components::screensaver::ScreensaverComponent::new()
+                    .handle_key_event(self, key_event)?
             }
         };
 

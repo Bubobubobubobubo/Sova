@@ -1,18 +1,18 @@
-use crate::components::grid::cell_style::GridCellStyles;
 use crate::app::App;
+use crate::components::grid::cell_style::GridCellStyles;
+use crate::components::grid::{GridCellData, GridSelection};
 use ratatui::prelude::*;
 use ratatui::text::Line;
 use ratatui::widgets::Cell;
-use crate::components::grid::{GridCellData, GridSelection};
 
 /// A renderer for individual cells in the timeline grid.
-/// 
+///
 /// This struct handles the visual rendering of grid cells, including their styles and content.
 /// It maintains consistent styling across the grid and provides methods to determine
 /// how each cell should be displayed based on its state.
-/// 
+///
 /// # Fields
-/// 
+///
 /// * `styles` - The collection of visual styles for different cell states
 /// * `bar_char_active` - The character used to represent an active frame in the grid
 /// * `bar_char_inactive` - The character used to represent an inactive frame in the grid
@@ -32,18 +32,18 @@ impl GridCellRenderer {
     }
 
     /// Determines the visual style and optional content override for a grid cell based on its state.
-    /// 
+    ///
     /// This function evaluates the cell's position relative to local and peer cursors, selections,
     /// and editing states to determine how it should be displayed.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `data` - The grid cell data containing position and line information
     /// * `app` - The application state containing cursor positions and peer information
     /// * `base_style` - The default style to use if no special states apply
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A tuple containing:
     /// * The final style to apply to the cell
     /// * An optional content override (typically used for peer cursor indicators)
@@ -87,7 +87,7 @@ impl GridCellRenderer {
             final_style = styles.cursor;
         } else if let Some((ref peer_name, _)) = peer_on_cell {
             final_style = styles.peer_cursor;
-            let name_fragment = peer_name.clone().chars().take(4).collect::<String>(); 
+            let name_fragment = peer_name.clone().chars().take(4).collect::<String>();
             content_override = Some(Span::raw(format!("{:<4}", name_fragment)));
         } else {
             final_style = base_style;
@@ -95,47 +95,47 @@ impl GridCellRenderer {
 
         if is_being_edited_by_peer && !(is_local_cursor || is_selected_locally) {
             // Apply animation only if there's peer content or local cursor/selection isn't overriding
-            let should_animate = is_local_cursor || is_selected_locally || peer_on_cell.is_some(); 
-             if should_animate {
-                 let phase = std::time::SystemTime::now()
-                     .duration_since(std::time::UNIX_EPOCH)
-                     .unwrap_or_default()
-                     .as_millis()
-                     % 500;
-                 let current_fg = final_style.fg.unwrap_or(Color::White);
-                 let animated_fg = if phase < 250 { current_fg } else { Color::Red };
-                 final_style = final_style.fg(animated_fg);
-             }
+            let should_animate = is_local_cursor || is_selected_locally || peer_on_cell.is_some();
+            if should_animate {
+                let phase = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
+                    % 500;
+                let current_fg = final_style.fg.unwrap_or(Color::White);
+                let animated_fg = if phase < 250 { current_fg } else { Color::Red };
+                final_style = final_style.fg(animated_fg);
+            }
         }
 
         (final_style, content_override)
     }
 
     /// Renders a single cell in the grid with all its visual elements and states.
-    /// 
+    ///
     /// This function handles the complex rendering logic for a grid cell, including:
     /// - Frame state (enabled/disabled)
     /// - Playback markers (current frame, end of line)
     /// - Start/end range indicators
     /// - Peer cursor and editing indicators
     /// - Frame names and duration values
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `data` - Contains the cell's position and associated line data
     /// * `app` - Reference to the application state for accessing peer and playback info
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A `Cell` containing the rendered content with appropriate styling
-    /// 
+    ///
     /// # Notes
-    /// 
+    ///
     /// The cell layout consists of:
     /// - Left side: Range bar, play marker, frame name
     /// - Right side: Frame duration
     /// - Padding in between to fill the column width
-    /// 
+    ///
     /// Special cases handled:
     /// - Empty cells (no line data)
     /// - Out of bounds frames
@@ -164,16 +164,13 @@ impl GridCellRenderer {
                     styles.disabled
                 };
 
-                let (final_style, content_override) = self.determine_cell_style_and_content(&data, app, base_style);
+                let (final_style, content_override) =
+                    self.determine_cell_style_and_content(&data, app, base_style);
                 let current_frame_info = app
                     .server
                     .current_frame_positions
                     .as_ref()
-                    .and_then(|positions| {
-                        positions
-                            .iter()
-                            .find(|(l, _, _)| *l == data.col_idx)
-                    });
+                    .and_then(|positions| positions.iter().find(|(l, _, _)| *l == data.col_idx));
 
                 let (current_frame_idx_for_line, current_repetition_idx) = current_frame_info
                     .map(|(_, f, r)| (*f, *r))
@@ -192,7 +189,6 @@ impl GridCellRenderer {
                     " "
                 };
                 let play_marker_span = Span::raw(play_marker);
-
 
                 // Determine Start/End Bar
                 let should_draw_bar = if let Some(start) = line.start_frame {
@@ -225,16 +221,18 @@ impl GridCellRenderer {
                     |span| span.content.to_string(),
                 );
 
-                 // Build repetition string ONLY if playhead is on this frame
-                 let repetition_span_opt: Option<Span> = if is_head_on_this_frame && total_repetitions > 1 {
-                      // Use a slightly less intrusive style for repetition count
-                      Some(Span::styled( // Style with gray background like duration
-                          format!(" ({}/{})", current_repetition_idx + 1, total_repetitions),
-                          Style::default().fg(Color::White).bg(Color::DarkGray), // Match duration style
-                      ))
-                  } else {
-                      None // No repetition info shown otherwise
-                  };
+                // Build repetition string ONLY if playhead is on this frame
+                let repetition_span_opt: Option<Span> =
+                    if is_head_on_this_frame && total_repetitions > 1 {
+                        // Use a slightly less intrusive style for repetition count
+                        Some(Span::styled(
+                            // Style with gray background like duration
+                            format!(" ({}/{})", current_repetition_idx + 1, total_repetitions),
+                            Style::default().fg(Color::White).bg(Color::DarkGray), // Match duration style
+                        ))
+                    } else {
+                        None // No repetition info shown otherwise
+                    };
 
                 let mut left_spans = vec![bar_span, play_marker_span, Span::raw(" ")];
                 left_spans.push(Span::raw(main_content_str));
@@ -269,7 +267,6 @@ impl GridCellRenderer {
                 let cell_content =
                     Line::from(cell_line_spans).alignment(ratatui::layout::Alignment::Left);
                 Cell::from(cell_content).style(final_style)
-
             } else {
                 self.render_empty(data, app)
             }
@@ -279,23 +276,25 @@ impl GridCellRenderer {
     }
 
     /// Renders an empty cell in the grid.
-    /// 
+    ///
     /// This function creates a cell with no frame content, using the terminal's default background.
     /// It may display peer cursor information if present, otherwise renders an empty space.
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `data` - The grid cell data containing position and line information
     /// * `app` - The application state for determining cell styling and peer information
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// A styled `Cell` that can be rendered in the grid
     fn render_empty<'a>(&self, data: GridCellData<'a>, app: &App) -> Cell<'static> {
         let base_style = Style::default().bg(Color::Reset);
-        let (final_style, content_override) = self.determine_cell_style_and_content(&data, app, base_style);
+        let (final_style, content_override) =
+            self.determine_cell_style_and_content(&data, app, base_style);
         let cell_content_span = content_override.unwrap_or_else(|| Span::raw(""));
-        let cell_content = Line::from(cell_content_span).alignment(ratatui::layout::Alignment::Left);
+        let cell_content =
+            Line::from(cell_content_span).alignment(ratatui::layout::Alignment::Left);
         Cell::from(cell_content).style(final_style)
     }
 }
