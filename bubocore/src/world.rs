@@ -193,11 +193,12 @@ impl World {
             ProtocolPayload::AudioEngine(audio_payload) => {
                 // Handle timebase calibration first, outside of any borrows
                 let current_link_time = self.clock.micros();
-                if current_link_time - self.timebase_calibration.last_calibration > 
-                   self.timebase_calibration.calibration_interval {
+                if current_link_time - self.timebase_calibration.last_calibration
+                    > self.timebase_calibration.calibration_interval
+                {
                     self.calibrate_timebase();
                 }
-                
+
                 if let Some(ref tx) = self.audio_engine_tx {
                     let (engine_message, new_voice_id_counter) = self
                         .convert_audio_engine_payload_to_engine_message(
@@ -207,20 +208,22 @@ impl World {
                     self.voice_id_counter = new_voice_id_counter;
 
                     let current_sync_time = self.get_clock_micros();
-                    
-                    let scheduled_msg =
-                        if time <= current_sync_time || (time - current_sync_time) < 5000 {
-                            // For messages in the past or within 5ms, execute immediately for efficiency
-                            ScheduledEngineMessage::Immediate(engine_message)
-                        } else {
-                            // High-precision Link→SystemTime conversion
-                            let system_due_time = (time as i64 + self.timebase_calibration.link_to_system_offset) as u64;
-                            
-                            ScheduledEngineMessage::Scheduled(ScheduledMessage {
-                                due_time_micros: system_due_time,
-                                message: engine_message,
-                            })
-                        };
+
+                    let scheduled_msg = if time <= current_sync_time
+                        || (time - current_sync_time) < 5000
+                    {
+                        // For messages in the past or within 5ms, execute immediately for efficiency
+                        ScheduledEngineMessage::Immediate(engine_message)
+                    } else {
+                        // High-precision Link→SystemTime conversion
+                        let system_due_time =
+                            (time as i64 + self.timebase_calibration.link_to_system_offset) as u64;
+
+                        ScheduledEngineMessage::Scheduled(ScheduledMessage {
+                            due_time_micros: system_due_time,
+                            message: engine_message,
+                        })
+                    };
                     let _ = tx.send(scheduled_msg);
                 }
             }
@@ -242,14 +245,11 @@ impl World {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_micros() as u64;
-        
+
         // Calculate offset: SystemTime - LinkTime
-        self.timebase_calibration.link_to_system_offset = 
-            system_time as i64 - link_time as i64;
+        self.timebase_calibration.link_to_system_offset = system_time as i64 - link_time as i64;
         self.timebase_calibration.last_calibration = link_time;
     }
-    
-
 
     fn convert_audio_engine_payload_to_engine_message(
         &self,

@@ -166,15 +166,17 @@ impl AudioEngine {
         if self.stream_start_time == 0 {
             return None;
         }
-        
+
         // Calculate how many microseconds have passed since stream start
-        let stream_elapsed_micros = self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
+        let stream_elapsed_micros =
+            self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
         let current_timestamp = self.stream_start_time + stream_elapsed_micros as u64;
-        
+
         // Calculate sample offset from current position
         let time_diff_micros = timestamp_micros as i64 - current_timestamp as i64;
-        let sample_offset = (time_diff_micros as f64 / 1_000_000.0 * self.sample_rate as f64) as i64;
-        
+        let sample_offset =
+            (time_diff_micros as f64 / 1_000_000.0 * self.sample_rate as f64) as i64;
+
         Some(sample_offset)
     }
 
@@ -277,7 +279,7 @@ impl AudioEngine {
 
             output[processed..processed + block_len].copy_from_slice(block_slice);
             processed += block_len;
-            
+
             // Update sample count for timing accuracy
             self.current_sample_count += block_len as u64;
         }
@@ -299,7 +301,8 @@ impl AudioEngine {
         status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
     ) {
         while let Some(scheduled) = self.scheduled_messages.peek() {
-            if let Some(sample_offset) = self.timestamp_to_sample_offset(scheduled.due_time_micros) {
+            if let Some(sample_offset) = self.timestamp_to_sample_offset(scheduled.due_time_micros)
+            {
                 // Check if message should fire within this block
                 if sample_offset >= 0 && sample_offset < block_len as i64 {
                     let scheduled = self.scheduled_messages.pop().unwrap();
@@ -317,9 +320,10 @@ impl AudioEngine {
                 }
             } else {
                 // Fallback to old timing if stream timing not initialized
-                let stream_elapsed_micros = self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
+                let stream_elapsed_micros =
+                    self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
                 let estimated_current_time = self.stream_start_time + stream_elapsed_micros as u64;
-                
+
                 if scheduled.due_time_micros <= estimated_current_time {
                     let scheduled = self.scheduled_messages.pop().unwrap();
                     self.handle_message_immediate(&scheduled.message, status_tx);
@@ -640,7 +644,7 @@ impl AudioEngine {
 
         let engine_clone = Arc::clone(&engine);
         let mut stream_initialized = false;
-        
+
         let stream = device
             .build_output_stream(
                 &config,
@@ -659,7 +663,7 @@ impl AudioEngine {
                             engine_lock.initialize_stream_timing();
                             stream_initialized = true;
                         }
-                        
+
                         // Process audio - this is the only place we hold the lock
                         engine_lock.process(buffer_slice);
                         // Lock is automatically released here
