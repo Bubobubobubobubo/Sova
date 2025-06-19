@@ -12,6 +12,7 @@ use std::collections::BinaryHeap;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::{SystemTime, UNIX_EPOCH};
+use crossbeam_channel::{Receiver, Sender};
 
 pub struct AudioEngine {
     pub voices: Vec<Voice>,
@@ -752,6 +753,130 @@ impl AudioEngine {
             }
 
             std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    }
+
+    /// Lock-free audio thread implementation using crossbeam channels
+    pub fn start_audio_thread_lockfree(
+        mut engine: AudioEngine,
+        block_size: u32,
+        max_voices: usize,
+        sample_rate: u32,
+        buffer_size: usize,
+        output_device: Option<String>,
+        command_rx: Receiver<ScheduledEngineMessage>,
+        status_tx: Option<Sender<EngineStatusMessage>>,
+    ) -> thread::JoinHandle<()> {
+        thread::Builder::new()
+            .name("audio_lockfree".to_string())
+            .spawn(move || {
+                Self::run_audio_thread_lockfree(
+                    engine,
+                    sample_rate,
+                    buffer_size,
+                    output_device,
+                    command_rx,
+                    status_tx,
+                    block_size,
+                    max_voices,
+                );
+            })
+            .expect("Failed to spawn lock-free audio thread")
+    }
+
+    fn run_audio_thread_lockfree(
+        mut engine: AudioEngine,
+        sample_rate: u32,
+        buffer_size: usize,
+        output_device: Option<String>,
+        command_rx: Receiver<ScheduledEngineMessage>,
+        status_tx: Option<Sender<EngineStatusMessage>>,
+        block_size: u32,
+        _max_voices: usize,
+    ) {
+        use cpal::StreamConfig;
+        use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
+
+        let host = cpal::default_host();
+
+        let device = if let Some(device_name) = output_device {
+            host.output_devices()
+                .unwrap()
+                .find(|d| d.name().unwrap_or_default() == device_name)
+                .unwrap_or_else(|| {
+                    host.default_output_device()
+                        .expect("No output device available")
+                })
+        } else {
+            host.default_output_device()
+                .expect("No output device available")
+        };
+
+        let config = StreamConfig {
+            channels: 2,
+            sample_rate: cpal::SampleRate(sample_rate),
+            buffer_size: cpal::BufferSize::Fixed(buffer_size as u32),
+        };
+
+        let mut pre_allocated_buffer = vec![Frame::ZERO; buffer_size];
+        let _effective_block_size = block_size.min(buffer_size as u32) as usize;
+
+        let mut stream_initialized = false;
+
+        let stream = device
+            .build_output_stream(
+                &config,
+                move |data: &mut [f32], _: &cpal::OutputCallbackInfo| {
+                    let frames_needed = data.len() / 2;
+                    let actual_frames = frames_needed.min(buffer_size);
+                    let buffer_slice = &mut pre_allocated_buffer[..actual_frames];
+
+                    Frame::process_block_zero(buffer_slice);
+
+                    if !stream_initialized {
+                        engine.initialize_stream_timing();
+                        stream_initialized = true;
+                    }
+
+                    // Process all pending commands (lock-free!)
+                    while let Ok(scheduled_msg) = command_rx.try_recv() {
+                        match scheduled_msg {
+                            ScheduledEngineMessage::Immediate(msg) => {
+                                engine.handle_message_immediate(&msg, None);
+                            }
+                            ScheduledEngineMessage::Scheduled(scheduled) => {
+                                engine.schedule_message(scheduled.message, scheduled.due_time_micros);
+                            }
+                        }
+                    }
+
+                    // Process audio (no mutex!)
+                    engine.process(buffer_slice);
+
+                    // Fill output buffer
+                    data.fill(0.0);
+                    for (i, frame) in buffer_slice.iter().enumerate() {
+                        let idx = i * 2;
+                        if idx + 1 < data.len() {
+                            data[idx] = frame.left;
+                            data[idx + 1] = frame.right;
+                        }
+                    }
+                },
+                |err| {
+                    eprintln!("[ENGINE ERROR] Audio stream error: {}", err);
+                },
+                None, // No timeout
+            )
+            .expect("Failed to build audio stream");
+
+        stream.play().expect("Failed to start audio stream");
+
+        println!("Lock-free audio thread started at {}Hz, buffer: {}", sample_rate, buffer_size);
+
+        // Keep the stream alive
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
         }
     }
 

@@ -21,4 +21,5 @@ faust-macro = { git = "https://github.com/Frando/rust-faust" }
 faust-ui = { git = "https://github.com/Frando/rust-faust" }
 strum = { version = "0.26", features = ["derive"] }
 crossbeam-queue = "0.3.11"
+crossbeam-channel = "0.5.15"
 hound = "3.5"
