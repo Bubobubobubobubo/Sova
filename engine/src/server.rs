@@ -8,6 +8,7 @@ use std::net::UdpSocket;
 use std::sync::Arc;
 use std::sync::mpsc;
 use std::time::Duration;
+use crossbeam_channel::Sender;
 
 pub enum ScheduledEngineMessage {
     Immediate(EngineMessage),
@@ -59,6 +60,34 @@ impl OscServer {
         })
     }
 
+    /// Lock-free OSC server using crossbeam channels
+    pub fn run_lockfree(&mut self, engine_tx: Sender<ScheduledEngineMessage>) {
+        println!("Starting lock-free OSC server...");
+        
+        loop {
+            match self.socket.recv_from(&mut self.receive_buffer) {
+                Ok((size, addr)) => {
+                    println!("OSC message received from {}: {} bytes", addr, size);
+
+                    let mut temp_buffer = [0u8; 1024];
+                    temp_buffer[..size].copy_from_slice(&self.receive_buffer[..size]);
+
+                    if let Some(message) = self.parse_osc_message(&temp_buffer[..size]) {
+                        // Send to audio thread (bounded channel prevents blocking)
+                        if let Err(_) = engine_tx.try_send(message) {
+                            eprintln!("[OSC WARNING] Command queue full - dropping message");
+                        }
+                    }
+                }
+                Err(err) => {
+                    if err.kind() != std::io::ErrorKind::TimedOut {
+                        eprintln!("[OSC ERROR] Failed to receive: {}", err);
+                    }
+                }
+            }
+        }
+    }
+
     pub fn run(&mut self, engine_tx: mpsc::Sender<ScheduledEngineMessage>) {
         loop {
             match self.socket.recv_from(&mut self.receive_buffer) {
@@ -75,6 +104,10 @@ impl OscServer {
                 Err(_) => continue,
             }
         }
+    }
+
+    fn parse_osc_packet(&mut self, data: &[u8]) -> Option<ScheduledEngineMessage> {
+        self.parse_osc_message(data)
     }
 
     fn parse_osc_message(&mut self, data: &[u8]) -> Option<ScheduledEngineMessage> {

@@ -9,9 +9,10 @@ use clap::Parser;
 use engine::AudioEngine;
 use memory::{MemoryPool, SampleLibrary, VoiceMemory};
 use registry::ModuleRegistry;
-use server::{OscServer, ScheduledEngineMessage};
-use std::sync::{Arc, mpsc};
+use server::OscServer;
+use std::sync::Arc;
 use std::thread;
+use crossbeam_channel::bounded;
 
 pub mod audio_tools;
 pub mod dsp;
@@ -148,33 +149,32 @@ fn main() {
         Arc::clone(&sample_library),
     )));
 
-    let (engine_tx, engine_rx): (
-        mpsc::Sender<ScheduledEngineMessage>,
-        mpsc::Receiver<ScheduledEngineMessage>,
-    ) = mpsc::channel();
-
-    let engine_clone = Arc::clone(&audio_engine);
-    let audio_thread = AudioEngine::start_audio_thread(
-        engine_clone,
-        args.block_size,
-        args.max_voices,
-        args.sample_rate,
-        args.buffer_size,
-        args.output_device,
-        engine_rx,
-        None, // No status channel for standalone engine
-    );
-
+    println!("Starting LOCK-FREE audio engine...");
+    
+    // Create bounded crossbeam channel for lock-free operation
+    let (engine_tx, engine_rx) = bounded(1024);
+    
+    // Move engine out of Arc<Mutex<>> for lock-free operation
+    let engine = Arc::try_unwrap(audio_engine)
+        .map_err(|_| "Failed to unwrap AudioEngine from Arc")
+        .unwrap()
+        .into_inner()
+        .unwrap();
+        
     let engine_tx_clone = engine_tx.clone();
     let registry_clone = registry.clone();
     let voice_memory_clone = Arc::clone(&voice_memory);
     let sample_library_clone = Arc::clone(&sample_library);
-    let osc_thread = thread::Builder::new()
-        .name("osc".to_string())
+    let osc_host = args.osc_host.clone();
+    let osc_port = args.osc_port;
+    
+    // Start OSC server thread
+    let _osc_thread = thread::Builder::new()
+        .name("osc_lockfree".to_string())
         .spawn(move || {
             let mut osc_server = match OscServer::new(
-                &args.osc_host,
-                args.osc_port,
+                &osc_host,
+                osc_port,
                 registry_clone,
                 voice_memory_clone,
                 sample_library_clone,
@@ -185,12 +185,23 @@ fn main() {
                     return;
                 }
             };
-            osc_server.run(engine_tx_clone);
+            osc_server.run_lockfree(engine_tx_clone);
         })
-        .expect("Failed to spawn OSC thread");
+        .expect("Failed to spawn lock-free OSC thread");
+        
+    // Start lock-free audio thread
+    let audio_thread = AudioEngine::start_audio_thread_lockfree(
+        engine,
+        args.block_size,
+        args.max_voices,
+        args.sample_rate,
+        args.buffer_size,
+        args.output_device,
+        engine_rx,
+        None, // No status channel for standalone engine
+    );
 
     println!("Ready ✓");
 
     let _ = audio_thread.join();
-    let _ = osc_thread.join();
 }
