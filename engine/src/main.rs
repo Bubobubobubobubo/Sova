@@ -23,6 +23,7 @@ pub mod modules;
 pub mod parser;
 pub mod registry;
 pub mod server;
+pub mod timing;
 pub mod track;
 pub mod types;
 pub mod voice;

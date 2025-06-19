@@ -20,8 +20,10 @@ pub fn calculate_frame_index(
         return (usize::MAX, usize::MAX, 0, SyncTime::MAX, SyncTime::MAX);
     }
 
-    let beat_in_effective_loop = current_absolute_beat % effective_loop_length_beats;
-    let loop_iteration = current_absolute_beat.div_euclid(effective_loop_length_beats) as usize;
+    use crate::util::decimal_operations::precise_beat_modulo;
+    
+    let beat_in_effective_loop = precise_beat_modulo(current_absolute_beat, effective_loop_length_beats);
+    let loop_iteration = (current_absolute_beat / effective_loop_length_beats).floor() as usize;
 
     let effective_start_frame = line.get_effective_start_frame();
     let effective_num_frames = line.get_effective_num_frames();
@@ -39,7 +41,8 @@ pub fn calculate_frame_index(
         } else {
             line.speed_factor
         };
-        let single_rep_len_beats = line.frame_len(absolute_frame_index) / speed_factor;
+        use crate::util::decimal_operations::precise_beat_division;
+        let single_rep_len_beats = precise_beat_division(line.frame_len(absolute_frame_index), speed_factor);
         let total_repetitions = line
             .frame_repetitions
             .get(absolute_frame_index)

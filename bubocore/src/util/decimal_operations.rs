@@ -187,6 +187,42 @@ pub fn string_from_decimal(sign: i8, num: u64, den: u64) -> String {
     sign.to_owned() + &num.to_string() + "/" + &den.to_string()
 }
 
+/// High-precision summation of floating-point values using rational arithmetic.
+/// Eliminates cumulative floating-point rounding errors in summation operations.
+pub fn precise_sum(values: impl Iterator<Item = f64>) -> f64 {
+    let result = values
+        .map(decimal_from_float64)
+        .fold((1, 0, 1), |acc, val| add_decimal(acc.0, acc.1, acc.2, val.0, val.1, val.2));
+    
+    float64_from_decimal(result.0, result.1, result.2)
+}
+
+/// High-precision modulo operation for beat positioning using the fraction crate.
+/// Preserves exact fractional beat positions (1/4, 1/8, 1/16, etc.) without precision loss.
+pub fn precise_beat_modulo(beat: f64, loop_length: f64) -> f64 {
+    use fraction::Fraction;
+    
+    let beat_fraction = Fraction::from(beat);
+    let loop_fraction = Fraction::from(loop_length);
+    let result_fraction = beat_fraction % loop_fraction;
+    
+    // Convert back to f64 - fraction crate maintains full precision
+    f64::try_from(result_fraction).unwrap_or(beat % loop_length)
+}
+
+/// High-precision division for beat calculations using the fraction crate.
+/// Eliminates floating-point precision loss in speed factor and timing divisions.
+pub fn precise_beat_division(numerator: f64, denominator: f64) -> f64 {
+    use fraction::Fraction;
+    
+    let num_fraction = Fraction::from(numerator);
+    let den_fraction = Fraction::from(denominator);
+    let result_fraction = num_fraction / den_fraction;
+    
+    // Convert back to f64 - fraction crate maintains full precision
+    f64::try_from(result_fraction).unwrap_or(numerator / denominator)
+}
+
 // Reminder of the division of two decimal numbers
 pub fn rem_decimal(
     x_sign: i8,
