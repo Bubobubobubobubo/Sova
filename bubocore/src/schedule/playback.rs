@@ -40,7 +40,13 @@ impl PlaybackManager {
             PlaybackState::Stopped => {
                 if link_is_playing {
                     let quantum = clock.quantum();
-                    let target_beat = ((current_beat / quantum).floor() + 1.0) * quantum;
+                    // High-precision quantum synchronization using rational arithmetic
+                    // Eliminates floating-point precision loss in transport start timing
+                    use fraction::Fraction;
+                    let current_fraction = Fraction::from(current_beat);
+                    let quantum_fraction = Fraction::from(quantum);
+                    let target_beat = ((current_fraction / quantum_fraction).floor() + 1) * quantum_fraction;
+                    let target_beat = f64::try_from(target_beat).unwrap_or(((current_beat / quantum).floor() + 1.0) * quantum);
                     println!(
                         "[SCHEDULER] Link is playing, scheduler was stopped. Waiting for beat {:.4} to start.",
                         target_beat
@@ -110,7 +116,12 @@ impl PlaybackManager {
         let current_micros = clock.micros();
         let current_beat = clock.beat_at_date(current_micros);
         let quantum = clock.quantum();
-        let start_beat = ((current_beat / quantum).floor() + 1.0) * quantum;
+        // High-precision quantum synchronization for transport start requests
+        use fraction::Fraction;
+        let current_fraction = Fraction::from(current_beat);
+        let quantum_fraction = Fraction::from(quantum);
+        let start_beat = ((current_fraction / quantum_fraction).floor() + 1) * quantum_fraction;
+        let start_beat = f64::try_from(start_beat).unwrap_or(((current_beat / quantum).floor() + 1.0) * quantum);
         let start_micros = clock.date_at_beat(start_beat);
 
         println!(

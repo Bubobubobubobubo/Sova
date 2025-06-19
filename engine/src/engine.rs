@@ -3,6 +3,7 @@ use crate::modulation::Modulation;
 use crate::modules::Frame;
 use crate::registry::ModuleRegistry;
 use crate::server::ScheduledEngineMessage;
+use crate::timing::HighPrecisionTimer;
 use crate::track::Track;
 use crate::types::{
     EngineError, EngineMessage, EngineStatusMessage, ScheduledMessage, TrackId, VoiceId,
@@ -11,7 +12,6 @@ use crate::voice::Voice;
 use std::collections::BinaryHeap;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
-use std::time::{SystemTime, UNIX_EPOCH};
 use crossbeam_channel::{Receiver, Sender};
 
 pub struct AudioEngine {
@@ -29,9 +29,8 @@ pub struct AudioEngine {
     scheduled_messages: BinaryHeap<ScheduledMessage>,
     voice_memory: Arc<VoiceMemory>,
     sample_library: Arc<Mutex<SampleLibrary>>,
-    // High-precision timing state
-    current_sample_count: u64,
-    stream_start_time: u64,
+    // High-precision timing system
+    precision_timer: HighPrecisionTimer,
 }
 
 impl AudioEngine {
@@ -148,35 +147,18 @@ impl AudioEngine {
             scheduled_messages: BinaryHeap::new(),
             voice_memory,
             sample_library,
-            current_sample_count: 0,
-            stream_start_time: 0,
+            precision_timer: HighPrecisionTimer::new(sample_rate),
         }
     }
 
     /// Initialize stream timing when audio processing starts
     pub fn initialize_stream_timing(&mut self) {
-        self.stream_start_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_micros() as u64;
-        self.current_sample_count = 0;
+        self.precision_timer.initialize_stream_timing();
     }
 
-    /// Convert absolute timestamp to sample-accurate position
+    /// Convert absolute timestamp to sample-accurate position using high-precision timing
     fn timestamp_to_sample_offset(&self, timestamp_micros: u64) -> Option<i64> {
-        if self.stream_start_time == 0 {
-            return None;
-        }
-
-        // Pure integer arithmetic - eliminates floating-point precision loss
-        let stream_elapsed_micros = (self.current_sample_count * 1_000_000) / self.sample_rate as u64;
-        let current_timestamp = self.stream_start_time + stream_elapsed_micros;
-
-        // Sample-accurate conversion with integer arithmetic
-        let time_diff_micros = timestamp_micros as i64 - current_timestamp as i64;
-        let sample_offset = (time_diff_micros * self.sample_rate as i64) / 1_000_000;
-
-        Some(sample_offset)
+        self.precision_timer.timestamp_to_sample_offset(timestamp_micros)
     }
 
     pub fn allocate_voice(&mut self) -> &mut Voice {
@@ -280,7 +262,7 @@ impl AudioEngine {
             processed += block_len;
 
             // Update sample count for timing accuracy
-            self.current_sample_count += block_len as u64;
+            self.precision_timer.advance_samples(block_len as u64);
         }
 
         self.cleanup_finished_voices();
@@ -316,12 +298,10 @@ impl AudioEngine {
                     break;
                 }
             } else {
-                // Fallback to old timing if stream timing not initialized
-                let stream_elapsed_micros =
-                    self.current_sample_count as f64 / self.sample_rate as f64 * 1_000_000.0;
-                let estimated_current_time = self.stream_start_time + stream_elapsed_micros as u64;
+                // Use high-precision timing
+                let current_time = self.precision_timer.get_current_timestamp_exact();
 
-                if scheduled.due_time_micros <= estimated_current_time {
+                if scheduled.due_time_micros <= current_time {
                     let scheduled = self.scheduled_messages.pop().unwrap();
                     self.handle_message_immediate(&scheduled.message, status_tx);
                 } else {

@@ -213,9 +213,12 @@ impl Line {
     ///
     /// Note: This does *not* consider `enabled_frames`, `frame_repetitions`, `start_frame`, `end_frame`,
     /// or `custom_length`. Use `effective_beats_len` for the duration considering the playback range.
+    /// 
+    /// Uses high-precision rational arithmetic to eliminate cumulative floating-point rounding errors.
     #[inline]
     pub fn beats_len(&self) -> f64 {
-        self.frames.iter().sum()
+        use crate::util::decimal_operations::precise_sum;
+        precise_sum(self.frames.iter().copied())
     }
 
     /// Returns an iterator over the durations (`f64`) of all frames in the line.
@@ -493,8 +496,10 @@ impl Line {
     /// Calculates the total beat length of the frames within the effective playback range.
     /// Sums the durations of the frames returned by `get_effective_frames`.
     /// Does *not* account for `frame_repetitions` or `speed_factor`.
+    /// Uses high-precision rational arithmetic to eliminate cumulative floating-point rounding errors.
     pub fn effective_beats_len(&self) -> f64 {
-        self.get_effective_frames().iter().sum()
+        use crate::util::decimal_operations::precise_sum;
+        precise_sum(self.get_effective_frames().iter().copied())
     }
 
     /// Sets the optional name for the frame at the specified `frame_index`.

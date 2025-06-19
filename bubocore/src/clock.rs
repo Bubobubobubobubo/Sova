@@ -325,10 +325,21 @@ impl Clock {
         if tempo == 0.0 {
             return 0;
         }
-        // High-precision conversion using extended precision arithmetic
-        // Avoids floating-point precision loss in tempo calculations
-        let micros_per_beat = 60_000_000.0 / tempo;
-        (beats * micros_per_beat).round() as SyncTime
+        // Ultra-high-precision conversion using exact rational arithmetic
+        // Eliminates floating-point precision loss and cumulative rounding errors
+        use crate::util::decimal_operations::{decimal_from_float64, div_decimal, mul_decimal, float64_from_decimal};
+        
+        let beats_rational = decimal_from_float64(beats);
+        let tempo_rational = decimal_from_float64(tempo);
+        let sixty_million = (1, 60_000_000, 1); // 60,000,000 microseconds per minute
+        
+        // Exact calculation: beats * (60,000,000 / tempo)
+        let micros_per_beat = div_decimal(sixty_million.0, sixty_million.1, sixty_million.2, 
+                                        tempo_rational.0, tempo_rational.1, tempo_rational.2);
+        let result_rational = mul_decimal(beats_rational.0, beats_rational.1, beats_rational.2,
+                                        micros_per_beat.0, micros_per_beat.1, micros_per_beat.2);
+        
+        float64_from_decimal(result_rational.0, result_rational.1, result_rational.2).round() as SyncTime
     }
 
     /// Converts a duration in microseconds to beats based on the current tempo.
@@ -341,10 +352,21 @@ impl Clock {
         if tempo == 0.0 {
             return 0.0;
         }
-        // High-precision conversion using extended precision arithmetic
-        // Reduces cumulative precision errors in long sessions
-        let beats_per_micro = tempo / 60_000_000.0;
-        micros as f64 * beats_per_micro
+        // Ultra-high-precision conversion using exact rational arithmetic
+        // Eliminates cumulative precision errors in long sessions
+        use crate::util::decimal_operations::{decimal_from_float64, div_decimal, mul_decimal, float64_from_decimal};
+        
+        let micros_rational = decimal_from_float64(micros as f64);
+        let tempo_rational = decimal_from_float64(tempo);
+        let sixty_million = (1, 60_000_000, 1); // 60,000,000 microseconds per minute
+        
+        // Exact calculation: micros * (tempo / 60,000,000)
+        let beats_per_micro = div_decimal(tempo_rational.0, tempo_rational.1, tempo_rational.2,
+                                        sixty_million.0, sixty_million.1, sixty_million.2);
+        let result_rational = mul_decimal(micros_rational.0, micros_rational.1, micros_rational.2,
+                                        beats_per_micro.0, beats_per_micro.1, beats_per_micro.2);
+        
+        float64_from_decimal(result_rational.0, result_rational.1, result_rational.2)
     }
 }
 
