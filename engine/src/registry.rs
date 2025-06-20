@@ -31,7 +31,6 @@ use crate::modulation::Modulation;
 use crate::modules::{GlobalEffect, LocalEffect, ParameterDescriptor, Source};
 use std::any::Any;
 use std::collections::HashMap;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// Index for amplitude parameter in engine parameter array.
 pub const ENGINE_PARAM_AMP: usize = 0;
@@ -303,16 +302,16 @@ impl TimestampValidator {
         Self { max_future_micros }
     }
 
-    /// Validates a message timestamp against current time and future limits.
+    /// Validates a message timestamp using deterministic timing.
     ///
     /// Extracts the "due" parameter from message parameters and validates:
     /// - Parameter exists and has correct type (f32 or f64)
-    /// - Timestamp is not in the past
-    /// - Timestamp is not too far in the future
+    /// - Timestamp is not too far in the future (prevents memory overflow)
     ///
     /// # Arguments
     ///
-    /// * `parameters` - Message parameters containing "due" timestamp in seconds
+    /// * `parameters` - Message parameters containing "due" timestamp in microseconds
+    /// * `current_time_micros` - Current deterministic time for validation
     ///
     /// # Returns
     ///
@@ -321,11 +320,12 @@ impl TimestampValidator {
     ///
     /// # Performance Notes
     ///
-    /// This function performs system time calls and should not be used
-    /// in real-time audio processing contexts.
-    pub fn validate_message_timestamp(
+    /// This function is safe for real-time audio processing contexts as it
+    /// does not perform any system calls.
+    pub fn validate_message_timestamp_deterministic(
         &self,
         parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
+        current_time_micros: u64,
     ) -> Result<u64, TimestampValidationError> {
         let due = parameters
             .get("due")
@@ -338,20 +338,27 @@ impl TimestampValidator {
             .ok_or(TimestampValidationError::InvalidDueFormat)?;
 
         let due_micros = (due_timestamp * 1_000_000.0).round() as u64;
-        let now_micros = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| TimestampValidationError::InvalidDueFormat)?
-            .as_micros() as u64;
 
-        if due_micros <= now_micros {
-            return Err(TimestampValidationError::DueInPast);
-        }
-
-        if due_micros > now_micros + self.max_future_micros {
+        // For deterministic execution, we allow past timestamps (they execute immediately)
+        // Only check future limit to prevent memory overflow
+        if due_micros > current_time_micros + self.max_future_micros {
             return Err(TimestampValidationError::DueTooFarInFuture);
         }
 
         Ok(due_micros)
+    }
+    
+    /// Legacy system-time based validation (deprecated for deterministic execution).
+    ///
+    /// This method should be avoided in favor of `validate_message_timestamp_deterministic`
+    /// for deterministic real-time audio execution.
+    #[deprecated(note = "Use validate_message_timestamp_deterministic for deterministic execution")]
+    pub fn validate_message_timestamp(
+        &self,
+        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
+    ) -> Result<u64, TimestampValidationError> {
+        // For legacy compatibility, use deterministic validation with current time = 0
+        self.validate_message_timestamp_deterministic(parameters, 0)
     }
 }
 
@@ -731,6 +738,18 @@ impl ModuleRegistry {
     ///
     /// `Ok(timestamp_ms)` with validated timestamp in milliseconds, or
     /// `Err(TimestampValidationError)` describing the validation failure.
+    /// Validate timestamp using deterministic timing (recommended).
+    pub fn validate_timestamp_deterministic(
+        &self,
+        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
+        current_time_micros: u64,
+    ) -> Result<u64, TimestampValidationError> {
+        self.timestamp_validator
+            .validate_message_timestamp_deterministic(parameters, current_time_micros)
+    }
+    
+    /// Legacy timestamp validation (deprecated).
+    #[deprecated(note = "Use validate_timestamp_deterministic for deterministic execution")]
     pub fn validate_timestamp(
         &self,
         parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,

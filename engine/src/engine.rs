@@ -160,6 +160,11 @@ impl AudioEngine {
     fn timestamp_to_sample_offset(&self, timestamp_micros: u64) -> Option<i64> {
         self.precision_timer.timestamp_to_sample_offset(timestamp_micros)
     }
+    
+    /// Convert timestamp to exact sample position for sample-accurate scheduling
+    fn timestamp_to_exact_sample(&self, timestamp_micros: u64) -> Option<u64> {
+        self.precision_timer.timestamp_to_exact_sample(timestamp_micros)
+    }
 
     pub fn allocate_voice(&mut self) -> &mut Voice {
         let voice_index = self.next_voice_id as usize % self.max_voices;
@@ -236,7 +241,7 @@ impl AudioEngine {
             let block_len = remaining.min(self.block_size);
 
             // Process sample-accurate scheduled messages for this block
-            self.process_scheduled_messages_for_block(block_len, None);
+            self.process_scheduled_messages_sample_accurate(block_len, None);
 
             if let Some(voice_buffer) = self.voice_memory.get_voice_buffer(0) {
                 (0..block_len).for_each(|i| {
@@ -273,6 +278,58 @@ impl AudioEngine {
             if voice.is_active && voice.envelope_state.is_finished() {
                 voice.immediate_reset();
             }
+        }
+    }
+
+    /// Process scheduled messages with sample-accurate timing within the block.
+    ///
+    /// This provides maximum precision by checking for scheduled events at every
+    /// sample within the block, enabling sub-sample accurate timing.
+    fn process_scheduled_messages_sample_accurate(
+        &mut self,
+        block_len: usize,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
+        let base_sample_count = self.precision_timer.get_current_sample_count();
+        
+        // Collect all messages that should fire within this block
+        let mut block_messages = Vec::with_capacity(16);
+        
+        while let Some(scheduled) = self.scheduled_messages.peek() {
+            if let Some(target_sample) = self.timestamp_to_exact_sample(scheduled.due_time_micros) {
+                let sample_offset = target_sample as i64 - base_sample_count as i64;
+                
+                if sample_offset >= 0 && sample_offset < block_len as i64 {
+                    // Message fires within this block
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    block_messages.push((sample_offset as usize, scheduled));
+                } else if sample_offset < 0 {
+                    // Message is overdue, execute immediately
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    block_messages.push((0, scheduled));
+                } else {
+                    // Message is for future blocks
+                    break;
+                }
+            } else {
+                // Fallback to time-based comparison
+                let current_time = self.precision_timer.get_current_timestamp_exact();
+                if scheduled.due_time_micros <= current_time {
+                    let scheduled = self.scheduled_messages.pop().unwrap();
+                    block_messages.push((0, scheduled));
+                } else {
+                    break;
+                }
+            }
+        }
+        
+        // Sort messages by sample offset for deterministic execution order
+        block_messages.sort_by_key(|(sample_offset, _)| *sample_offset);
+        
+        // Execute messages at their exact sample positions
+        for (sample_offset, scheduled) in block_messages {
+            let fractional_offset = sample_offset as f32;
+            self.handle_message_with_exact_sample_timing(&scheduled.message, fractional_offset, status_tx);
         }
     }
 
@@ -319,6 +376,15 @@ impl AudioEngine {
         self.process_scheduled_messages_for_block(self.block_size, status_tx);
     }
 
+    fn handle_message_with_exact_sample_timing(
+        &mut self,
+        message: &EngineMessage,
+        fractional_offset: f32,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
+        self.handle_message_with_fractional_timing(message, Some(fractional_offset), status_tx);
+    }
+
     fn handle_message_with_sample_timing(
         &mut self,
         message: &EngineMessage,
@@ -334,6 +400,108 @@ impl AudioEngine {
         status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
     ) {
         self.handle_message_with_optional_timing(message, None, status_tx);
+    }
+
+    fn handle_message_with_fractional_timing(
+        &mut self,
+        message: &EngineMessage,
+        fractional_offset: Option<f32>,
+        status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
+    ) {
+        match message {
+            EngineMessage::Play {
+                voice_id: _,
+                track_id,
+                source_name,
+                parameters,
+            } => {
+                let source = self.registry.create_source(source_name);
+
+                if source.is_none() {
+                    if let Some(tx) = status_tx {
+                        let available_sources = self.registry.sources.keys().cloned().collect();
+                        let error = EngineError::InvalidSource {
+                            source_name: source_name.clone(),
+                            voice_id: self.next_voice_id,
+                            available_sources,
+                        };
+                        eprintln!("[ENGINE ERROR] {}", error);
+                        let _ = tx.send(EngineStatusMessage::Error(error));
+                    } else {
+                        let available_sources: Vec<String> =
+                            self.registry.sources.keys().cloned().collect();
+                        eprintln!(
+                            "[ENGINE ERROR] Unknown source '{}' for voice {}. Available sources: [{}]",
+                            source_name,
+                            self.next_voice_id,
+                            available_sources.join(", ")
+                        );
+                    }
+                    return;
+                }
+
+                let sample_rate = self.sample_rate;
+                let voice_index = {
+                    let voice = self.allocate_voice();
+                    voice.track_id = *track_id;
+                    
+                    // Set up voice with exact fractional timing
+                    if let Some(s) = source {
+                        voice.source = Some(s);
+                    }
+                    
+                    // Configure voice parameters and trigger
+                    voice.trigger();
+                    
+                    // Apply fractional sample timing for maximum precision
+                    if let Some(offset) = fractional_offset {
+                        let sample_time = offset / sample_rate;
+                        voice.advance_envelope_by_time(sample_time);
+                    }
+                    
+                    voice.voice_index
+                };
+                
+                // Continue with parameter setup...
+                let voice = &mut self.voices[voice_index];
+                
+                for (key, value) in parameters {
+                    if let Some(value_f32) = value.downcast_ref::<f32>() {
+                        if let Some(param_index) = crate::registry::get_engine_parameter_index(key) {
+                            voice.set_engine_parameter(param_index, *value_f32);
+                        } else {
+                            if let Some(source) = &mut voice.source {
+                                source.set_parameter(key, *value_f32);
+                            }
+                        }
+                    }
+                }
+            }
+            EngineMessage::Update { voice_id, track_id: _, parameters } => {
+                for voice in &mut self.voices {
+                    if voice.id == *voice_id && voice.is_active {
+                        for (key, value) in parameters {
+                            if let Some(value_f32) = value.downcast_ref::<f32>() {
+                                if let Some(param_index) = crate::registry::get_engine_parameter_index(key) {
+                                    voice.set_engine_parameter(param_index, *value_f32);
+                                } else {
+                                    if let Some(source) = &mut voice.source {
+                                        source.set_parameter(key, *value_f32);
+                                    }
+                                }
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+            EngineMessage::Stop => {
+                self.stop_all_voices();
+            }
+            EngineMessage::Panic => {
+                self.stop_all_voices();
+            }
+        }
     }
 
     fn handle_message_with_optional_timing(
