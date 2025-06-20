@@ -14,6 +14,33 @@ pub struct ParameterDescriptor {
     pub modulable: bool,
 }
 
+impl ParameterDescriptor {
+    // Fast parameter name matching - avoids string allocation and slice iteration
+    #[inline]
+    pub fn matches_name(&self, param: &str) -> bool {
+        // Use pointer equality first for common case (faster than string comparison)
+        if std::ptr::eq(self.name.as_ptr(), param.as_ptr()) && self.name.len() == param.len() {
+            return true;
+        }
+        
+        // Fast string comparison for main name
+        if self.name == param {
+            return true;
+        }
+        
+        // Check aliases only if necessary - most parameters don't have aliases
+        if !self.aliases.is_empty() {
+            for &alias in self.aliases {
+                if alias == param {
+                    return true;
+                }
+            }
+        }
+        
+        false
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct Frame {
     pub left: f32,

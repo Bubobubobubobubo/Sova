@@ -1,6 +1,19 @@
 use crate::memory::{SampleLibrary, VoiceMemory};
 use crate::registry::ModuleRegistry;
 use crate::types::{EngineMessage, ScheduledMessage, TrackId, VoiceId};
+
+// Real-time safe logging - local macro
+#[cfg(feature = "rt-safe")]
+macro_rules! rt_eprintln {
+    ($($arg:tt)*) => {};
+}
+
+#[cfg(not(feature = "rt-safe"))]
+macro_rules! rt_eprintln {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+    };
+}
 use rosc::{OscMessage, OscPacket, OscType};
 use std::any::Any;
 use std::collections::HashMap;
@@ -75,13 +88,13 @@ impl OscServer {
                     if let Some(message) = self.parse_osc_message(&temp_buffer[..size]) {
                         // Send to audio thread (bounded channel prevents blocking)
                         if let Err(_) = engine_tx.try_send(message) {
-                            eprintln!("[OSC WARNING] Command queue full - dropping message");
+                            rt_eprintln!("[OSC WARNING] Command queue full - dropping message");
                         }
                     }
                 }
                 Err(err) => {
                     if err.kind() != std::io::ErrorKind::TimedOut {
-                        eprintln!("[OSC ERROR] Failed to receive: {}", err);
+                        rt_eprintln!("[OSC ERROR] Failed to receive: {}", err);
                     }
                 }
             }

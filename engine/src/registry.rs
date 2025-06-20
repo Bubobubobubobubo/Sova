@@ -212,7 +212,7 @@ pub const ENGINE_PARAM_DESCRIPTORS: [ParameterDescriptor; ENGINE_PARAM_COUNT] = 
 pub fn is_engine_parameter(param_name: &str) -> bool {
     ENGINE_PARAM_DESCRIPTORS
         .iter()
-        .any(|desc| desc.name == param_name || desc.aliases.contains(&param_name))
+        .any(|desc| desc.matches_name(param_name))
 }
 
 /// Gets the array index for an engine parameter by name.
@@ -240,7 +240,7 @@ pub fn is_engine_parameter(param_name: &str) -> bool {
 pub fn get_engine_parameter_index(param_name: &str) -> Option<usize> {
     ENGINE_PARAM_DESCRIPTORS
         .iter()
-        .position(|desc| desc.name == param_name || desc.aliases.contains(&param_name))
+        .position(|desc| desc.matches_name(param_name))
 }
 
 /// Errors that can occur during message timestamp validation.
@@ -820,13 +820,8 @@ impl ModuleRegistry {
     ) -> &'static str {
         // Check engine parameters first
         for desc in &ENGINE_PARAM_DESCRIPTORS {
-            if desc.name == param {
+            if desc.matches_name(param) {
                 return desc.name;
-            }
-            for alias in desc.aliases {
-                if *alias == param {
-                    return desc.name;
-                }
             }
         }
 
@@ -835,13 +830,8 @@ impl ModuleRegistry {
             if self.sources.contains_key(source) {
                 let module = self.sources.get(source).unwrap()();
                 for desc in module.get_parameter_descriptors() {
-                    if desc.name == param {
+                    if desc.matches_name(param) {
                         return desc.name;
-                    }
-                    for alias in desc.aliases {
-                        if *alias == param {
-                            return desc.name;
-                        }
                     }
                 }
             }
@@ -851,13 +841,8 @@ impl ModuleRegistry {
         for factory in self.local_effects.values() {
             let module = factory();
             for desc in module.get_parameter_descriptors() {
-                if desc.name == param {
+                if desc.matches_name(param) {
                     return desc.name;
-                }
-                for alias in desc.aliases {
-                    if *alias == param {
-                        return desc.name;
-                    }
                 }
             }
         }
@@ -866,13 +851,8 @@ impl ModuleRegistry {
         for factory in self.global_effects.values() {
             let module = factory();
             for desc in module.get_parameter_descriptors() {
-                if desc.name == param {
+                if desc.matches_name(param) {
                     return desc.name;
-                }
-                for alias in desc.aliases {
-                    if *alias == param {
-                        return desc.name;
-                    }
                 }
             }
         }
@@ -897,13 +877,8 @@ impl ModuleRegistry {
     pub fn is_valid_parameter(&self, param_name: &str, source_name: Option<&String>) -> bool {
         // Check engine parameters
         for desc in &ENGINE_PARAM_DESCRIPTORS {
-            if desc.name == param_name {
+            if desc.matches_name(param_name) {
                 return true;
-            }
-            for alias in desc.aliases {
-                if *alias == param_name {
-                    return true;
-                }
             }
         }
 
@@ -912,13 +887,8 @@ impl ModuleRegistry {
             if self.sources.contains_key(source) {
                 let module = self.sources.get(source).unwrap()();
                 for desc in module.get_parameter_descriptors() {
-                    if desc.name == param_name {
+                    if desc.matches_name(param_name) {
                         return true;
-                    }
-                    for alias in desc.aliases {
-                        if *alias == param_name {
-                            return true;
-                        }
                     }
                 }
             }
@@ -928,13 +898,8 @@ impl ModuleRegistry {
         for factory in self.local_effects.values() {
             let module = factory();
             for desc in module.get_parameter_descriptors() {
-                if desc.name == param_name {
+                if desc.matches_name(param_name) {
                     return true;
-                }
-                for alias in desc.aliases {
-                    if *alias == param_name {
-                        return true;
-                    }
                 }
             }
         }
@@ -943,13 +908,8 @@ impl ModuleRegistry {
         for factory in self.global_effects.values() {
             let module = factory();
             for desc in module.get_parameter_descriptors() {
-                if desc.name == param_name {
+                if desc.matches_name(param_name) {
                     return true;
-                }
-                for alias in desc.aliases {
-                    if *alias == param_name {
-                        return true;
-                    }
                 }
             }
         }
