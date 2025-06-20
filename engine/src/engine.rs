@@ -9,6 +9,19 @@ use crate::types::{
     EngineError, EngineMessage, EngineStatusMessage, ScheduledMessage, TrackId, VoiceId,
 };
 use crate::voice::Voice;
+
+// Real-time safe logging - local macro
+#[cfg(feature = "rt-safe")]
+macro_rules! rt_eprintln {
+    ($($arg:tt)*) => {};
+}
+
+#[cfg(not(feature = "rt-safe"))]
+macro_rules! rt_eprintln {
+    ($($arg:tt)*) => {
+        eprintln!($($arg)*);
+    };
+}
 use std::collections::BinaryHeap;
 use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
@@ -425,12 +438,12 @@ impl AudioEngine {
                             voice_id: self.next_voice_id,
                             available_sources,
                         };
-                        eprintln!("[ENGINE ERROR] {}", error);
+                        rt_eprintln!("[ENGINE ERROR] {}", error);
                         let _ = tx.send(EngineStatusMessage::Error(error));
                     } else {
                         let available_sources: Vec<String> =
                             self.registry.sources.keys().cloned().collect();
-                        eprintln!(
+                        rt_eprintln!(
                             "[ENGINE ERROR] Unknown source '{}' for voice {}. Available sources: [{}]",
                             source_name,
                             self.next_voice_id,
@@ -527,12 +540,12 @@ impl AudioEngine {
                             voice_id: self.next_voice_id,
                             available_sources,
                         };
-                        eprintln!("[ENGINE ERROR] {}", error);
+                        rt_eprintln!("[ENGINE ERROR] {}", error);
                         let _ = tx.send(EngineStatusMessage::Error(error));
                     } else {
                         let available_sources: Vec<String> =
                             self.registry.sources.keys().cloned().collect();
-                        eprintln!(
+                        rt_eprintln!(
                             "[ENGINE ERROR] Unknown source '{}' for voice {}. Available sources: [{}]",
                             source_name,
                             self.next_voice_id,
@@ -557,7 +570,7 @@ impl AudioEngine {
                                 let param_exists = temp_effect
                                     .get_parameter_descriptors()
                                     .iter()
-                                    .any(|d| d.name == key || d.aliases.contains(&key.as_str()));
+                                    .any(|d| d.matches_name(key));
 
                                 if param_exists {
                                     let already_added = self.temp_effects.iter().any(|e| {
@@ -600,7 +613,7 @@ impl AudioEngine {
                                 {
                                     let param_exists =
                                         temp_effect.get_parameter_descriptors().iter().any(|d| {
-                                            d.name == key || d.aliases.contains(&key.as_str())
+                                            d.matches_name(key)
                                         });
 
                                     if param_exists {
@@ -1052,10 +1065,10 @@ impl AudioEngine {
                         "speed".to_string(),
                     ],
                 };
-                eprintln!("[ENGINE ERROR] {}", error);
+                rt_eprintln!("[ENGINE ERROR] {}", error);
                 let _ = tx.send(EngineStatusMessage::Error(error));
             } else {
-                eprintln!(
+                rt_eprintln!(
                     "[ENGINE ERROR] Missing sample_name parameter for voice {}",
                     voice_id
                 );
@@ -1113,14 +1126,14 @@ impl AudioEngine {
                         voice_id,
                         available_folders,
                     };
-                    eprintln!("[ENGINE ERROR] {}", error);
+                    rt_eprintln!("[ENGINE ERROR] {}", error);
                     let _ = tx.send(EngineStatusMessage::Error(error));
                 } else {
                     let available_folders: Vec<String> = sample_lib
                         .get_folders()
                         .into_iter().cloned()
                         .collect();
-                    eprintln!(
+                    rt_eprintln!(
                         "[ENGINE ERROR] Sample folder '{}' (index {}) not found for voice {}. Available folders: [{}]",
                         sample_name,
                         sample_index,
