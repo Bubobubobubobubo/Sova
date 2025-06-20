@@ -189,7 +189,7 @@ impl OscServer {
                 let mut parameters = self.parse_osc_parameters(&msg.args);
 
                 let due_timestamp =
-                    if let Ok(timestamp) = self.registry.validate_timestamp(&parameters) {
+                    if let Ok(timestamp) = self.registry.validate_timestamp_deterministic(&parameters, 0) {
                         parameters.remove("due");
                         Some(timestamp)
                     } else if parameters.contains_key("due") {
@@ -247,7 +247,7 @@ impl OscServer {
                 let mut parameters = self.parse_osc_parameters(&msg.args);
 
                 let due_timestamp =
-                    if let Ok(timestamp) = self.registry.validate_timestamp(&parameters) {
+                    if let Ok(timestamp) = self.registry.validate_timestamp_deterministic(&parameters, 0) {
                         parameters.remove("due");
                         Some(timestamp)
                     } else if parameters.contains_key("due") {
@@ -395,7 +395,7 @@ impl OscServer {
             parameters.insert("dur".to_string(), Box::new(1.0f32) as Box<dyn Any + Send>);
         }
 
-        let due_timestamp = if let Ok(timestamp) = self.registry.validate_timestamp(&parameters) {
+        let due_timestamp = if let Ok(timestamp) = self.registry.validate_timestamp_deterministic(&parameters, 0) {
             parameters.remove("due");
             Some(timestamp)
         } else if parameters.contains_key("due") {
@@ -437,7 +437,7 @@ impl OscServer {
 
         let mut parameters = self.parse_parameters(&parts[2..]);
 
-        let due_timestamp = if let Ok(timestamp) = self.registry.validate_timestamp(&parameters) {
+        let due_timestamp = if let Ok(timestamp) = self.registry.validate_timestamp_deterministic(&parameters, 0) {
             parameters.remove("due");
             Some(timestamp)
         } else if parameters.contains_key("due") {

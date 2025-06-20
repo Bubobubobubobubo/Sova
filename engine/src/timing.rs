@@ -5,7 +5,6 @@
 //! cause precision loss and timing drift over long sessions.
 
 use fraction::Fraction;
-use std::time::{SystemTime, UNIX_EPOCH};
 
 /// High-precision timer for sample-accurate audio timing.
 ///
@@ -42,8 +41,11 @@ pub struct HighPrecisionTimer {
     /// Current sample count since stream start
     current_sample_count: u64,
     
-    /// Stream start time in microseconds since UNIX epoch
-    stream_start_time: u64,
+    /// Deterministic time base in microseconds (not tied to system clock)
+    deterministic_time_base: u64,
+    
+    /// Whether timing has been initialized
+    timing_initialized: bool,
     
     /// Sample rate for overflow protection calculations
     sample_rate: u32,
@@ -72,21 +74,30 @@ impl HighPrecisionTimer {
             microseconds_per_sample,
             samples_per_microsecond,
             current_sample_count: 0,
-            stream_start_time: 0,
+            deterministic_time_base: 0,
+            timing_initialized: false,
             sample_rate: sample_rate as u32,
         }
     }
     
-    /// Initialize stream timing to current system time.
+    /// Initialize deterministic stream timing.
     ///
     /// Must be called once when the audio stream starts to establish the time base.
-    /// All subsequent timing calculations are relative to this moment.
+    /// Uses a deterministic time base instead of system clock for absolute precision.
     pub fn initialize_stream_timing(&mut self) {
-        self.stream_start_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_micros() as u64;
+        self.deterministic_time_base = 0;
         self.current_sample_count = 0;
+        self.timing_initialized = true;
+    }
+    
+    /// Initialize stream timing with a specific time base (for synchronized starts).
+    ///
+    /// This allows multiple engines or processes to start from the same deterministic
+    /// time reference for perfect synchronization.
+    pub fn initialize_stream_timing_with_base(&mut self, time_base_micros: u64) {
+        self.deterministic_time_base = time_base_micros;
+        self.current_sample_count = 0;
+        self.timing_initialized = true;
     }
     
     /// Convert sample count to exact microseconds using rational arithmetic.
@@ -114,7 +125,7 @@ impl HighPrecisionTimer {
     ///
     /// # Arguments
     ///
-    /// * `timestamp_micros` - Target timestamp in microseconds since UNIX epoch
+    /// * `timestamp_micros` - Target timestamp in deterministic time base
     ///
     /// # Returns
     ///
@@ -126,13 +137,13 @@ impl HighPrecisionTimer {
     /// Result is accurate to within 1 sample for any timestamp, with zero
     /// cumulative drift regardless of session length.
     pub fn timestamp_to_sample_offset(&self, timestamp_micros: u64) -> Option<i64> {
-        if self.stream_start_time == 0 {
+        if !self.timing_initialized {
             return None;
         }
         
         // Calculate current exact timestamp using rational arithmetic
         let stream_elapsed_micros = self.samples_to_micros_exact(self.current_sample_count);
-        let current_timestamp = self.stream_start_time + stream_elapsed_micros;
+        let current_timestamp = self.deterministic_time_base + stream_elapsed_micros;
         
         // Time difference (can be negative for past events)
         let time_diff_micros = timestamp_micros as i64 - current_timestamp as i64;
@@ -144,6 +155,24 @@ impl HighPrecisionTimer {
         
         // Preserve sign
         Some(if time_diff_micros >= 0 { sample_offset } else { -sample_offset })
+    }
+    
+    /// Convert timestamp to exact sample position (not offset).
+    ///
+    /// Returns the absolute sample position for a given timestamp, used for
+    /// sample-accurate scheduling within blocks.
+    pub fn timestamp_to_exact_sample(&self, timestamp_micros: u64) -> Option<u64> {
+        if !self.timing_initialized {
+            return None;
+        }
+        
+        if timestamp_micros < self.deterministic_time_base {
+            return Some(0); // Past events map to sample 0
+        }
+        
+        let elapsed_micros = timestamp_micros - self.deterministic_time_base;
+        let samples_fraction = self.samples_per_microsecond * Fraction::from(elapsed_micros);
+        Some(u64::try_from(samples_fraction.floor()).unwrap_or(0))
     }
     
     /// Advance the sample count by the specified number of samples.
@@ -169,18 +198,18 @@ impl HighPrecisionTimer {
         }
     }
     
-    /// Get current exact timestamp in microseconds since UNIX epoch.
+    /// Get current exact timestamp in deterministic time base.
     ///
     /// # Returns
     ///
     /// Current timestamp with perfect precision, no cumulative drift.
     /// Returns 0 if stream timing has not been initialized.
     pub fn get_current_timestamp_exact(&self) -> u64 {
-        if self.stream_start_time == 0 {
+        if !self.timing_initialized {
             return 0;
         }
         
-        self.stream_start_time + self.samples_to_micros_exact(self.current_sample_count)
+        self.deterministic_time_base + self.samples_to_micros_exact(self.current_sample_count)
     }
     
     /// Get current sample count since stream start.
@@ -188,9 +217,14 @@ impl HighPrecisionTimer {
         self.current_sample_count
     }
     
-    /// Get stream start time in microseconds since UNIX epoch.
-    pub fn get_stream_start_time(&self) -> u64 {
-        self.stream_start_time
+    /// Get deterministic time base in microseconds.
+    pub fn get_time_base(&self) -> u64 {
+        self.deterministic_time_base
+    }
+    
+    /// Check if timing has been initialized.
+    pub fn is_initialized(&self) -> bool {
+        self.timing_initialized
     }
     
     /// Reset time base to prevent overflow in very long sessions.
@@ -200,7 +234,7 @@ impl HighPrecisionTimer {
     fn reset_time_base(&mut self) {
         // Calculate elapsed time and shift time base forward
         let elapsed_micros = self.samples_to_micros_exact(self.current_sample_count);
-        self.stream_start_time += elapsed_micros;
+        self.deterministic_time_base += elapsed_micros;
         self.current_sample_count = 0;
         
         println!("HighPrecisionTimer: Time base reset to prevent overflow");
@@ -250,7 +284,7 @@ mod tests {
         timer.initialize_stream_timing();
         
         // Simulate 10 minutes of audio processing (600 seconds)
-        let initial_time = timer.get_stream_start_time();
+        let initial_time = timer.get_time_base();
         
         for second in 1..=600 {
             timer.advance_samples(48000); // 1 second of samples
