@@ -255,7 +255,6 @@ async fn main() {
     // Create module registry for both audio engine and world
     let mut registry = ModuleRegistry::new();
     registry.register_default_modules();
-    registry.set_timestamp_tolerance(cli.timestamp_tolerance_ms);
 
     // Conditionally initialize audio engine (Sova)
     let (audio_engine_components, registry_for_world) = if cli.audio_engine {

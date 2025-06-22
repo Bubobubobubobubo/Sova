@@ -176,13 +176,8 @@ pub fn parse_command_with_pool(
 
     add_missing_defaults(&mut parameters);
 
-    if registry
-        .validate_timestamp_deterministic(&parameters, 0)
-        .is_err()
-    {
-        return None;
-    }
-
+    // Accept all messages unconditionally - no timestamp validation
+    // Remove "due" parameter if present (it's for scheduling, not voice parameters)
     parameters.remove("due");
 
     let voice_id = if let Some(voice_param) = voice_param {

@@ -201,15 +201,14 @@ impl OscServer {
 
                 let mut parameters = self.parse_osc_parameters(&msg.args);
 
-                let due_timestamp = if let Ok(timestamp) = self
-                    .registry
-                    .validate_timestamp_deterministic(&parameters, 0)
-                {
-                    parameters.remove("due");
-                    Some(timestamp)
-                } else if parameters.contains_key("due") {
-                    println!("Message rejected - timestamp validation failed");
-                    return None;
+                let due_timestamp = if let Some(due) = parameters.remove("due") {
+                    if let Some(due_f64) = due.downcast_ref::<f64>() {
+                        Some((*due_f64 * 1_000_000.0).round() as u64)
+                    } else if let Some(due_f32) = due.downcast_ref::<f32>() {
+                        Some((*due_f32 * 1_000_000.0).round() as u64)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 };
@@ -261,15 +260,14 @@ impl OscServer {
             "/update" => {
                 let mut parameters = self.parse_osc_parameters(&msg.args);
 
-                let due_timestamp = if let Ok(timestamp) = self
-                    .registry
-                    .validate_timestamp_deterministic(&parameters, 0)
-                {
-                    parameters.remove("due");
-                    Some(timestamp)
-                } else if parameters.contains_key("due") {
-                    println!("Update message rejected - timestamp validation failed");
-                    return None;
+                let due_timestamp = if let Some(due) = parameters.remove("due") {
+                    if let Some(due_f64) = due.downcast_ref::<f64>() {
+                        Some((*due_f64 * 1_000_000.0).round() as u64)
+                    } else if let Some(due_f32) = due.downcast_ref::<f32>() {
+                        Some((*due_f32 * 1_000_000.0).round() as u64)
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 };
@@ -412,14 +410,14 @@ impl OscServer {
             parameters.insert("dur".to_string(), Box::new(1.0f32) as Box<dyn Any + Send>);
         }
 
-        let due_timestamp = if let Ok(timestamp) = self
-            .registry
-            .validate_timestamp_deterministic(&parameters, 0)
-        {
-            parameters.remove("due");
-            Some(timestamp)
-        } else if parameters.contains_key("due") {
-            return None;
+        let due_timestamp = if let Some(due) = parameters.remove("due") {
+            if let Some(due_f64) = due.downcast_ref::<f64>() {
+                Some((*due_f64 * 1_000_000.0).round() as u64)
+            } else if let Some(due_f32) = due.downcast_ref::<f32>() {
+                Some((*due_f32 * 1_000_000.0).round() as u64)
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -457,14 +455,14 @@ impl OscServer {
 
         let mut parameters = self.parse_parameters(&parts[2..]);
 
-        let due_timestamp = if let Ok(timestamp) = self
-            .registry
-            .validate_timestamp_deterministic(&parameters, 0)
-        {
-            parameters.remove("due");
-            Some(timestamp)
-        } else if parameters.contains_key("due") {
-            return None;
+        let due_timestamp = if let Some(due) = parameters.remove("due") {
+            if let Some(due_f64) = due.downcast_ref::<f64>() {
+                Some((*due_f64 * 1_000_000.0).round() as u64)
+            } else if let Some(due_f32) = due.downcast_ref::<f32>() {
+                Some((*due_f32 * 1_000_000.0).round() as u64)
+            } else {
+                None
+            }
         } else {
             None
         };

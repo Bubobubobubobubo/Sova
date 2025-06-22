@@ -243,145 +243,7 @@ pub fn get_engine_parameter_index(param_name: &str) -> Option<usize> {
         .position(|desc| desc.matches_name(param_name))
 }
 
-/// Errors that can occur during message timestamp validation.
-///
-/// These errors ensure that scheduled messages have valid timing information
-/// and fall within acceptable scheduling bounds for real-time processing.
-#[derive(Debug, Clone, Copy)]
-pub enum TimestampValidationError {
-    /// Message is missing required "due" timestamp parameter
-    MissingDue,
-    /// Timestamp parameter has invalid format (not f32/f64)
-    InvalidDueFormat,
-    /// Scheduled time is in the past
-    DueInPast,
-    /// Scheduled time is too far in the future
-    DueTooFarInFuture,
-}
 
-/// Validates message timestamps for scheduled engine commands.
-///
-/// This validator ensures that scheduled messages have reasonable timing
-/// constraints to prevent memory usage growth and maintain real-time
-/// performance guarantees.
-///
-/// # Design Rationale
-///
-/// - Prevents infinite memory growth from far-future scheduled messages
-/// - Rejects past timestamps that cannot be executed
-/// - Validates timestamp format for type safety
-/// - Configurable future limit for different use cases
-#[derive(Clone)]
-pub struct TimestampValidator {
-    /// Maximum allowed microseconds into the future for scheduled messages
-    max_future_micros: u64,
-}
-
-impl Default for TimestampValidator {
-    /// Creates a validator with default 1-second future limit.
-    ///
-    /// This default provides a reasonable balance between flexibility
-    /// and resource usage for most live coding scenarios.
-    fn default() -> Self {
-        Self::new(1_000_000) // 1 second in microseconds
-    }
-}
-
-impl TimestampValidator {
-    /// Creates a new timestamp validator with specified future limit.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_future_micros` - Maximum microseconds into the future to allow
-    ///
-    /// # Performance Notes
-    ///
-    /// The future limit prevents unbounded memory growth in the message
-    /// scheduler while still allowing reasonable scheduling flexibility.
-    pub fn new(max_future_micros: u64) -> Self {
-        Self { max_future_micros }
-    }
-
-    /// Validates a message timestamp using deterministic timing.
-    ///
-    /// Extracts the "due" parameter from message parameters and validates:
-    /// - Parameter exists and has correct type (f32 or f64)
-    /// - Timestamp is not too far in the future (prevents memory overflow)
-    ///
-    /// # Arguments
-    ///
-    /// * `parameters` - Message parameters containing "due" timestamp in microseconds
-    /// * `current_time_micros` - Current deterministic time for validation
-    ///
-    /// # Returns
-    ///
-    /// `Ok(timestamp_micros)` with validated timestamp in microseconds, or
-    /// `Err(TimestampValidationError)` describing the validation failure.
-    ///
-    /// # Performance Notes
-    ///
-    /// This function is safe for real-time audio processing contexts as it
-    /// does not perform any system calls.
-    pub fn validate_message_timestamp_deterministic(
-        &self,
-        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
-        current_time_micros: u64,
-    ) -> Result<u64, TimestampValidationError> {
-        let due = parameters
-            .get("due")
-            .ok_or(TimestampValidationError::MissingDue)?;
-
-        let due_timestamp = due
-            .downcast_ref::<f64>()
-            .copied()
-            .or_else(|| due.downcast_ref::<f32>().map(|&f| f as f64))
-            .ok_or(TimestampValidationError::InvalidDueFormat)?;
-
-        let due_micros = (due_timestamp * 1_000_000.0).round() as u64;
-
-        // For deterministic execution, we allow past timestamps (they execute immediately)
-        // Only check future limit to prevent memory overflow
-        if due_micros > current_time_micros + self.max_future_micros {
-            return Err(TimestampValidationError::DueTooFarInFuture);
-        }
-
-        Ok(due_micros)
-    }
-
-    /// Legacy system-time based validation (deprecated for deterministic execution).
-    ///
-    /// This method should be avoided in favor of `validate_message_timestamp_deterministic`
-    /// for deterministic real-time audio execution.
-    #[deprecated(note = "Use validate_message_timestamp_deterministic for deterministic execution")]
-    pub fn validate_message_timestamp(
-        &self,
-        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
-    ) -> Result<u64, TimestampValidationError> {
-        // For legacy compatibility, use deterministic validation with current time = 0
-        self.validate_message_timestamp_deterministic(parameters, 0)
-    }
-}
-
-/// Validates engine message timestamps using the default validator.
-///
-/// Convenience function that creates a default timestamp validator and
-/// validates the message. Used for quick validation without custom limits.
-///
-/// # Arguments
-///
-/// * `parameters` - Message parameters containing "due" timestamp
-/// * `validator` - Configured timestamp validator
-///
-/// # Returns
-///
-/// `Ok(())` if validation passes, `Err(TimestampValidationError)` otherwise.
-pub fn validate_engine_message_timestamp(
-    parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
-    validator: &TimestampValidator,
-) -> Result<(), TimestampValidationError> {
-    validator.validate_message_timestamp(parameters)?;
-    Ok(())
-}
 
 /// Central registry for audio processing modules and configuration.
 ///
@@ -432,8 +294,6 @@ pub struct ModuleRegistry {
     pub local_effects: HashMap<String, fn() -> Box<dyn LocalEffect>>,
     /// Factory functions for global effect modules
     pub global_effects: HashMap<String, fn() -> Box<dyn GlobalEffect>>,
-    /// Timestamp validator for scheduled messages
-    pub timestamp_validator: TimestampValidator,
 }
 
 impl Default for ModuleRegistry {
@@ -449,15 +309,13 @@ impl Default for ModuleRegistry {
 impl ModuleRegistry {
     /// Creates a new empty module registry.
     ///
-    /// The registry is initialized with empty module collections and
-    /// default timestamp validation. Call `register_default_modules()`
-    /// or register individual modules to populate the registry.
+    /// The registry is initialized with empty module collections.
+    /// Call `register_default_modules()` or register individual modules to populate the registry.
     pub fn new() -> Self {
         Self {
             sources: HashMap::new(),
             local_effects: HashMap::new(),
             global_effects: HashMap::new(),
-            timestamp_validator: TimestampValidator::default(),
         }
     }
 
@@ -725,56 +583,6 @@ impl ModuleRegistry {
         self.local_effects.get(name).map(|factory| factory())
     }
 
-    /// Validates a message timestamp using the registry's validator.
-    ///
-    /// Convenience method that delegates to the internal timestamp validator.
-    /// Used for validating scheduled engine messages before queuing.
-    ///
-    /// # Arguments
-    ///
-    /// * `parameters` - Message parameters containing "due" timestamp
-    ///
-    /// # Returns
-    ///
-    /// `Ok(timestamp_ms)` with validated timestamp in milliseconds, or
-    /// `Err(TimestampValidationError)` describing the validation failure.
-    /// Validate timestamp using deterministic timing (recommended).
-    pub fn validate_timestamp_deterministic(
-        &self,
-        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
-        current_time_micros: u64,
-    ) -> Result<u64, TimestampValidationError> {
-        self.timestamp_validator
-            .validate_message_timestamp_deterministic(parameters, current_time_micros)
-    }
-
-    /// Legacy timestamp validation (deprecated).
-    #[deprecated(note = "Use validate_timestamp_deterministic for deterministic execution")]
-    pub fn validate_timestamp(
-        &self,
-        parameters: &HashMap<String, Box<dyn std::any::Any + Send>>,
-    ) -> Result<u64, TimestampValidationError> {
-        self.timestamp_validator
-            .validate_message_timestamp(parameters)
-    }
-
-    /// Sets the maximum future time limit for timestamp validation.
-    ///
-    /// Updates the internal timestamp validator with a new time limit.
-    /// Messages scheduled beyond this limit will be rejected to prevent
-    /// unbounded memory growth in the scheduler.
-    ///
-    /// # Arguments
-    ///
-    /// * `max_future_micros` - Maximum microseconds into the future to allow
-    ///
-    /// # Performance Notes
-    ///
-    /// This setting affects all future timestamp validations and should
-    /// be configured during initialization.
-    pub fn set_timestamp_tolerance(&mut self, max_future_micros: u64) {
-        self.timestamp_validator = TimestampValidator::new(max_future_micros);
-    }
 
     /// Creates a new global effect module instance.
     ///

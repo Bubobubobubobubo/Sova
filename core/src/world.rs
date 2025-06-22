@@ -57,6 +57,8 @@ pub struct World {
     timebase_calibration_interval: SyncTime,
     // MIDI interface latency compensation (2ms)
     midi_early_threshold: SyncTime,
+    // Lookahead for non-MIDI messages (OSC, AudioEngine) - send early for internal scheduling
+    non_midi_lookahead: SyncTime,
 }
 
 impl World {
@@ -82,6 +84,7 @@ impl World {
                     timebase_calibration: TimebaseCalibration::new(),
                     timebase_calibration_interval: 1_000_000, // 1s calibration interval
                     midi_early_threshold: 2_000,              // 2ms for MIDI interface compensation
+                    non_midi_lookahead: 20_000,               // 20ms lookahead for OSC/AudioEngine
                 };
                 world.live();
             })
@@ -206,23 +209,13 @@ impl World {
                         );
                     self.voice_id_counter = new_voice_id_counter;
 
-                    let current_sync_time = self.get_clock_micros();
-                    let time_until_execution = time.saturating_sub(current_sync_time);
-
-                    let scheduled_msg = if time_until_execution <= 100 {
-                        // Execute immediately if within 100μs (precision threshold)
-                        ScheduledEngineMessage::Immediate(engine_message)
-                    } else {
-                        // Schedule future messages with precise timestamp
-                        // TODO: Consider direct Link time routing to avoid timebase conversion precision loss
-                        let system_due_time =
-                            (time as i64 + self.timebase_calibration.link_to_system_offset) as u64;
-
-                        ScheduledEngineMessage::Scheduled(ScheduledMessage {
-                            due_time_micros: system_due_time,
-                            message: engine_message,
-                        })
-                    };
+                    // LOOKAHEAD SCHEDULING: Send ALL messages early with their timestamp
+                    // Use the actual musical time + lookahead for proper scheduling
+                    let engine_due_time = time + self.non_midi_lookahead;
+                    let scheduled_msg = ScheduledEngineMessage::Scheduled(ScheduledMessage {
+                        due_time_micros: engine_due_time,
+                        message: engine_message,
+                    });
                     let _ = tx.send(scheduled_msg);
                 }
             }
@@ -241,7 +234,8 @@ impl World {
                 }
             }
             ProtocolPayload::OSC(ref osc_msg) => {
-                // SuperDirt optimization - enhanced temporal context parameters
+                // Send OSC messages immediately for external system scheduling
+                // External systems (SuperDirt, etc.) handle timing internally using the provided timestamp
                 if osc_msg.addr.starts_with("/dirt/") || osc_msg.addr.contains("play") {
                     let current_sync_time = self.get_clock_micros();
 
@@ -251,10 +245,10 @@ impl World {
                     let target_cycle = time as f64 / cycle_duration_micros;
                     let _delta_cycles = target_cycle - current_cycle; // Future: can be used for cps/cycle/delta parameters
 
-                    // Send with enhanced timing precision for SuperDirt compatibility
+                    // Send immediately with original timestamp for SuperDirt internal scheduling
                     let _ = message.send(time);
                 } else {
-                    // Regular OSC: Send with precise target timestamp
+                    // Regular OSC: Send immediately with original timestamp
                     let _ = message.send(time);
                 }
             }
@@ -365,4 +359,5 @@ impl World {
             new_voice_id_counter,
         )
     }
+
 }
