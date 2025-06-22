@@ -197,6 +197,11 @@ impl AudioEngine {
         self.precision_timer.initialize_stream_timing();
     }
 
+    /// Initialize stream timing with Link time base for synchronized timing
+    pub fn initialize_stream_timing_with_link_time(&mut self, link_time_base_micros: u64) {
+        self.precision_timer.initialize_stream_timing_with_base(link_time_base_micros);
+    }
+
     /// Convert absolute timestamp to sample-accurate position using high-precision timing
     fn timestamp_to_sample_offset(&self, timestamp_micros: u64) -> Option<i64> {
         self.precision_timer
@@ -328,6 +333,10 @@ impl AudioEngine {
     ///
     /// This provides maximum precision by checking for scheduled events at every
     /// sample within the block, enabling sub-sample accurate timing.
+    /// 
+    /// Accepts all messages unconditionally:
+    /// - Late messages (past due time): Execute immediately
+    /// - Future messages: Execute at precise sample timing
     fn process_scheduled_messages_sample_accurate(
         &mut self,
         block_len: usize,
@@ -338,27 +347,28 @@ impl AudioEngine {
         // Collect all messages that should fire within this block
         let mut block_messages = Vec::with_capacity(16);
 
+        let current_time = self.precision_timer.get_current_timestamp_exact();
+        let mut executed_count = 0;
+        
         while let Some(scheduled) = self.scheduled_messages.peek() {
             if let Some(target_sample) = self.timestamp_to_exact_sample(scheduled.due_time_micros) {
                 let sample_offset = target_sample as i64 - base_sample_count as i64;
 
                 if sample_offset >= 0 && sample_offset < block_len as i64 {
-                    // Message fires within this block
                     let scheduled = self.scheduled_messages.pop().unwrap();
+                    executed_count += 1;
                     block_messages.push((sample_offset as usize, scheduled));
                 } else if sample_offset < 0 {
-                    // Message is overdue, execute immediately
                     let scheduled = self.scheduled_messages.pop().unwrap();
+                    executed_count += 1;
                     block_messages.push((0, scheduled));
                 } else {
-                    // Message is for future blocks
                     break;
                 }
             } else {
-                // Fallback to time-based comparison
-                let current_time = self.precision_timer.get_current_timestamp_exact();
                 if scheduled.due_time_micros <= current_time {
                     let scheduled = self.scheduled_messages.pop().unwrap();
+                    executed_count += 1;
                     block_messages.push((0, scheduled));
                 } else {
                     break;
@@ -366,10 +376,9 @@ impl AudioEngine {
             }
         }
 
-        // Sort messages by sample offset for deterministic execution order
+
         block_messages.sort_by_key(|(sample_offset, _)| *sample_offset);
 
-        // Execute messages at their exact sample positions
         for (sample_offset, scheduled) in block_messages {
             let fractional_offset = sample_offset as f32;
             self.handle_message_with_exact_sample_timing(
@@ -430,10 +439,11 @@ impl AudioEngine {
     fn handle_message_with_exact_sample_timing(
         &mut self,
         message: &EngineMessage,
-        fractional_offset: f32,
+        _fractional_offset: f32,
         status_tx: Option<&mpsc::Sender<EngineStatusMessage>>,
     ) {
-        self.handle_message_with_fractional_timing(message, Some(fractional_offset), status_tx);
+        // Use the complete implementation that handles sample loading
+        self.handle_message_with_optional_timing(message, None, status_tx);
     }
 
     fn handle_message_with_sample_timing(
@@ -921,8 +931,15 @@ impl AudioEngine {
                     Frame::process_block_zero(buffer_slice);
 
                     if !stream_initialized {
-                        engine.initialize_stream_timing();
-                        stream_initialized = true;
+                        // ALWAYS wait for first message to get correct Link time
+                        if let Ok(ScheduledEngineMessage::Scheduled(scheduled)) = command_rx.try_recv() {
+                            let init_time = scheduled.due_time_micros.saturating_sub(100_000);
+                            engine.initialize_stream_timing_with_link_time(init_time);
+                            engine.schedule_message(scheduled.message, scheduled.due_time_micros);
+                            stream_initialized = true;
+                        } else {
+                            return;
+                        }
                     }
 
                     // Process all pending commands (lock-free!)
@@ -932,8 +949,7 @@ impl AudioEngine {
                                 engine.handle_message_immediate(&msg, None);
                             }
                             ScheduledEngineMessage::Scheduled(scheduled) => {
-                                engine
-                                    .schedule_message(scheduled.message, scheduled.due_time_micros);
+                                engine.schedule_message(scheduled.message, scheduled.due_time_micros);
                             }
                         }
                     }

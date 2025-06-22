@@ -65,9 +65,6 @@ struct Args {
     #[arg(long, default_value = "127.0.0.1")]
     osc_host: String,
 
-    /// OSC timestamp tolerance in milliseconds
-    #[arg(long, default_value_t = 1000)]
-    timestamp_tolerance_ms: u64,
 
     /// Directory path for audio sample files
     #[arg(long, default_value = "./samples")]
@@ -135,13 +132,12 @@ fn main() {
 
     let mut registry = ModuleRegistry::new();
     registry.register_default_modules();
-    registry.set_timestamp_tolerance(args.timestamp_tolerance_ms);
 
     print!("Engine config: {} voices", args.max_voices);
     if let Some(device) = &args.output_device {
         print!(" | Output: {}", device);
     }
-    println!(" | Tolerance: {}ms", args.timestamp_tolerance_ms);
+    println!();
 
     let engine = AudioEngine::new_with_memory(
         args.sample_rate as f32,
