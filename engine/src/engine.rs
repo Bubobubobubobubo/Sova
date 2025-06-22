@@ -593,7 +593,7 @@ impl AudioEngine {
 
                     // Sub-sample precision: advance envelope by exact sample offset
                     if let Some(offset) = sample_offset {
-                        let sample_time = offset as f32 / self.sample_rate as f32;
+                        let sample_time = offset as f32 / self.sample_rate;
                         voice.advance_envelope_by_time(sample_time, self.sample_rate);
                     }
                 }
