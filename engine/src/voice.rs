@@ -155,8 +155,8 @@ pub struct Voice {
     is_crossfading: bool,
     /// Chain-level gain reduction for managing effect explosions
     chain_gain_reduction: f32,
-    /// Peak tracking for automatic gain management
-    peak_tracker: f32,
+    /// Peak tracking for voice culling optimization
+    pub peak_tracker: f32,
 }
 
 impl Voice {
@@ -325,11 +325,15 @@ impl Voice {
             let mixed_left = frame.left * envelope_amp * smooth_amp * left_gain;
             let mixed_right = frame.right * envelope_amp * smooth_amp * right_gain;
 
+            // Track peak level for voice culling (running average with decay)
+            self.peak_tracker = self.peak_tracker * 0.99 + (mixed_left.abs() + mixed_right.abs()) * 0.01;
+
             output[i].left += mixed_left;
             output[i].right += mixed_right;
         }
 
-        if self.envelope_state.is_finished() {
+        // Voice is inactive if envelope finished OR output is below silence threshold (-60dB)
+        if self.envelope_state.is_finished() || self.peak_tracker < 0.001 {
             self.is_active = false;
         }
     }
@@ -344,6 +348,7 @@ impl Voice {
         self.is_crossfading = false;
         self.crossfade_smoother.set_target_immediate(1.0);
         self.envelope_state.trigger();
+        self.peak_tracker = 0.0;  // Reset peak tracking for fresh voice
 
         if let Some(source) = &mut self.source {
             // Check if it's a sampler and trigger it
