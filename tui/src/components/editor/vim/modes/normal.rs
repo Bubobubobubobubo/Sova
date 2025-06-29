@@ -4,37 +4,48 @@ use tui_textarea::{CursorMove, Input, Key};
 use super::super::{execute_command, paste_after, paste_before, Mode, ParseResult};
 
 pub fn handle_normal_mode(app: &mut App, input: Input) -> bool {
+    // Check if we're waiting for a replace character
+    if let Some(count) = app.editor.vim_state.replace_pending {
+        return handle_replace_char(app, input, count);
+    }
+    
     match input {
         // Mode transitions
         Input { key: Key::Char('i'), .. } => {
             app.editor.textarea.cancel_selection();
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         Input { key: Key::Char('a'), .. } => {
             app.editor.textarea.cancel_selection();
             app.editor.textarea.move_cursor(CursorMove::Forward);
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         Input { key: Key::Char('A'), .. } => {
             app.editor.textarea.cancel_selection();
             app.editor.textarea.move_cursor(CursorMove::End);
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         Input { key: Key::Char('I'), .. } => {
             app.editor.textarea.cancel_selection();
             app.editor.textarea.move_cursor(CursorMove::Head);
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         Input { key: Key::Char('o'), .. } => {
             app.editor.textarea.move_cursor(CursorMove::End);
             app.editor.textarea.insert_newline();
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         Input { key: Key::Char('O'), .. } => {
             app.editor.textarea.move_cursor(CursorMove::Head);
             app.editor.textarea.insert_newline();
             app.editor.textarea.move_cursor(CursorMove::Up);
-            app.editor.vim_state.set_mode(Mode::Insert, &mut app.editor.textarea);
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.start_insert_mode(count, &mut app.editor.textarea);
         }
         
         // Visual mode
@@ -102,6 +113,11 @@ pub fn handle_normal_mode(app: &mut App, input: Input) -> bool {
         }
         Input { key: Key::Char('r'), ctrl: true, .. } => {
             app.editor.textarea.redo();
+        }
+        Input { key: Key::Char('r'), ctrl: false, .. } => {
+            // Replace command - wait for next character
+            let count = get_pending_count(&mut app.editor.vim_state.parser);
+            app.editor.vim_state.replace_pending = Some(count.unwrap_or(1));
         }
         
         // Line operations
@@ -242,4 +258,51 @@ fn handle_join_lines(app: &mut App) {
         app.editor.textarea.delete_next_char(); // Remove newline
         app.editor.textarea.insert_char(' '); // Add space
     }
+}
+
+fn get_pending_count(parser: &mut super::super::CommandParser) -> Option<u32> {
+    parser.extract_count()
+}
+
+fn handle_replace_char(app: &mut App, input: Input, count: u32) -> bool {
+    match input {
+        Input { key: Key::Esc, .. } => {
+            // Cancel replace operation
+            app.editor.vim_state.replace_pending = None;
+        }
+        Input { key: Key::Char(c), .. } => {
+            // Perform the replace operation
+            app.editor.vim_state.replace_pending = None;
+            
+            let (row, col) = app.editor.textarea.cursor();
+            let lines = app.editor.textarea.lines();
+            
+            if let Some(line) = lines.get(row) {
+                let chars: Vec<char> = line.chars().collect();
+                let available_chars = chars.len().saturating_sub(col);
+                let replace_count = (count as usize).min(available_chars);
+                
+                if replace_count > 0 {
+                    // Delete the characters to be replaced
+                    for _ in 0..replace_count {
+                        app.editor.textarea.delete_next_char();
+                    }
+                    
+                    // Insert the replacement characters
+                    for _ in 0..replace_count {
+                        app.editor.textarea.insert_char(c);
+                    }
+                    
+                    // Move cursor back to the original position
+                    app.editor.textarea.move_cursor(CursorMove::Jump(row as u16, col as u16));
+                }
+            }
+        }
+        _ => {
+            // Invalid key for replace - cancel the operation
+            app.editor.vim_state.replace_pending = None;
+        }
+    }
+    
+    true
 }

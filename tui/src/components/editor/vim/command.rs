@@ -41,15 +41,6 @@ impl Operator {
 }
 
 impl Command {
-    pub fn new(motion: Motion) -> Self {
-        Self {
-            count: None,
-            operator: None,
-            motion,
-        }
-    }
-
-
     pub fn effective_count(&self) -> u32 {
         self.count.unwrap_or(1)
     }

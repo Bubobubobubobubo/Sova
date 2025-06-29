@@ -20,7 +20,7 @@ pub mod lang_popup;
 pub mod line_view;
 pub mod normal;
 pub mod search;
-pub mod vim2;
+pub mod vim;
 
 /// The main editor component that handles text editing functionality.
 ///
@@ -342,11 +342,11 @@ impl Component for EditorComponent {
             disk::EditingMode::Vim => {
                 let input: Input = key_event.into();
                 // Call the handler from the vim module
-                consumed_in_mode = vim2::handle_vim_input(app, input);
+                consumed_in_mode = vim::handle_vim_input(app, input);
                 // If Esc was pressed AND vim handler didn't consume it (meaning it was in Normal mode)
                 if key_event.code == KeyCode::Esc
                     && !consumed_in_mode
-                    && app.editor.vim_state.mode == vim2::Mode::Normal
+                    && app.editor.vim_state.mode == vim::Mode::Normal
                 // Check if in Normal mode
                 {
                     // Then exit the editor
@@ -505,11 +505,11 @@ impl Component for EditorComponent {
             let search_active = app.editor.search_state.is_active;
             let compilation_error_present = app.editor.compilation_error.is_some();
             let command_mode_active = app.client_config.editing_mode == disk::EditingMode::Vim
-                && app.editor.vim_state.mode == vim2::Mode::Command;
+                && app.editor.vim_state.mode == vim::Mode::Command;
             let search_input_mode_active = app.client_config.editing_mode == disk::EditingMode::Vim
                 && matches!(
                     app.editor.vim_state.mode,
-                    vim2::Mode::Search { .. }
+                    vim::Mode::Search { .. }
                 );
 
             let mut constraints = vec![Constraint::Min(0)];
@@ -637,11 +637,11 @@ impl Component for EditorComponent {
                 if cmd_area.width > 0 && cmd_area.height > 0 {
                     let buffer_text = &app.editor.vim_state.command_buffer;
                     let (prefix, style) = match app.editor.vim_state.mode {
-                        vim2::Mode::Command => (":", Style::default().fg(Color::Yellow)),
-                        vim2::Mode::Search { forward: true } => {
+                        vim::Mode::Command => (":", Style::default().fg(Color::Yellow)),
+                        vim::Mode::Search { forward: true } => {
                             ("/", Style::default().fg(Color::LightMagenta))
                         }
-                        vim2::Mode::Search { forward: false } => {
+                        vim::Mode::Search { forward: false } => {
                             ("?", Style::default().fg(Color::LightMagenta))
                         }
                         _ => ("", Style::default()), // Should not be reached if command_line_area is Some

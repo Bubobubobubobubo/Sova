@@ -89,7 +89,7 @@ impl<'a> Widget for ContextBarWidget<'a> {
             mode_text_inner = format!(
                 "{} ({}) ",
                 mode_text_inner,
-                self.app.editor.vim_state.mode.title_string()
+                self.app.editor.vim_state.mode_display_string()
             );
         }
 
