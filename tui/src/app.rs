@@ -5,7 +5,7 @@ use crate::components::{
     devices::{DevicesComponent, DevicesState},
     editor::EditorComponent,
     editor::search::SearchState,
-    editor::vim::VimState,
+    editor::vim2::VimState,
     grid::{GridComponent, utils::GridRenderInfo},
     help::{HelpComponent, HelpState},
     logs::{LogEntry, LogLevel, LogsComponent},
