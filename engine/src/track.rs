@@ -278,6 +278,8 @@ impl Track {
 
         Frame::process_block_zero(buffer);
 
+        // Process only voices that belong to this track and are active
+        // Note: peak_tracker check removed from filter to allow new voices to produce sound
         for voice in voices {
             if voice.track_id == self.id && voice.is_active {
                 voice.process(buffer, sample_rate);
