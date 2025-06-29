@@ -42,6 +42,16 @@ impl CommandParser {
         self.state = ParseState::Initial;
     }
 
+    pub fn extract_count(&mut self) -> Option<u32> {
+        let count = if self.count_buffer.is_empty() {
+            None
+        } else {
+            self.count_buffer.parse().ok()
+        };
+        self.reset();
+        count
+    }
+
     pub fn push_key(&mut self, key: char) -> ParseResult {
         match self.state {
             ParseState::Initial => self.handle_initial(key),

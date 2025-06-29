@@ -56,11 +56,19 @@ pub struct VimState {
     pub command_buffer: String,
     pub last_search: Option<String>,
     pub yank_register: YankRegister,
+    pub insert_repeat: Option<InsertRepeat>,
+    pub replace_pending: Option<u32>,
 }
 
 #[derive(Debug, Clone)]
 pub struct YankRegister {
     pub yank_type: YankType,
+}
+
+#[derive(Debug, Clone)]
+pub struct InsertRepeat {
+    pub count: u32,
+    pub start_cursor: (usize, usize),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -85,6 +93,8 @@ impl VimState {
             yank_register: YankRegister {
                 yank_type: YankType::Characterwise,
             },
+            insert_repeat: None,
+            replace_pending: None,
         }
     }
 
@@ -100,6 +110,27 @@ impl VimState {
             if mode != Mode::OperatorPending {
                 self.parser.reset();
             }
+        }
+    }
+
+    pub fn start_insert_mode(&mut self, count: Option<u32>, textarea: &mut TextArea) {
+        let insert_count = count.unwrap_or(1);
+        if insert_count > 1 {
+            self.insert_repeat = Some(InsertRepeat {
+                count: insert_count,
+                start_cursor: textarea.cursor(),
+            });
+        } else {
+            self.insert_repeat = None;
+        }
+        self.set_mode(Mode::Insert, textarea);
+    }
+
+    pub fn mode_display_string(&self) -> String {
+        if self.replace_pending.is_some() {
+            "REPLACE".to_string()
+        } else {
+            self.mode.title_string()
         }
     }
 }
