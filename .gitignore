@@ -30,7 +30,32 @@ Cargo.lock
 !/website/static/*.pdf
 /website/public/*
 .DS_Store
-**/.claude/settings.local.json
+
+# Claude Code artifacts - comprehensive exclusion
+**/.claude/
+**/CLAUDE.md
+**/CLAUDE.local.md
+.claude/
 CLAUDE.md
 CLAUDE.local.md
 DEBUG*
+# Claude Code temporary files
+**/.claude-temp/
+**/.claude-cache/
+**/.claude-workspace/
+**/.claude-session/
+**/.claude-history/
+# Claude Code generated files
+**/claude-*
+**/*claude*tmp*
+**/*claude*temp*
+**/.claude*
+**/claude_*
+**/*_claude_*
+# Claude Code logs and debug files
+**/claude*.log
+**/debug-claude*
+**/claude-debug*
+# Additional patterns for safety
+**/*anthropic*
+**/*claude-code*
