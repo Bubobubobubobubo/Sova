@@ -363,7 +363,6 @@ impl SampleLibrary {
     /// Preload ALL samples from all folders to eliminate runtime loading.
     /// This ensures no mutex contention during audio processing.
     pub fn preload_all_samples(&self) {
-        println!("Pre-loading all samples to eliminate runtime mutex usage...");
         let folder_index = self.folder_index.clone();
         let mut total_loaded = 0;
 
