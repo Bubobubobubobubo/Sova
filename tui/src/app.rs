@@ -1409,6 +1409,15 @@ impl App {
                     ),
                 );
 
+                // Clear editor state before loading new project
+                self.editor.textarea = TextArea::default();
+                self.editor.compilation_error = None;
+                // Reset active_line to force fresh script requests
+                self.editor.active_line = UserPosition {
+                    line_index: usize::MAX,
+                    frame_index: usize::MAX,
+                };
+                
                 // 1. Update local state IMMEDIATELY
                 self.editor.scene = Some(snapshot.scene.clone()); // Update local scene data
                 self.server
@@ -1419,17 +1428,33 @@ impl App {
 
                 // 2. Send messages to server with the specified timing
                 self.send_client_message(ClientMessage::SetTempo(snapshot.tempo, timing));
-                self.send_client_message(ClientMessage::SetScene(snapshot.scene, timing)); // Send scene again (server might validate)
+                self.send_client_message(ClientMessage::SetScene(snapshot.scene.clone(), timing)); // Send scene again (server might validate)
                 self.send_client_message(ClientMessage::UpdateGridSelection(
                     self.interface.components.grid_selection,
                 )); // Send reset selection
 
+                // 3. Send individual scripts to ensure server has all script contents
+                let mut scripts_sent = 0;
+                for (line_idx, line) in snapshot.scene.lines.iter().enumerate() {
+                    for (frame_idx, script) in line.scripts.iter().enumerate() {
+                        if !script.content.is_empty() {
+                            self.send_client_message(ClientMessage::SetScript(
+                                line_idx,
+                                frame_idx, 
+                                script.content.clone(),
+                                timing,
+                            ));
+                            scripts_sent += 1;
+                        }
+                    }
+                }
+
                 self.add_log(
                     LogLevel::Info,
-                    "Project load messages sent to server.".to_string(),
+                    format!("Project load messages sent to server. {} scripts synchronized.", scripts_sent),
                 );
 
-                // 3. Switch view after applying locally and sending messages
+                // 4. Switch view after applying locally and sending messages
                 self.interface.screen.mode = Mode::Grid;
             }
             AppEvent::SwitchToSaveLoad => {
