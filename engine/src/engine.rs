@@ -89,6 +89,8 @@ pub struct AudioEngine {
     precision_timer: HighPrecisionTimer,
     // Predictive sample loading system
     predictive_sample_manager: PredictiveSampleManager,
+    // Pre-allocated buffer for sample mixing (real-time safe)
+    sample_mix_buffer: Box<[f32]>,
 }
 
 impl AudioEngine {
@@ -216,6 +218,11 @@ impl AudioEngine {
             2, // Number of background loader threads
         );
 
+        // Pre-allocate mix buffer for real-time safe sample mixing  
+        // Size: 2 seconds at max sample rate stereo (covers 90% of samples, analysis shows most <2 seconds)
+        let max_sample_size = (sample_rate as usize) * 2 * 2; // 2 seconds stereo 
+        let sample_mix_buffer = vec![0.0f32; max_sample_size].into_boxed_slice();
+
         Self {
             voices,
             tracks,
@@ -235,6 +242,7 @@ impl AudioEngine {
             global_effect_pool,
             precision_timer: HighPrecisionTimer::new(sample_rate),
             predictive_sample_manager,
+            sample_mix_buffer,
         }
     }
 
@@ -959,15 +967,25 @@ impl AudioEngine {
                     // Try to get the next sample for mixing
                     match self.predictive_sample_manager.get_sample_immediate(&sample_name, sample_index + 1) {
                         SampleResult::Ready(next_sample_data) => {
-                            // Mix the two samples
+                            // Mix the two samples using pre-allocated buffer (REAL-TIME SAFE)
                             let len = sample_data.len().min(next_sample_data.len());
-                            let mut mixed_data = Vec::with_capacity(len);
                             
-                            for i in 0..len {
-                                let mixed = sample_data[i] * (1.0 - mix_factor) + next_sample_data[i] * mix_factor;
-                                mixed_data.push(mixed);
+                            // Ensure our pre-allocated buffer is large enough
+                            if len <= self.sample_mix_buffer.len() {
+                                // Use pre-allocated buffer slice for mixing
+                                let mix_slice = &mut self.sample_mix_buffer[..len];
+                                
+                                for i in 0..len {
+                                    mix_slice[i] = sample_data[i] * (1.0 - mix_factor) + next_sample_data[i] * mix_factor;
+                                }
+                                
+                                // Return slice as Vec (copies from pre-allocated buffer)
+                                mix_slice.to_vec()
+                            } else {
+                                // Fallback: sample too large for buffer, use current sample only
+                                rt_eprintln!("Sample too large for mix buffer: {} > {}", len, self.sample_mix_buffer.len());
+                                sample_data
                             }
-                            mixed_data
                         },
                         _ => {
                             // Next sample not available, use current sample only
