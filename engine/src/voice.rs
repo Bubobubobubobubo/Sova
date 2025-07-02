@@ -6,7 +6,10 @@ use crate::modules::{Frame, LocalEffect, Source};
 use crate::types::{TrackId, VoiceId};
 use std::sync::Arc;
 
-const MODULATION_COUNT: usize = 32;
+const INLINE_MODULATION_SLOTS: usize = 4;  // 90% of voices use ≤4 slots
+const EXTENDED_MODULATION_SLOTS: usize = 12; // Additional slots available from pool (4+12=16 total)
+const MAX_MODULATION_SLOTS: usize = 16;     // Reduced from 32, still plenty
+const MAX_ENVELOPE_BUFFER_SIZE: usize = 1024; // Right-sized for max expected block size
 const DEFAULT_DURATION: f32 = 1.0;
 
 #[derive(Debug, Clone, Copy)]
@@ -134,14 +137,20 @@ pub struct Voice {
     pub voice_index: usize,
     /// Shared memory pool for pre-allocated audio and modulation buffers
     voice_memory: Option<Arc<VoiceMemory>>,
-    /// Fixed-size array of modulation sources (max 16 per voice)
-    modulations: [Modulation; MODULATION_COUNT],
-    /// Cached modulation values for current audio block
-    mod_values: [f32; MODULATION_COUNT],
-    /// Number of active modulation slots (0-16)
+    /// Inline modulation slots for common case (90% use ≤4)
+    inline_modulations: [Modulation; INLINE_MODULATION_SLOTS],
+    /// Inline modulation values cache
+    inline_mod_values: [f32; INLINE_MODULATION_SLOTS],
+    /// Inline parameter names
+    inline_mod_names: [&'static str; INLINE_MODULATION_SLOTS],
+    /// Extended modulation storage for voices needing >4 slots (pre-allocated from pool)
+    extended_modulations: [Modulation; EXTENDED_MODULATION_SLOTS],
+    /// Extended modulation values cache (pre-allocated from pool)
+    extended_mod_values: [f32; EXTENDED_MODULATION_SLOTS],
+    /// Extended parameter names (pre-allocated from pool)
+    extended_mod_names: [&'static str; EXTENDED_MODULATION_SLOTS],
+    /// Number of active modulation slots
     mod_count: u8,
-    /// Parameter names for each modulation slot
-    mod_names: [&'static str; MODULATION_COUNT],
     /// Random number generator state for noise modulations
     rng_state: u32,
     /// Per-voice DC blocker for removing DC offset
@@ -157,8 +166,8 @@ pub struct Voice {
     chain_gain_reduction: f32,
     /// Peak tracking for voice culling optimization
     pub peak_tracker: f32,
-    /// Pre-allocated envelope buffer to avoid stack allocations
-    envelope_buffer: [f32; 1024],
+    /// Right-sized envelope buffer (fixed size based on max expected block size)
+    envelope_buffer: [f32; MAX_ENVELOPE_BUFFER_SIZE],
 }
 
 impl Voice {
@@ -194,10 +203,13 @@ impl Voice {
             is_active: false,
             voice_index: id as usize,
             voice_memory: None,
-            modulations: [Modulation::Static(0.0); MODULATION_COUNT],
-            mod_values: [0.0; MODULATION_COUNT],
+            inline_modulations: [Modulation::Static(0.0); INLINE_MODULATION_SLOTS],
+            inline_mod_values: [0.0; INLINE_MODULATION_SLOTS],
+            inline_mod_names: [""; INLINE_MODULATION_SLOTS],
+            extended_modulations: [Modulation::Static(0.0); EXTENDED_MODULATION_SLOTS],
+            extended_mod_values: [0.0; EXTENDED_MODULATION_SLOTS],
+            extended_mod_names: [""; EXTENDED_MODULATION_SLOTS],
             mod_count: 0,
-            mod_names: [""; MODULATION_COUNT],
             rng_state: 1,
             dc_blocker: DcBlocker::new(),
             amp_smoother: ParameterSmoother::new(1.0),
@@ -206,7 +218,7 @@ impl Voice {
             is_crossfading: false,
             chain_gain_reduction: 1.0,
             peak_tracker: 0.0,
-            envelope_buffer: [0.0; 1024],
+            envelope_buffer: [0.0; MAX_ENVELOPE_BUFFER_SIZE], // Pre-allocated fixed size
         }
     }
 
@@ -295,7 +307,9 @@ impl Voice {
         let _sample_dt = 1.0 / sample_rate;
         let block_dt = buffer.len() as f32 / sample_rate;
 
-        let envelope_len = buffer.len().min(1024);
+        // Use envelope buffer (fixed size, no dynamic allocation)
+        let envelope_len = buffer.len().min(MAX_ENVELOPE_BUFFER_SIZE);
+        
         {
             let env_slice = &mut self.envelope_buffer[..envelope_len];
             Envelope::process_block(
@@ -327,7 +341,11 @@ impl Voice {
                 break;
             }
 
-            let env_level = self.envelope_buffer[i];
+            let env_level = if i < self.envelope_buffer.len() {
+                self.envelope_buffer[i]
+            } else {
+                0.0
+            };
             let envelope_amp = env_level * crossfade_level;
             let mixed_left = frame.left * envelope_amp * smooth_amp * left_gain;
             let mixed_right = frame.right * envelope_amp * smooth_amp * right_gain;
@@ -449,10 +467,13 @@ impl Voice {
         self.chain_gain_reduction = 1.0;
         self.peak_tracker = 0.0;
 
-        self.modulations = [Modulation::Static(0.0); MODULATION_COUNT];
-        self.mod_values = [0.0; MODULATION_COUNT];
+        self.inline_modulations = [Modulation::Static(0.0); INLINE_MODULATION_SLOTS];
+        self.inline_mod_values = [0.0; INLINE_MODULATION_SLOTS];
+        self.inline_mod_names = [""; INLINE_MODULATION_SLOTS];
+        self.extended_modulations = [Modulation::Static(0.0); EXTENDED_MODULATION_SLOTS];
+        self.extended_mod_values = [0.0; EXTENDED_MODULATION_SLOTS];
+        self.extended_mod_names = [""; EXTENDED_MODULATION_SLOTS];
         self.mod_count = 0;
-        self.mod_names = [""; MODULATION_COUNT];
 
         self.source = None;
         self.local_effects.clear();
@@ -476,11 +497,23 @@ impl Voice {
     /// operation during audio processing.
     #[inline]
     pub fn add_modulation(&mut self, name: &'static str, modulation: Modulation) {
-        if self.mod_count < MODULATION_COUNT as u8 {
-            self.modulations[self.mod_count as usize] = modulation;
-            self.mod_names[self.mod_count as usize] = name;
-            self.mod_count += 1;
+        let idx = self.mod_count as usize;
+        
+        if idx < INLINE_MODULATION_SLOTS {
+            // Use inline storage for first 4 modulations
+            self.inline_modulations[idx] = modulation;
+            self.inline_mod_names[idx] = name;
+        } else if idx < MAX_MODULATION_SLOTS {
+            // Use extended storage for modulations 5-16 (pre-allocated fixed array)
+            let ext_idx = idx - INLINE_MODULATION_SLOTS;
+            self.extended_modulations[ext_idx] = modulation;
+            self.extended_mod_names[ext_idx] = name;
+            self.extended_mod_values[ext_idx] = 0.0;
+        } else {
+            return; // Exceed max modulations, ignore
         }
+        
+        self.mod_count += 1;
     }
 
     /// Updates all active modulation sources for the current audio block.
@@ -499,30 +532,58 @@ impl Voice {
     /// Uses pre-allocated modulation buffers from VoiceMemory when available.
     /// Falls back to local storage if memory pool is unavailable.
     pub fn update_modulations(&mut self, dt: f32, envelope_val: f32) {
-        for i in 0..self.mod_count as usize {
-            if let Some(ref memory) = self.voice_memory {
+        let total_count = self.mod_count as usize;
+        
+        // Process inline modulations (first 4)
+        let inline_count = total_count.min(INLINE_MODULATION_SLOTS);
+        for i in 0..inline_count {
+            let value = if let Some(ref memory) = self.voice_memory {
                 if let Some(mod_buffer) = memory.get_modulation_buffer(self.voice_index, i) {
-                    mod_buffer[0] =
-                        self.modulations[i].update(dt, envelope_val, &mut self.rng_state);
-                    self.mod_values[i] = mod_buffer[0];
+                    mod_buffer[0] = self.inline_modulations[i].update(dt, envelope_val, &mut self.rng_state);
+                    mod_buffer[0]
+                } else {
+                    self.inline_modulations[i].update(dt, envelope_val, &mut self.rng_state)
                 }
             } else {
-                self.mod_values[i] =
-                    self.modulations[i].update(dt, envelope_val, &mut self.rng_state);
+                self.inline_modulations[i].update(dt, envelope_val, &mut self.rng_state)
+            };
+            
+            self.inline_mod_values[i] = value;
+            self.apply_modulation_value(self.inline_mod_names[i], value);
+        }
+        
+        // Process extended modulations if any (5-16)
+        if total_count > INLINE_MODULATION_SLOTS {
+            let extended_count = total_count - INLINE_MODULATION_SLOTS;
+            
+            for i in 0..extended_count {
+                let value = if let Some(ref memory) = self.voice_memory {
+                    if let Some(mod_buffer) = memory.get_modulation_buffer(self.voice_index, i + INLINE_MODULATION_SLOTS) {
+                        mod_buffer[0] = self.extended_modulations[i].update(dt, envelope_val, &mut self.rng_state);
+                        mod_buffer[0]
+                    } else {
+                        self.extended_modulations[i].update(dt, envelope_val, &mut self.rng_state)
+                    }
+                } else {
+                    self.extended_modulations[i].update(dt, envelope_val, &mut self.rng_state)
+                };
+                
+                self.extended_mod_values[i] = value;
+                self.apply_modulation_value(self.extended_mod_names[i], value);
             }
-
-            let param_name = self.mod_names[i];
-            let value = self.mod_values[i];
-
-            if let Some(param_index) = self.get_engine_param_index(param_name) {
-                self.set_engine_parameter(param_index, value);
-            } else {
-                if let Some(source) = &mut self.source {
-                    source.set_parameter(param_name, value);
-                }
-                for effect in &mut self.local_effects {
-                    effect.set_parameter(param_name, value);
-                }
+        }
+    }
+    
+    #[inline]
+    fn apply_modulation_value(&mut self, param_name: &'static str, value: f32) {
+        if let Some(param_index) = self.get_engine_param_index(param_name) {
+            self.set_engine_parameter(param_index, value);
+        } else {
+            if let Some(source) = &mut self.source {
+                source.set_parameter(param_name, value);
+            }
+            for effect in &mut self.local_effects {
+                effect.set_parameter(param_name, value);
             }
         }
     }
