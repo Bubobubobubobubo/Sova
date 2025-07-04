@@ -1,0 +1,95 @@
+# Quick Deployment Guide
+
+## Before You Start
+
+1. **Check your VPS memory:**
+   ```bash
+   free -h
+   ```
+   - If you have < 4GB RAM, use the prebuilt option
+   - If you have ≥ 4GB RAM, you can use either option
+
+## Deployment Steps
+
+### Step 1: Build the Binary (Prebuilt Option)
+
+```bash
+# Navigate to BuboCore root
+cd /path/to/BuboCore
+
+# Build with single thread to avoid memory issues
+CARGO_BUILD_JOBS=1 cargo build --release -p bubocore-relay
+```
+
+### Step 2: Choose Your Deployment Method
+
+#### Option A: Standalone Docker
+
+```bash
+# Build and run standalone
+cd relay
+docker-compose up -d bubocore-relay-prebuilt
+```
+
+#### Option B: Integration with Existing Stack
+
+Add to your main `docker-compose.yml`:
+
+```yaml
+bubocore-relay:
+  build:
+    context: ./BuboCore
+    dockerfile: relay/Dockerfile.prebuilt
+  container_name: bubocore-relay
+  restart: unless-stopped
+  environment:
+    - RUST_LOG=info
+  networks:
+    - proxy
+  # Add Traefik labels if needed
+```
+
+### Step 3: Verify Deployment
+
+```bash
+# Check container status
+docker ps | grep bubocore-relay
+
+# Check logs
+docker logs bubocore-relay
+
+# Test connectivity
+curl http://localhost:9090
+# or with your domain
+curl https://relay.your-domain.com
+```
+
+## Troubleshooting
+
+### Memory Issues During Build
+- Use `CARGO_BUILD_JOBS=1`
+- Add temporary swap if needed
+- Use the prebuilt Dockerfile
+
+### Container Won't Start
+- Check logs: `docker logs bubocore-relay`
+- Verify binary exists: `ls -la target/release/bubocore-relay`
+- Check port conflicts: `netstat -tulpn | grep 9090`
+
+### Network Issues
+- Verify Traefik configuration
+- Check firewall rules
+- Ensure DNS points to your server
+
+## Performance Monitoring
+
+```bash
+# Resource usage
+docker stats bubocore-relay
+
+# Connection monitoring
+docker logs -f bubocore-relay | grep "connection"
+
+# Health check
+docker inspect bubocore-relay | grep -A 5 Health
+```

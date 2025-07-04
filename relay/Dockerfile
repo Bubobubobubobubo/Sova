@@ -10,10 +10,16 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy source code
-COPY . .
+# Copy workspace files first for dependency caching
+COPY Cargo.toml ./
+COPY relay/Cargo.toml ./relay/
+COPY relay/src/ ./relay/src/
 
-# Build the relay server
+# Optimize for low-memory builds
+ENV CARGO_BUILD_JOBS=1
+ENV CARGO_TARGET_DIR=/tmp/target
+
+# Build the relay server (build from workspace root)
 RUN cargo build --release -p bubocore-relay
 
 # Runtime stage
@@ -28,7 +34,7 @@ RUN apt-get update && apt-get install -y \
 RUN useradd -r -s /bin/false relay
 
 # Copy binary from builder
-COPY --from=builder /app/target/release/bubocore-relay /usr/local/bin/
+COPY --from=builder /tmp/target/release/bubocore-relay /usr/local/bin/
 
 # Set ownership
 RUN chown relay:relay /usr/local/bin/bubocore-relay
