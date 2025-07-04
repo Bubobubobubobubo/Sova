@@ -187,7 +187,133 @@ The crate is structured for easy extension:
 
 ## Deployment
 
-See [deployment.md](../deployment.md) for Docker and VPS deployment instructions.
+### Docker Deployment
+
+#### Option 1: Pre-built Binary (Recommended for VPS)
+
+To avoid memory issues when compiling Rust on a VPS:
+
+1. **Build locally or on the host machine:**
+   ```bash
+   cd /path/to/BuboCore
+   CARGO_BUILD_JOBS=1 cargo build --release -p bubocore-relay
+   ```
+
+2. **Use the lightweight Dockerfile:**
+   ```bash
+   # Build image with pre-compiled binary
+   docker build -f relay/Dockerfile.prebuilt -t bubocore-relay .
+   ```
+
+3. **Start the container:**
+   ```bash
+   docker run -d \
+     --name bubocore-relay \
+     -p 9090:9090 \
+     -e RUST_LOG=info \
+     bubocore-relay
+   ```
+
+#### Option 2: Full Compilation (Requires >4GB RAM)
+
+If you have sufficient memory:
+
+```bash
+# Build image with full compilation
+docker build -f relay/Dockerfile -t bubocore-relay .
+```
+
+#### Integration with docker-compose
+
+To integrate into an existing docker-compose stack:
+
+```yaml
+services:
+  bubocore-relay:
+    build:
+      context: ./BuboCore
+      dockerfile: relay/Dockerfile.prebuilt  # Uses pre-compiled binary
+    container_name: bubocore-relay
+    restart: unless-stopped
+    environment:
+      - RUST_LOG=info
+    networks:
+      - proxy  # If using Traefik
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "timeout", "5", "bash", "-c", "</dev/tcp/localhost/9090"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    # If using Traefik for reverse proxy:
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.bubocore-relay.rule=Host(`relay.your-domain.fr`)
+      - traefik.http.routers.bubocore-relay.entrypoints=websecure
+      - traefik.http.routers.bubocore-relay.tls.certresolver=myresolver
+      - traefik.http.services.bubocore-relay.loadbalancer.server.port=9090
+```
+
+#### Memory Issues Troubleshooting
+
+**Problem:** Rust compilation can consume 1-2GB RAM per parallel process and crash VPS with limited memory.
+
+**Solutions:**
+
+1. **Single-threaded compilation:**
+   ```bash
+   CARGO_BUILD_JOBS=1 cargo build --release -p bubocore-relay
+   ```
+
+2. **Add temporary swap (temporary):**
+   ```bash
+   sudo fallocate -l 2G /swapfile
+   sudo chmod 600 /swapfile
+   sudo mkswap /swapfile
+   sudo swapon /swapfile
+   # Compile, then disable
+   sudo swapoff /swapfile
+   sudo rm /swapfile
+   ```
+
+3. **Use Dockerfile.prebuilt:** (Recommended)
+   - Compile on your local machine
+   - Copy only the binary into the final image
+   - Final image: ~100MB vs 2GB+ for full compilation
+
+#### Access and Testing
+
+Once deployed, the relay will be accessible:
+
+- **Direct port:** `http://your-server:9090`
+- **Via Traefik:** `https://relay.your-domain.fr`
+- **Health check:** Service exposes a healthcheck on port 9090
+
+#### Logs and Monitoring
+
+```bash
+# View service logs
+docker logs bubocore-relay
+
+# Real-time logs
+docker logs -f bubocore-relay
+
+# Resource statistics
+docker stats bubocore-relay
+```
+
+### Production Configuration
+
+```bash
+# Recommended environment variables
+RUST_LOG=info                    # Appropriate log level
+BUBOCORE_MAX_INSTANCES=50       # Instance limit
+BUBOCORE_RATE_LIMIT=2000        # Messages per minute
+```
 
 ## License
 
