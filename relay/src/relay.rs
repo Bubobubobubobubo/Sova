@@ -16,9 +16,8 @@ use tokio::{
 };
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
-use hyper::{Request, Response, service::service_fn, Method, StatusCode};
+use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
-use http_body_util::Full;
 
 /// Connection state for an instance
 struct ConnectionState {
@@ -119,7 +118,7 @@ impl RelayServer {
                             if let Err(e) = hyper::server::conn::http1::Builder::new()
                                 .serve_connection(
                                     io,
-                                    service_fn(move |req| Self::handle_http_request(req, instances.clone())),
+                                    service_fn(move |req| crate::web::handle_http_request(req, instances.clone())),
                                 )
                                 .await
                             {
@@ -586,163 +585,6 @@ impl RelayServer {
         }
     }
 
-    /// Handle HTTP requests for the web interface
-    async fn handle_http_request(
-        req: Request<hyper::body::Incoming>,
-        instances: Arc<RwLock<HashMap<Uuid, InstanceInfo>>>,
-    ) -> Result<Response<Full<bytes::Bytes>>, std::convert::Infallible> {
-        match (req.method(), req.uri().path()) {
-            (&Method::GET, "/") => {
-                let instances_read = instances.read().await;
-                let instances_list: Vec<&InstanceInfo> = instances_read.values().collect();
-                let instance_count = instances_list.len();
-                
-                let html = format!(
-                    r#"<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BuboCore Relay Server</title>
-    <style>
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 2rem;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            color: #333;
-        }}
-        .container {{
-            background: white;
-            padding: 2rem;
-            border-radius: 10px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-        }}
-        h1 {{
-            color: #4a5568;
-            text-align: center;
-            margin-bottom: 1rem;
-        }}
-        .status {{
-            background: #f7fafc;
-            padding: 1rem;
-            border-radius: 5px;
-            margin: 1rem 0;
-            border-left: 4px solid #4299e1;
-        }}
-        .instances {{
-            margin-top: 2rem;
-        }}
-        .instance {{
-            background: #edf2f7;
-            padding: 1rem;
-            margin: 0.5rem 0;
-            border-radius: 5px;
-            border-left: 4px solid #48bb78;
-        }}
-        .empty {{
-            text-align: center;
-            color: #718096;
-            font-style: italic;
-            margin: 2rem 0;
-        }}
-        .version {{
-            text-align: center;
-            color: #718096;
-            font-size: 0.9rem;
-            margin-top: 2rem;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>🔗 BuboCore Relay Server</h1>
-        
-        <div class="status">
-            <strong>Status:</strong> Online<br>
-            <strong>Connected Instances:</strong> {}<br>
-            <strong>Version:</strong> {}
-        </div>
-        
-        <div class="instances">
-            <h2>Connected Instances</h2>
-            {}"#,
-                    instance_count,
-                    BUBOCORE_VERSION,
-                    if instance_count == 0 {
-                        "<div class=\"empty\">No instances currently connected</div>".to_string()
-                    } else {
-                        instances_list
-                            .iter()
-                            .map(|instance| {
-                                let connected_duration = instance.connected_at
-                                    .elapsed()
-                                    .unwrap_or_default();
-                                format!(
-                                    "<div class=\"instance\">
-                                        <strong>{}</strong><br>
-                                        <small>ID: {}</small><br>
-                                        <small>Connected: {}s ago</small>
-                                    </div>",
-                                    instance.name,
-                                    instance.id,
-                                    connected_duration.as_secs()
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .join("")
-                    }
-                );
-                
-                let html = format!("{}{}", html, 
-                    r#"
-        </div>
-        
-        <div class="version">
-            This is a BuboCore Relay Server for remote collaboration.
-        </div>
-    </div>
-</body>
-</html>"#);
-
-                Ok(Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "text/html")
-                    .body(Full::new(bytes::Bytes::from(html)))
-                    .unwrap())
-            }
-            (&Method::GET, "/status") => {
-                let instances_read = instances.read().await;
-                let status = serde_json::json!({
-                    "status": "online",
-                    "version": BUBOCORE_VERSION,
-                    "connected_instances": instances_read.len(),
-                    "instances": instances_read.values().map(|i| {
-                        serde_json::json!({
-                            "id": i.id,
-                            "name": i.name,
-                            "version": i.version,
-                            "connected_at": i.connected_at.duration_since(UNIX_EPOCH).unwrap_or_default().as_secs()
-                        })
-                    }).collect::<Vec<_>>()
-                });
-
-                Ok(Response::builder()
-                    .status(StatusCode::OK)
-                    .header("Content-Type", "application/json")
-                    .body(Full::new(bytes::Bytes::from(status.to_string())))
-                    .unwrap())
-            }
-            _ => {
-                Ok(Response::builder()
-                    .status(StatusCode::NOT_FOUND)
-                    .body(Full::new(bytes::Bytes::from("Not Found")))
-                    .unwrap())
-            }
-        }
-    }
 }
 
 /// Helper function to get current timestamp

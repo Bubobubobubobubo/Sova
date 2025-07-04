@@ -5,6 +5,7 @@ use tracing::{info, warn};
 
 mod relay;
 mod types;
+mod web;
 
 use relay::RelayServer;
 
