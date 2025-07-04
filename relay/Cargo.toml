@@ -25,6 +25,8 @@ hyper = { version = "1.0", features = ["full"] }
 hyper-util = { version = "0.1", features = ["tokio"] }
 http-body-util = "0.1"
 bytes = "1.0"
+tokio-util = { version = "0.7", features = ["io"] }
+mime_guess = "2.0"
 
 [dev-dependencies]
 tokio-test = "0.4"
