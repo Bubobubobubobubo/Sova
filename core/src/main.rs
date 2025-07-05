@@ -438,6 +438,7 @@ async fn main() {
         match client.connect().await {
             Ok(_) => {
                 println!("[+] Connected to relay server at {}", relay_addr);
+                println!("[+] Relay client instance ID: {:?}", client.instance_id());
                 Some(Arc::new(Mutex::new(client)))
             }
             Err(e) => {
@@ -468,11 +469,19 @@ async fn main() {
         let _updater_relay = updater.clone();
         
         tokio::spawn(async move {
+            println!("[RELAY] Starting relay message handler task");
             loop {
-                let relay_msg = {
+                let (relay_msg, is_connected) = {
                     let mut client = relay.lock().await;
-                    client.recv().await
+                    let msg = client.recv().await;
+                    let connected = client.is_connected();
+                    (msg, connected)
                 };
+                
+                if !is_connected {
+                    eprintln!("[RELAY] Connection lost, relay handler exiting");
+                    break;
+                }
                 
                 if let Some(relay_msg) = relay_msg {
                 use relay_client::RelayMessage;
@@ -530,6 +539,10 @@ async fn main() {
                         // Handle other relay messages if needed
                     }
                 }
+                } else {
+                    // recv() returned None, channel is closed
+                    eprintln!("[RELAY] Relay message channel closed, handler exiting");
+                    break;
                 }
             }
         });

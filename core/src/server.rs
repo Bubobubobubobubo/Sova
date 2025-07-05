@@ -274,8 +274,13 @@ async fn on_message(
     if let Some(relay_client) = &state.relay_client {
         if RelayClient::should_relay(&msg) {
             let client = relay_client.lock().await;
-            if let Err(e) = client.send_update(&msg).await {
-                eprintln!("[RELAY] Failed to forward message to relay: {}", e);
+            if client.is_connected() {
+                if let Err(e) = client.send_update(&msg).await {
+                    eprintln!("[RELAY] Failed to forward message {:?} to relay: {}", msg, e);
+                    eprintln!("[RELAY] Instance ID: {:?}, Connected: {}", client.instance_id(), client.is_connected());
+                }
+            } else {
+                println!("[RELAY] Skipping relay forward - not connected (message: {:?})", msg);
             }
         }
     }
