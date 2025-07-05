@@ -1,6 +1,15 @@
 use crate::types::{
     InstanceInfo, RateLimit, RateLimitConfig, RelayError, RelayMessage, BUBOCORE_VERSION,
 };
+
+/// Maximum allowed message size to prevent DoS attacks (10MB)
+const MAX_MESSAGE_SIZE: usize = 10 * 1024 * 1024;
+
+/// Connection timeout for reading messages (30 seconds)
+const READ_TIMEOUT_SECS: u64 = 30;
+
+/// Connection timeout for writing messages (10 seconds)  
+const WRITE_TIMEOUT_SECS: u64 = 10;
 use anyhow::Result;
 use std::{
     collections::HashMap,
@@ -183,8 +192,16 @@ impl RelayServer {
         rate_config: RateLimitConfig,
         broadcast_tx: mpsc::UnboundedSender<BroadcastMessage>,
     ) -> Result<()> {
-        // Read handshake message
-        let handshake = Self::read_message(&mut socket).await?;
+        // Set socket timeouts
+        let std_socket = socket.as_ref();
+        std_socket.set_read_timeout(Some(std::time::Duration::from_secs(READ_TIMEOUT_SECS)))?;
+        std_socket.set_write_timeout(Some(std::time::Duration::from_secs(WRITE_TIMEOUT_SECS)))?;
+        
+        // Read handshake message with timeout
+        let handshake = tokio::time::timeout(
+            Duration::from_secs(READ_TIMEOUT_SECS),
+            Self::read_message(&mut socket)
+        ).await??;
         
         let (instance_id, instance_info) = match handshake {
             RelayMessage::RegisterInstance {
@@ -365,10 +382,18 @@ impl RelayServer {
         broadcast_tx: mpsc::UnboundedSender<BroadcastMessage>,
     ) -> Result<()> {
         loop {
-            let message = match Self::read_message_from_reader(&mut reader).await {
-                Ok(msg) => msg,
-                Err(e) => {
+            // Read message with timeout to detect dead connections
+            let message = match tokio::time::timeout(
+                Duration::from_secs(READ_TIMEOUT_SECS),
+                Self::read_message_from_reader(&mut reader)
+            ).await {
+                Ok(Ok(msg)) => msg,
+                Ok(Err(e)) => {
                     debug!("Failed to read message from {}: {}", instance_name, e);
+                    break;
+                }
+                Err(_) => {
+                    debug!("Read timeout for instance {}, closing connection", instance_name);
                     break;
                 }
             };
@@ -450,7 +475,7 @@ impl RelayServer {
         };
 
         let conns = connections.read().await;
-        let failed_instances = Vec::new();
+        let mut send_tasks = Vec::new();
         
         for (&id, conn) in conns.iter() {
             // Don't send to the source instance
@@ -461,8 +486,8 @@ impl RelayServer {
             let writer = conn.writer.clone();
             let msg_clone = relay_msg.clone();
             
-            // Send asynchronously
-            tokio::spawn(async move {
+            // Send asynchronously and collect the task handle
+            let task = tokio::spawn(async move {
                 let mut writer_guard = writer.lock().await;
                 if let Err(e) = Self::send_message_to_writer(&mut *writer_guard, &msg_clone).await {
                     warn!("Failed to send message to instance {}: {}", id, e);
@@ -470,14 +495,25 @@ impl RelayServer {
                 }
                 None
             });
+            
+            send_tasks.push(task);
         }
         
         drop(conns);
+
+        // Collect failed instance IDs from completed tasks
+        let mut failed_instances = Vec::new();
+        for task in send_tasks {
+            if let Ok(Some(failed_id)) = task.await {
+                failed_instances.push(failed_id);
+            }
+        }
 
         // Clean up failed connections
         if !failed_instances.is_empty() {
             let mut conns = connections.write().await;
             for id in failed_instances {
+                debug!("Removing failed connection for instance {}", id);
                 conns.remove(&id);
             }
         }
@@ -518,6 +554,18 @@ impl RelayServer {
         socket.read_exact(&mut len_buf).await?;
         let message_len = u32::from_be_bytes(len_buf) as usize;
 
+        // Validate message size to prevent DoS attacks
+        if message_len == 0 {
+            return Err(anyhow::anyhow!("Received zero-length message"));
+        }
+        if message_len > MAX_MESSAGE_SIZE {
+            return Err(anyhow::anyhow!(
+                "Message too large: {} bytes (max: {} bytes)", 
+                message_len, 
+                MAX_MESSAGE_SIZE
+            ));
+        }
+
         // Read message data
         let mut message_buf = vec![0u8; message_len];
         socket.read_exact(&mut message_buf).await?;
@@ -532,6 +580,18 @@ impl RelayServer {
         let mut len_buf = [0u8; 4];
         reader.read_exact(&mut len_buf).await?;
         let message_len = u32::from_be_bytes(len_buf) as usize;
+
+        // Validate message size to prevent DoS attacks
+        if message_len == 0 {
+            return Err(anyhow::anyhow!("Received zero-length message"));
+        }
+        if message_len > MAX_MESSAGE_SIZE {
+            return Err(anyhow::anyhow!(
+                "Message too large: {} bytes (max: {} bytes)", 
+                message_len, 
+                MAX_MESSAGE_SIZE
+            ));
+        }
 
         // Read message data
         let mut message_buf = vec![0u8; message_len];

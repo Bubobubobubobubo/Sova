@@ -23,36 +23,70 @@ fn render_template(template: &str, data: &HashMap<&str, String>) -> String {
 
 /// Serve static files from the web directory
 async fn serve_static_file(path: &str) -> Result<Response<Full<Bytes>>, std::convert::Infallible> {
+    // Validate path to prevent directory traversal
+    if path.contains("..") || path.contains('\0') || path.contains('\\') {
+        warn!("Blocked potential path traversal attempt: {}", path);
+        return Ok(Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Full::new(Bytes::from("Forbidden")))
+            .expect("Failed to build forbidden response"));
+    }
+    
     // Try container path first, fall back to development path
     let web_root = if Path::new("/opt/bubocore-relay/web").exists() {
         Path::new("/opt/bubocore-relay/web").to_path_buf()
     } else {
         Path::new(env!("CARGO_MANIFEST_DIR")).join("web")
     };
+    
     let file_path = web_root.join(path.trim_start_matches('/'));
     
-    // Security check: ensure the path is within web directory
-    if !file_path.starts_with(&web_root) {
+    // Security check: canonicalize paths and ensure the file is within web directory
+    let canonical_web_root = match web_root.canonicalize() {
+        Ok(path) => path,
+        Err(e) => {
+            warn!("Failed to canonicalize web root: {}", e);
+            return Ok(Response::builder()
+                .status(StatusCode::INTERNAL_SERVER_ERROR)
+                .body(Full::new(Bytes::from("Internal server error")))
+                .expect("Failed to build error response"));
+        }
+    };
+    
+    let canonical_file_path = match file_path.canonicalize() {
+        Ok(path) => path,
+        Err(_) => {
+            // File doesn't exist or can't be canonicalized
+            return Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Full::new(Bytes::from("File not found")))
+                .expect("Failed to build not found response"));
+        }
+    };
+    
+    // Ensure the canonical file path is within the canonical web root
+    if !canonical_file_path.starts_with(&canonical_web_root) {
+        warn!("Blocked path traversal attempt: {} -> {}", path, canonical_file_path.display());
         return Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(Full::new(Bytes::from("Forbidden")))
-            .unwrap());
+            .expect("Failed to build forbidden response"));
     }
     
-    match fs::read(&file_path).await {
+    match fs::read(&canonical_file_path).await {
         Ok(contents) => {
-            let mime_type = from_path(&file_path).first_or_octet_stream();
+            let mime_type = from_path(&canonical_file_path).first_or_octet_stream();
             Ok(Response::builder()
                 .status(StatusCode::OK)
                 .header("Content-Type", mime_type.as_ref())
                 .body(Full::new(Bytes::from(contents)))
-                .unwrap())
+                .expect("Failed to build success response"))
         }
         Err(_) => {
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Full::new(Bytes::from("File not found")))
-                .unwrap())
+                .expect("Failed to build not found response"))
         }
     }
 }
@@ -127,14 +161,14 @@ pub async fn handle_http_request(
                         .status(StatusCode::OK)
                         .header("Content-Type", "text/html; charset=utf-8")
                         .body(Full::new(Bytes::from(html)))
-                        .unwrap())
+                        .expect("Failed to build HTML response"))
                 }
                 Err(e) => {
                     warn!("Failed to read template: {}", e);
                     Ok(Response::builder()
                         .status(StatusCode::INTERNAL_SERVER_ERROR)
                         .body(Full::new(Bytes::from("Template error")))
-                        .unwrap())
+                        .expect("Failed to build error response"))
                 }
             }
         }
@@ -159,7 +193,7 @@ pub async fn handle_http_request(
                 .status(StatusCode::OK)
                 .header("Content-Type", "application/json")
                 .body(Full::new(Bytes::from(status.to_string())))
-                .unwrap())
+                .expect("Failed to build JSON response"))
         }
         (&Method::GET, _) if path.starts_with("/css/") || path.starts_with("/js/") || path.starts_with("/assets/") => {
             serve_static_file(path).await
@@ -168,7 +202,7 @@ pub async fn handle_http_request(
             Ok(Response::builder()
                 .status(StatusCode::NOT_FOUND)
                 .body(Full::new(Bytes::from("404 Not Found")))
-                .unwrap())
+                .expect("Failed to build 404 response"))
         }
     }
 }

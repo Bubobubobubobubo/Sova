@@ -86,22 +86,21 @@ pub struct RelayClient {
     instance_id: Option<Uuid>,
     incoming_rx: mpsc::UnboundedReceiver<RelayMessage>,
     outgoing_tx: mpsc::UnboundedSender<RelayMessage>,
+    is_connected: bool,
 }
 
 impl RelayClient {
     /// Create a new relay client
     pub fn new(config: RelayConfig) -> Self {
-        let (incoming_tx, incoming_rx) = mpsc::unbounded_channel();
-        let (outgoing_tx, outgoing_rx) = mpsc::unbounded_channel();
-        
-        // These will be used by the connection handler
-        let _ = (incoming_tx, outgoing_rx);
+        let (outgoing_tx, _outgoing_rx) = mpsc::unbounded_channel();
+        let (_incoming_tx, incoming_rx) = mpsc::unbounded_channel();
         
         Self {
             config,
             instance_id: None,
             incoming_rx,
             outgoing_tx,
+            is_connected: false,
         }
     }
     
@@ -134,6 +133,11 @@ impl RelayClient {
                     println!("[RELAY] Connected successfully! Instance ID: {:?}", assigned_id);
                     println!("[RELAY] Other instances: {:?}", current_instances.iter().map(|i| &i.name).collect::<Vec<_>>());
                     
+                    // Verify we got an instance ID
+                    if assigned_id.is_none() {
+                        return Err(anyhow::anyhow!("Server did not assign instance ID"));
+                    }
+                    
                     // Start message handlers
                     let (incoming_tx, incoming_rx) = mpsc::unbounded_channel();
                     let (outgoing_tx, mut outgoing_rx) = mpsc::unbounded_channel();
@@ -141,6 +145,7 @@ impl RelayClient {
                     // Replace our channels
                     self.incoming_rx = incoming_rx;
                     self.outgoing_tx = outgoing_tx.clone();
+                    self.is_connected = true;
                     
                     // Split the socket into read and write halves
                     let (reader, writer) = socket.into_split();
@@ -164,15 +169,21 @@ impl RelayClient {
                         }
                     });
                     
-                    // Start writer task
+                    // Start writer task with error notification
                     let mut writer = writer;
+                    let outgoing_tx_clone = outgoing_tx.clone();
                     tokio::spawn(async move {
                         while let Some(msg) = outgoing_rx.recv().await {
                             if let Err(e) = Self::send_message(&mut writer, &msg).await {
                                 eprintln!("[RELAY] Write error: {}", e);
+                                // Try to notify about disconnection
+                                let _ = outgoing_tx_clone.send(RelayMessage::Error { 
+                                    message: "Connection lost".to_string() 
+                                });
                                 break;
                             }
                         }
+                        eprintln!("[RELAY] Writer task exited");
                     });
                     
                     Ok(())
@@ -191,24 +202,53 @@ impl RelayClient {
     
     /// Send a client message to the relay
     pub async fn send_update(&self, client_msg: &ClientMessage) -> Result<()> {
-        if let Some(instance_id) = self.instance_id {
-            // Serialize the client message
-            let update_data = rmp_serde::to_vec_named(client_msg)?;
-            
-            let relay_msg = RelayMessage::StateUpdate {
-                source_instance_id: instance_id,
-                timestamp: current_timestamp(),
-                update_data,
-            };
-            
-            self.outgoing_tx.send(relay_msg)?;
+        if !self.is_connected {
+            return Err(anyhow::anyhow!("Relay client not connected"));
         }
+        
+        let instance_id = self.instance_id
+            .ok_or_else(|| anyhow::anyhow!("No instance ID assigned"))?;
+            
+        // Serialize the client message
+        let update_data = rmp_serde::to_vec_named(client_msg)
+            .map_err(|e| anyhow::anyhow!("Failed to serialize message: {}", e))?;
+        
+        let relay_msg = RelayMessage::StateUpdate {
+            source_instance_id: instance_id,
+            timestamp: current_timestamp(),
+            update_data,
+        };
+        
+        self.outgoing_tx.send(relay_msg)
+            .map_err(|_| anyhow::anyhow!("Relay connection channel is closed"))?;
+            
         Ok(())
     }
     
     /// Receive incoming messages from relay
     pub async fn recv(&mut self) -> Option<RelayMessage> {
-        self.incoming_rx.recv().await
+        let msg = self.incoming_rx.recv().await;
+        
+        // Check for connection errors
+        if let Some(RelayMessage::Error { message }) = &msg {
+            if message == "Connection lost" {
+                self.is_connected = false;
+                self.instance_id = None;
+                eprintln!("[RELAY] Connection lost, marking as disconnected");
+            }
+        }
+        
+        msg
+    }
+    
+    /// Check if the relay client is connected
+    pub fn is_connected(&self) -> bool {
+        self.is_connected
+    }
+    
+    /// Get the instance ID if connected
+    pub fn instance_id(&self) -> Option<Uuid> {
+        self.instance_id
     }
     
     /// Check if a client message should be relayed
