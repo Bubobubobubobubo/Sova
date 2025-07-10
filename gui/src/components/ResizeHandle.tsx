@@ -19,13 +19,14 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
   const startPos = useRef(0);
   const startSize = useRef({ width: 0, height: 0 });
   const animationFrame = useRef<number | null>(null);
-  const [isHovering, setIsHovering] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
     if (!panelRef.current) return;
     
     e.preventDefault();
     isDragging.current = true;
+    setIsResizing(true);
     startPos.current = direction === 'horizontal' ? e.clientX : e.clientY;
     
     // Get current size from DOM
@@ -67,6 +68,7 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
       if (!panelRef.current) return;
       
       isDragging.current = false;
+      setIsResizing(false);
       if (animationFrame.current) {
         cancelAnimationFrame(animationFrame.current);
         animationFrame.current = null;
@@ -145,11 +147,8 @@ export const ResizeHandle: React.FC<ResizeHandleProps> = ({
     <div
       className={`${getHoverArea()} ${getCursorClass()} z-50 transition-colors ${className}`}
       onMouseDown={handleMouseDown}
-      onMouseEnter={() => setIsHovering(true)}
-      onMouseLeave={() => setIsHovering(false)}
       style={{
-        backgroundColor: isDragging.current ? 'rgba(59, 130, 246, 0.4)' : 
-                        isHovering ? 'rgba(59, 130, 246, 0.2)' : 'transparent',
+        backgroundColor: 'transparent',
         userSelect: 'none',
         ...getHoverAreaStyle()
       }}
