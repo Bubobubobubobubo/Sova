@@ -8,6 +8,8 @@ interface TopBarProps {
   onDisconnect: () => void;
   onToggleOptions: () => void;
   client: any;
+  optionsPanelPosition?: 'left' | 'right' | 'bottom';
+  onChangeOptionsPanelPosition?: (position: 'left' | 'right' | 'bottom') => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ 
