@@ -1,16 +1,18 @@
 import React, { useState } from 'react';
-import { X, Palette, Settings as SettingsIcon, Info } from 'lucide-react';
+import { X, Palette, Settings as SettingsIcon, Info, ArrowLeft, ArrowRight, ArrowDown } from 'lucide-react';
 import { useStore } from '@nanostores/react';
 import { MaterialColorPalette } from './MaterialColorPalette';
 import { editorSettingsStore, setFontSize, setTabSize, toggleVimMode } from '../stores/editorSettingsStore';
 
 interface OptionsPanelProps {
   onClose: () => void;
+  position?: 'left' | 'right' | 'bottom';
+  onPositionChange?: (position: 'left' | 'right' | 'bottom') => void;
 }
 
 type TabType = 'colors' | 'settings' | 'about';
 
-export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
+export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 'right', onPositionChange }) => {
   const [activeTab, setActiveTab] = useState<TabType>('colors');
   const editorSettings = useStore(editorSettingsStore);
 
@@ -36,7 +38,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
                   Font Size
                 </label>
                 <select 
-                  className="w-full p-2 border rounded-md"
+                  className="w-full p-2 border"
                   style={{ 
                     borderColor: 'var(--color-border)', 
                     backgroundColor: 'var(--color-surface)', 
@@ -57,7 +59,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
                   Tab Size
                 </label>
                 <select 
-                  className="w-full p-2 border rounded-md"
+                  className="w-full p-2 border"
                   style={{ 
                     borderColor: 'var(--color-border)', 
                     backgroundColor: 'var(--color-surface)', 
@@ -77,7 +79,6 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
                     type="checkbox" 
                     checked={editorSettings.vimMode}
                     onChange={toggleVimMode}
-                    className="rounded"
                     style={{ 
                       accentColor: 'var(--color-primary)'
                     }}
@@ -113,10 +114,23 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
     }
   };
 
+  const getBorderClass = () => {
+    switch (position) {
+      case 'left': return 'border-r';
+      case 'right': return 'border-l';
+      case 'bottom': return 'border-t';
+      default: return 'border-l';
+    }
+  };
+
   return (
     <div 
-      className="w-80 h-full border-l flex flex-col"
-      style={{ backgroundColor: 'var(--color-surface)', borderColor: 'var(--color-border)' }}
+      className={`w-full h-full ${getBorderClass()} flex ${position === 'bottom' ? 'flex-col' : 'flex-col'} overflow-hidden`}
+      style={{ 
+        backgroundColor: 'var(--color-surface)', 
+        borderColor: 'var(--color-border)',
+        boxShadow: '0 4px 24px rgba(0, 0, 0, 0.15), 0 2px 8px rgba(0, 0, 0, 0.1)'
+      }}
     >
       {/* Header */}
       <div 
@@ -126,13 +140,59 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose }) => {
         <h2 className="font-semibold" style={{ color: 'var(--color-text)' }}>
           Options
         </h2>
-        <button
-          onClick={onClose}
-          className="p-1 rounded-md hover:opacity-80 transition-opacity"
-          style={{ color: 'var(--color-muted)' }}
-        >
-          <X size={16} />
-        </button>
+        <div className="flex items-center space-x-2">
+          {/* Position toggle buttons */}
+          {onPositionChange && (
+            <div className="flex space-x-1">
+              <button
+                onClick={() => onPositionChange('left')}
+                className={`p-1.5 rounded transition-all ${
+                  position === 'left' ? 'opacity-100' : 'opacity-50 hover:opacity-75'
+                }`}
+                style={{ 
+                  backgroundColor: position === 'left' ? 'var(--color-primary)' : 'transparent',
+                  color: position === 'left' ? 'var(--color-background)' : 'var(--color-muted)'
+                }}
+                title="Position on left"
+              >
+                <ArrowLeft size={14} />
+              </button>
+              <button
+                onClick={() => onPositionChange('bottom')}
+                className={`p-1.5 rounded transition-all ${
+                  position === 'bottom' ? 'opacity-100' : 'opacity-50 hover:opacity-75'
+                }`}
+                style={{ 
+                  backgroundColor: position === 'bottom' ? 'var(--color-primary)' : 'transparent',
+                  color: position === 'bottom' ? 'var(--color-background)' : 'var(--color-muted)'
+                }}
+                title="Position at bottom"
+              >
+                <ArrowDown size={14} />
+              </button>
+              <button
+                onClick={() => onPositionChange('right')}
+                className={`p-1.5 rounded transition-all ${
+                  position === 'right' ? 'opacity-100' : 'opacity-50 hover:opacity-75'
+                }`}
+                style={{ 
+                  backgroundColor: position === 'right' ? 'var(--color-primary)' : 'transparent',
+                  color: position === 'right' ? 'var(--color-background)' : 'var(--color-muted)'
+                }}
+                title="Position on right"
+              >
+                <ArrowRight size={14} />
+              </button>
+            </div>
+          )}
+          <button
+            onClick={onClose}
+            className="p-1 hover:opacity-80 transition-opacity ml-2"
+            style={{ color: 'var(--color-muted)' }}
+          >
+            <X size={16} />
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}
