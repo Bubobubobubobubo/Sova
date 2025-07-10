@@ -1,4 +1,4 @@
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useEffect } from 'react';
 import { useMaterialPalette, MaterialPalette, ThemeMode } from '../hooks/useMaterialPalette';
 
 interface ColorContextType {
@@ -34,6 +34,16 @@ interface ColorProviderProps {
 
 export const ColorProvider: React.FC<ColorProviderProps> = ({ children }) => {
   const materialPalette = useMaterialPalette();
+  
+  // Initialize CSS variables immediately when the provider mounts
+  useEffect(() => {
+    materialPalette.updateCSS();
+  }, [materialPalette.updateCSS]);
+  
+  // Update CSS variables whenever palette changes
+  useEffect(() => {
+    materialPalette.updateCSS();
+  }, [materialPalette.palette, materialPalette.updateCSS]);
   
   return (
     <ColorContext.Provider value={materialPalette}>

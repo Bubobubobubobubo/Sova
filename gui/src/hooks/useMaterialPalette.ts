@@ -1,4 +1,14 @@
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useStore } from '@nanostores/react';
+import { 
+  $colorPaletteSettings, 
+  updateHueRotation, 
+  updateThemeMode, 
+  updateSaturation, 
+  updateBrightness, 
+  regenerateBaseColors, 
+  toggleTheme 
+} from '../stores/colorPaletteStore';
 
 export interface MaterialPalette {
   // Primary shades
@@ -44,18 +54,8 @@ export interface MaterialPalette {
 export type ThemeMode = 'light' | 'dark';
 
 export function useMaterialPalette() {
-  const [hueRotation, setHueRotation] = useState(0);
-  const [themeMode, setThemeMode] = useState<ThemeMode>('light');
-  const [saturation, setSaturation] = useState(75); // 0-100, controls color intensity
-  const [brightness, setBrightness] = useState(50); // 0-100, controls lightness shift
-  
-  // Generate two random base colors on mount
-  const [basePrimary, setBasePrimary] = useState(() => Math.floor(Math.random() * 360));
-  const [baseSecondary, setBaseSecondary] = useState(() => {
-    // Ensure secondary is different from primary (120-240 degrees apart)
-    const offset = 120 + Math.floor(Math.random() * 120);
-    return (basePrimary + offset) % 360;
-  });
+  const settings = useStore($colorPaletteSettings);
+  const { hueRotation, themeMode, saturation, brightness, basePrimary, baseSecondary } = settings;
 
   const hslToHex = useCallback((h: number, s: number, l: number): string => {
     h = h / 360;
@@ -193,36 +193,19 @@ export function useMaterialPalette() {
     root.style.setProperty('--color-info', palette.info);
   }, [palette]);
 
-  const regenerateColors = useCallback(() => {
-    // Generate new random colors without reloading
-    const newPrimary = Math.floor(Math.random() * 360);
-    const offset = 120 + Math.floor(Math.random() * 120);
-    const newSecondary = (newPrimary + offset) % 360;
-    
-    setBasePrimary(newPrimary);
-    setBaseSecondary(newSecondary);
-    setHueRotation(0); // Reset hue rotation
-    setSaturation(75); // Reset to balanced saturation
-    setBrightness(50); // Reset to medium brightness
-  }, []);
-
-  const toggleTheme = useCallback(() => {
-    setThemeMode(prev => prev === 'light' ? 'dark' : 'light');
-  }, []);
-
   return {
     hueRotation,
     themeMode,
     saturation,
     brightness,
     palette,
-    setHueRotation,
-    setThemeMode,
-    setSaturation,
-    setBrightness,
+    setHueRotation: updateHueRotation,
+    setThemeMode: updateThemeMode,
+    setSaturation: updateSaturation,
+    setBrightness: updateBrightness,
     toggleTheme,
     updateCSS,
-    regenerateColors,
+    regenerateColors: regenerateBaseColors,
     basePrimary,
     baseSecondary,
   };
