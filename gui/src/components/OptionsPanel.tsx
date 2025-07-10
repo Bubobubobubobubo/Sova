@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
-import { X, Palette, Settings as SettingsIcon, Info, ArrowLeft, ArrowRight, ArrowDown } from 'lucide-react';
+import { X, Palette, Settings as SettingsIcon, Monitor, ArrowLeft, ArrowRight, ArrowDown } from 'lucide-react';
 import { useStore } from '@nanostores/react';
 import { MaterialColorPalette } from './MaterialColorPalette';
+import { DevicesPanel } from './DevicesPanel';
 import { editorSettingsStore, setFontSize, setTabSize, toggleVimMode } from '../stores/editorSettingsStore';
 
 interface OptionsPanelProps {
@@ -10,7 +11,7 @@ interface OptionsPanelProps {
   onPositionChange?: (position: 'left' | 'right' | 'bottom') => void;
 }
 
-type TabType = 'colors' | 'settings' | 'about';
+type TabType = 'colors' | 'settings' | 'devices';
 
 export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 'right', onPositionChange }) => {
   const [activeTab, setActiveTab] = useState<TabType>('colors');
@@ -19,7 +20,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
   const tabs = [
     { id: 'colors' as const, label: 'Colors', icon: Palette },
     { id: 'settings' as const, label: 'Settings', icon: SettingsIcon },
-    { id: 'about' as const, label: 'About', icon: Info },
+    { id: 'devices' as const, label: 'Devices', icon: Monitor },
   ];
 
   const renderTabContent = () => {
@@ -91,24 +92,8 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
             </div>
           </div>
         );
-      case 'about':
-        return (
-          <div className="p-4">
-            <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
-              About BuboCore
-            </h3>
-            <div className="space-y-3 text-sm" style={{ color: 'var(--color-muted)' }}>
-              <p>BuboCore GUI is a modern code editor interface built with React and Tauri.</p>
-              <p>Features:</p>
-              <ul className="list-disc pl-5 space-y-1">
-                <li>CodeMirror 6 editor with syntax highlighting</li>
-                <li>Material Design color palette system</li>
-                <li>Real-time collaboration features</li>
-                <li>Cross-platform desktop application</li>
-              </ul>
-            </div>
-          </div>
-        );
+      case 'devices':
+        return <DevicesPanel />;
       default:
         return null;
     }
