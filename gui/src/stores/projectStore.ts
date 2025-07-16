@@ -1,5 +1,6 @@
 import { atom } from 'nanostores';
 import { ProjectInfo } from '../api/projects';
+import { updateStore } from '../utils/store-helpers';
 
 export interface ProjectState {
   projects: ProjectInfo[];
@@ -33,70 +34,64 @@ export const projectStore = atom<ProjectState>(initialState);
 
 // Actions
 export const setProjects = (projects: ProjectInfo[]) => {
-  projectStore.set({ ...projectStore.get(), projects });
+  updateStore(projectStore, { projects });
 };
 
 export const setSelectedIndex = (index: number) => {
   const state = projectStore.get();
   const maxIndex = Math.max(0, state.projects.length - 1);
-  projectStore.set({ ...state, selectedIndex: Math.min(index, maxIndex) });
+  updateStore(projectStore, { selectedIndex: Math.min(index, maxIndex) });
 };
 
 export const setSearchQuery = (query: string) => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     searchQuery: query,
     selectedIndex: 0 // Reset selection when searching
   });
 };
 
 export const setSearching = (isSearching: boolean) => {
-  projectStore.set({ ...projectStore.get(), isSearching });
+  updateStore(projectStore, { isSearching });
 };
 
 export const setSaving = (isSaving: boolean) => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     isSaving,
     saveProjectName: isSaving ? projectStore.get().saveProjectName : ''
   });
 };
 
 export const setSaveProjectName = (name: string) => {
-  projectStore.set({ ...projectStore.get(), saveProjectName: name });
+  updateStore(projectStore, { saveProjectName: name });
 };
 
 export const setStatusMessage = (message: string) => {
-  projectStore.set({ ...projectStore.get(), statusMessage: message });
+  updateStore(projectStore, { statusMessage: message });
 };
 
 export const showDeleteConfirmation = (projectName: string) => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     showDeleteConfirmation: true,
     projectToDelete: projectName
   });
 };
 
 export const hideDeleteConfirmation = () => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     showDeleteConfirmation: false,
     projectToDelete: undefined
   });
 };
 
 export const showSaveOverwriteConfirmation = (projectName: string) => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     showSaveOverwriteConfirmation: true,
     projectToOverwrite: projectName
   });
 };
 
 export const hideSaveOverwriteConfirmation = () => {
-  projectStore.set({ 
-    ...projectStore.get(), 
+  updateStore(projectStore, { 
     showSaveOverwriteConfirmation: false,
     projectToOverwrite: undefined
   });

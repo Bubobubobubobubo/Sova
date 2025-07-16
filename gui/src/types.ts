@@ -8,13 +8,9 @@ export type ActionTiming =
   | "EndOfScene"
   | { AtBeat: number };
 
-export interface PastedFrameData {
-  length: number;
-  is_enabled: boolean;
-  script_content: string | undefined;
-  name: string | undefined;
-  repetitions: number | undefined;
-}
+// Re-export frame types for convenience
+export type { Frame, FramePosition, DraggedFrame, PastedFrameData } from './types/frame';
+import type { PastedFrameData } from './types/frame';
 
 export interface Script {
   content: string;

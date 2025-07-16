@@ -18,6 +18,7 @@ interface DropdownProps {
   icon?: React.ReactNode;
   title?: string;
   dropDirection?: 'auto' | 'up' | 'down';
+  width?: string | 'full' | 'auto';
 }
 
 export const Dropdown: React.FC<DropdownProps> = ({
@@ -31,6 +32,7 @@ export const Dropdown: React.FC<DropdownProps> = ({
   icon,
   title,
   dropDirection = 'auto',
+  width = 'full',
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [shouldDropUp, setShouldDropUp] = useState(false);
@@ -171,10 +173,21 @@ export const Dropdown: React.FC<DropdownProps> = ({
     boxShadow: `0 4px 6px -1px ${palette.border}40, 0 2px 4px -1px ${palette.border}20`,
   };
 
+  const getWidthStyle = () => {
+    if (width === 'full') {
+      return { width: '100%' };
+    } else if (width === 'auto') {
+      return { width: 'auto' };
+    } else {
+      return { width };
+    }
+  };
+
   return (
     <div
       ref={dropdownRef}
       className={`relative inline-block ${className}`}
+      style={getWidthStyle()}
       title={title}
     >
       <button

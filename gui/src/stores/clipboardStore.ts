@@ -1,12 +1,8 @@
 import { map } from 'nanostores';
+import type { Frame } from '../types/frame';
+import { batchUpdateMap } from '../utils/store-helpers';
 
-export interface ClipboardFrame {
-  duration: number;
-  enabled: boolean;
-  name: string | null;
-  script: string | null;
-  repetitions: number;
-}
+export type ClipboardFrame = Frame;
 
 export interface ClipboardState {
   hasContent: boolean;
@@ -28,17 +24,21 @@ export const copyFrame = (
   frameIndex: number,
   frameData: ClipboardFrame
 ) => {
-  clipboardStore.setKey('hasContent', true);
-  clipboardStore.setKey('frameData', frameData);
-  clipboardStore.setKey('sourceLineIndex', lineIndex);
-  clipboardStore.setKey('sourceFrameIndex', frameIndex);
+  batchUpdateMap(clipboardStore, {
+    hasContent: true,
+    frameData,
+    sourceLineIndex: lineIndex,
+    sourceFrameIndex: frameIndex,
+  });
 };
 
 export const clearClipboard = () => {
-  clipboardStore.setKey('hasContent', false);
-  clipboardStore.setKey('frameData', null);
-  clipboardStore.setKey('sourceLineIndex', null);
-  clipboardStore.setKey('sourceFrameIndex', null);
+  batchUpdateMap(clipboardStore, {
+    hasContent: false,
+    frameData: null,
+    sourceLineIndex: null,
+    sourceFrameIndex: null,
+  });
 };
 
 export const getClipboardData = () => clipboardStore.get();

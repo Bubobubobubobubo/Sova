@@ -1,15 +1,11 @@
 import { map } from 'nanostores';
+import type { Frame } from '../types/frame';
+import { batchUpdateMap } from '../utils/store-helpers';
 
 export interface DraggedFrame {
   lineIndex: number;
   frameIndex: number;
-  frameData: {
-    duration: number;
-    enabled: boolean;
-    name: string | null;
-    script: string | null;
-    repetitions: number;
-  };
+  frameData: Frame;
 }
 
 export interface DropTarget {
@@ -49,13 +45,15 @@ export const startDrag = (
   frameData: DraggedFrame['frameData'],
   startPosition: { x: number; y: number }
 ) => {
-  dragStore.setKey('isDragging', true);
-  dragStore.setKey('draggedFrame', {
-    lineIndex,
-    frameIndex,
-    frameData,
+  batchUpdateMap(dragStore, {
+    isDragging: true,
+    draggedFrame: {
+      lineIndex,
+      frameIndex,
+      frameData,
+    },
+    dragStartPosition: startPosition,
   });
-  dragStore.setKey('dragStartPosition', startPosition);
 };
 
 export const updateDragPreview = (preview: DragPreview) => {
@@ -67,11 +65,13 @@ export const setDropTarget = (target: DropTarget | null) => {
 };
 
 export const endDrag = () => {
-  dragStore.setKey('isDragging', false);
-  dragStore.setKey('draggedFrame', null);
-  dragStore.setKey('dropTarget', null);
-  dragStore.setKey('dragPreview', null);
-  dragStore.setKey('dragStartPosition', null);
+  batchUpdateMap(dragStore, {
+    isDragging: false,
+    draggedFrame: null,
+    dropTarget: null,
+    dragPreview: null,
+    dragStartPosition: null,
+  });
 };
 
 export const getDragThreshold = () => dragStore.get().dragThreshold;

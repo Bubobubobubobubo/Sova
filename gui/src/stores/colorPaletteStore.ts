@@ -1,5 +1,6 @@
 import { persistentAtom } from '@nanostores/persistent';
 import type { ThemeMode } from '../hooks/useMaterialPalette';
+import { updateStore } from '../utils/store-helpers';
 
 export interface ColorPaletteSettings {
   hueRotation: number;
@@ -33,31 +34,19 @@ export const $colorPaletteSettings = persistentAtom<ColorPaletteSettings>(
 );
 
 export const updateHueRotation = (value: number) => {
-  $colorPaletteSettings.set({
-    ...$colorPaletteSettings.get(),
-    hueRotation: value,
-  });
+  updateStore($colorPaletteSettings, { hueRotation: value });
 };
 
 export const updateThemeMode = (mode: ThemeMode) => {
-  $colorPaletteSettings.set({
-    ...$colorPaletteSettings.get(),
-    themeMode: mode,
-  });
+  updateStore($colorPaletteSettings, { themeMode: mode });
 };
 
 export const updateSaturation = (value: number) => {
-  $colorPaletteSettings.set({
-    ...$colorPaletteSettings.get(),
-    saturation: value,
-  });
+  updateStore($colorPaletteSettings, { saturation: value });
 };
 
 export const updateBrightness = (value: number) => {
-  $colorPaletteSettings.set({
-    ...$colorPaletteSettings.get(),
-    brightness: value,
-  });
+  updateStore($colorPaletteSettings, { brightness: value });
 };
 
 export const regenerateBaseColors = () => {
@@ -65,8 +54,7 @@ export const regenerateBaseColors = () => {
   const offset = 120 + Math.floor(Math.random() * 120);
   const newSecondary = (newPrimary + offset) % 360;
   
-  $colorPaletteSettings.set({
-    ...$colorPaletteSettings.get(),
+  updateStore($colorPaletteSettings, {
     basePrimary: newPrimary,
     baseSecondary: newSecondary,
     hueRotation: 0,

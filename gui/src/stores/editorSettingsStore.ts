@@ -1,4 +1,5 @@
 import { persistentAtom } from '@nanostores/persistent';
+import { updateStore } from '../utils/store-helpers';
 
 export interface EditorSettings {
   fontSize: number;
@@ -18,22 +19,22 @@ export const editorSettingsStore = persistentAtom<EditorSettings>('editorSetting
 });
 
 export const setFontSize = (fontSize: number) => {
-  editorSettingsStore.set({ ...editorSettingsStore.get(), fontSize });
+  updateStore(editorSettingsStore, { fontSize });
 };
 
 export const setTabSize = (tabSize: number) => {
-  editorSettingsStore.set({ ...editorSettingsStore.get(), tabSize });
+  updateStore(editorSettingsStore, { tabSize });
 };
 
 export const setVimMode = (vimMode: boolean) => {
-  editorSettingsStore.set({ ...editorSettingsStore.get(), vimMode });
+  updateStore(editorSettingsStore, { vimMode });
 };
 
 export const toggleVimMode = () => {
   const currentSettings = editorSettingsStore.get();
-  editorSettingsStore.set({ ...currentSettings, vimMode: !currentSettings.vimMode });
+  updateStore(editorSettingsStore, { vimMode: !currentSettings.vimMode });
 };
 
 export const setFontFamily = (fontFamily: string) => {
-  editorSettingsStore.set({ ...editorSettingsStore.get(), fontFamily });
+  updateStore(editorSettingsStore, { fontFamily });
 };

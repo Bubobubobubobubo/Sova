@@ -1,5 +1,6 @@
 // import { atom } from 'nanostores';
 import { persistentAtom } from '@nanostores/persistent';
+import { updateStore } from '../utils/store-helpers';
 
 export interface OptionsPanelState {
   width: number;
@@ -23,23 +24,13 @@ export const optionsPanelStore = persistentAtom<OptionsPanelState>(
 );
 
 export const setOptionsPanelSize = (width: number, height: number) => {
-  optionsPanelStore.set({
-    ...optionsPanelStore.get(),
-    width,
-    height
-  });
+  updateStore(optionsPanelStore, { width, height });
 };
 
 export const setOptionsPanelPosition = (position: 'left' | 'right' | 'bottom') => {
-  optionsPanelStore.set({
-    ...optionsPanelStore.get(),
-    position
-  });
+  updateStore(optionsPanelStore, { position });
 };
 
 export const setOptionsPanelActiveTab = (activeTab: 'colors' | 'settings' | 'devices' | 'files') => {
-  optionsPanelStore.set({
-    ...optionsPanelStore.get(),
-    activeTab
-  });
+  updateStore(optionsPanelStore, { activeTab });
 };
