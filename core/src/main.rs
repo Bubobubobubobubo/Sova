@@ -8,7 +8,7 @@ use bubo_engine::{
     memory::{MemoryPool, SampleLibrary, VoiceMemory},
     registry::ModuleRegistry,
     server::ScheduledEngineMessage,
-    types::EngineMessage,
+    types::{EngineMessage, EngineLogMessage},
 };
 use clap::Parser;
 use crossbeam_channel::bounded;
@@ -63,6 +63,7 @@ fn initialize_sova_engine(
     crossbeam_channel::Sender<ScheduledEngineMessage>,
     thread::JoinHandle<()>,
     ModuleRegistry,
+    crossbeam_channel::Receiver<EngineLogMessage>,
 ) {
     println!("[+] Initializing Sova audio engine...");
 
@@ -98,7 +99,7 @@ fn initialize_sova_engine(
 
     // Clone registry for world usage
     let registry_for_world = registry.clone();
-    let engine = AudioEngine::new_with_memory(
+    let mut engine = AudioEngine::new_with_memory(
         cli.sample_rate as f32,
         cli.buffer_size,
         cli.max_voices,
@@ -108,6 +109,10 @@ fn initialize_sova_engine(
         voice_memory.clone(),
         sample_library.clone(),
     );
+
+    // Create log channel for engine-to-client communication
+    let (log_tx, log_rx) = crossbeam_channel::unbounded::<EngineLogMessage>();
+    engine.set_log_sender(log_tx);
 
     // Create message channels for engine communication
     let (engine_tx, engine_rx) = bounded(1024);
@@ -137,6 +142,7 @@ fn initialize_sova_engine(
     let _osc_thread = thread::Builder::new()
         .name("osc_server".to_string())
         .spawn(move || {
+            let logger = bubo_engine::types::LoggerHandle::new_console();
             let mut osc_server = match bubo_engine::server::OscServer::new(
                 &osc_host,
                 osc_port,
@@ -144,6 +150,7 @@ fn initialize_sova_engine(
                 voice_memory_clone,
                 sample_library_clone,
                 osc_shutdown_clone,
+                logger,
             ) {
                 Ok(server) => server,
                 Err(e) => {
@@ -156,7 +163,7 @@ fn initialize_sova_engine(
         .expect("Failed to spawn OSC thread");
 
     println!("   Audio engine ready ✓");
-    (engine_tx, audio_thread, registry_for_world)
+    (engine_tx, audio_thread, registry_for_world, log_rx)
 }
 
 // Define the CLI arguments struct
@@ -253,7 +260,8 @@ async fn main() {
 
     // Handle --list-devices flag before initialization
     if cli.list_devices {
-        bubo_engine::list_audio_devices();
+        let logger = bubo_engine::types::LoggerHandle::new_console();
+        bubo_engine::list_audio_devices(&logger);
         return;
     }
 
@@ -313,24 +321,25 @@ async fn main() {
     registry.register_default_modules();
 
     // Conditionally initialize audio engine (Sova)
-    let (audio_engine_components, registry_for_world, osc_shutdown_flag) = if cli.audio_engine {
+    let (audio_engine_components, registry_for_world, osc_shutdown_flag, engine_log_rx) = if cli.audio_engine {
         let osc_shutdown = Arc::new(AtomicBool::new(false));
-        let (tx, thread_handle, registry_clone) =
+        let (tx, thread_handle, registry_clone, log_rx) =
             initialize_sova_engine(&cli, registry, osc_shutdown.clone());
         (
             Some((tx, thread_handle)),
             registry_clone,
             Some(osc_shutdown),
+            Some(log_rx),
         )
     } else {
-        (None, registry, None)
+        (None, registry, None, None)
     };
 
     // ======================================================================
     // Initialize the world (side effect performer)
     let audio_engine_tx = audio_engine_components.as_ref().map(|(tx, _)| tx.clone());
     let (world_handle, world_iface) =
-        World::create(clock_server.clone(), audio_engine_tx, registry_for_world);
+        World::create(clock_server.clone(), audio_engine_tx, registry_for_world, engine_log_rx);
 
     // ======================================================================
     // Extract status receiver and start monitoring thread if audio engine is enabled
