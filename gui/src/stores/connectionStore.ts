@@ -1,4 +1,5 @@
 import { persistentMap } from '@nanostores/persistent';
+import { batchUpdateMap } from '../utils/store-helpers';
 
 export interface ConnectionSettings {
   username: string;
@@ -16,9 +17,7 @@ export const connectionStore = persistentMap<ConnectionSettings>('connection:', 
 
 // Helper functions
 export const updateConnectionSettings = (settings: Partial<ConnectionSettings>) => {
-  connectionStore.setKey('username', settings.username ?? connectionStore.get().username);
-  connectionStore.setKey('ip', settings.ip ?? connectionStore.get().ip);
-  connectionStore.setKey('port', settings.port ?? connectionStore.get().port);
+  batchUpdateMap(connectionStore, settings);
 };
 
 export const getConnectionSettings = (): ConnectionSettings => {

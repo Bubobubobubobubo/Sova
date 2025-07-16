@@ -55,6 +55,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
                   onChange={(value) => setFontSize(Number(value))}
                   icon={<Type size={16} />}
                   title="Select font size"
+                  width="full"
                 />
               </div>
               <div>
@@ -79,6 +80,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
                   onChange={(value) => setFontFamily(value)}
                   icon={<FileType size={16} />}
                   title="Select font family"
+                  width="full"
                 />
               </div>
               <div>
@@ -95,6 +97,7 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
                   onChange={(value) => setTabSize(Number(value))}
                   icon={<AlignLeft size={16} />}
                   title="Select tab size"
+                  width="full"
                 />
               </div>
               <div>

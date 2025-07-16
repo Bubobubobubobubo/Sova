@@ -51,6 +51,12 @@ export const GridCell: React.FC<GridCellProps> = ({
   const frameName = line.frame_names[frameIndex];
   const repetitions = line.frame_repetitions[frameIndex] || 1;
   
+  // Get the language for this frame
+  const frameLanguage = (() => {
+    const script = line.scripts.find(s => s.index === frameIndex);
+    return script?.lang || 'bali'; // Default to 'bali' if no script found
+  })();
+  
   const [isResizing, setIsResizing] = useState(false);
   const [, setResizeStartY] = useState(0);
   const [, setResizeStartValue] = useState(0);
@@ -402,11 +408,24 @@ export const GridCell: React.FC<GridCellProps> = ({
       onDoubleClick={onDoubleClick}
       title={`${frameName || 'Frame'} - Duration: ${frameValue?.toFixed(2) ?? '0.00'}s${repetitions > 1 ? ` × ${repetitions}` : ''}\nShift+Click to drag\nCtrl+C to copy, Ctrl+V to paste`}
     >
-      {/* Top row - play marker and delete button */}
+      {/* Top row - language, play marker and delete button */}
       <div className="flex justify-between items-start h-4">
-        <span className="text-xs opacity-60">
-          {isPlaying ? '▶' : ' '}
-        </span>
+        <div className="flex items-center space-x-1">
+          <span 
+            className="text-xs opacity-70 font-mono"
+            style={{ 
+              fontSize: '10px', 
+              color: palette.text,
+              lineHeight: '1'
+            }}
+            title={`Script language: ${frameLanguage}`}
+          >
+            {frameLanguage}
+          </span>
+          <span className="text-xs opacity-60">
+            {isPlaying ? '▶' : ''}
+          </span>
+        </div>
         {onDelete && (
           <button
             className="opacity-0 group-hover:opacity-100 transition-opacity w-4 h-4 flex items-center justify-center hover:bg-red-500 hover:text-white"
