@@ -13,12 +13,13 @@ use crate::{
     protocol::{
         message::TimedMessage,
         payload::{AudioEnginePayload, ProtocolPayload},
+        log::{LogMessage, Severity},
     },
 };
 use bubo_engine::{
     registry::ModuleRegistry,
     server::ScheduledEngineMessage,
-    types::{EngineMessage, ScheduledMessage},
+    types::{EngineMessage, ScheduledMessage, EngineLogMessage},
 };
 use std::collections::HashMap;
 
@@ -63,6 +64,7 @@ impl World {
         clock_server: Arc<ClockServer>,
         audio_engine_tx: Option<Sender<ScheduledEngineMessage>>,
         registry: ModuleRegistry,
+        engine_log_rx: Option<Receiver<EngineLogMessage>>,
     ) -> (JoinHandle<()>, Sender<TimedMessage>) {
         let (tx, rx) = crossbeam_channel::unbounded();
         let handle = ThreadBuilder::default()
@@ -83,13 +85,13 @@ impl World {
                     midi_early_threshold: 2_000,              // 2ms for MIDI interface compensation
                     non_midi_lookahead: 20_000,               // 20ms lookahead for OSC/AudioEngine
                 };
-                world.live();
+                world.live(engine_log_rx);
             })
             .expect("Unable to start World");
         (handle, tx)
     }
 
-    pub fn live(&mut self) {
+    pub fn live(&mut self, engine_log_rx: Option<Receiver<EngineLogMessage>>) {
         let start_date = self.get_clock_micros();
         // Initialize timebase calibration
         self.calibrate_timebase();
@@ -98,6 +100,13 @@ impl World {
             // Check for shutdown request
             if self.shutdown_requested {
                 break;
+            }
+
+            // Process engine logs without blocking
+            if let Some(ref log_rx) = engine_log_rx {
+                while let Ok(engine_log) = log_rx.try_recv() {
+                    self.handle_engine_log(engine_log);
+                }
             }
 
             let remaining = self.next_timeout.saturating_sub(Duration::from_micros(50)); // Reduced for better precision
@@ -147,6 +156,26 @@ impl World {
 
     pub fn add_message(&mut self, msg: TimedMessage) {
         self.queue.push(msg);
+    }
+
+    fn handle_engine_log(&mut self, engine_log: EngineLogMessage) {
+        let log_msg = match engine_log {
+            EngineLogMessage::Info(msg) => LogMessage::info(msg),
+            EngineLogMessage::Warning(msg) => LogMessage::warn(msg),
+            EngineLogMessage::Error(msg) => LogMessage::error(msg),
+            EngineLogMessage::Debug(msg) => LogMessage::debug(msg),
+        };
+        
+        // Send the log message to slot 0 (log device) immediately
+        let timed_message = TimedMessage {
+            message: crate::protocol::message::ProtocolMessage {
+                device: std::sync::Arc::new(crate::protocol::device::ProtocolDevice::Log),
+                payload: crate::protocol::payload::ProtocolPayload::LOG(log_msg),
+            },
+            time: self.get_clock_micros(),
+        };
+        
+        self.add_message(timed_message);
     }
 
     fn refresh_next_timeout(&mut self) {
