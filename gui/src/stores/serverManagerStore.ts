@@ -1,5 +1,6 @@
 import { map } from 'nanostores';
 import { invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { serverConfigStore, updateServerConfig, updateServerSettings } from './serverConfigStore';
 
 // Types matching the Rust backend
@@ -239,6 +240,25 @@ export const serverManagerActions = {
     if (state.status === 'Running') {
       this.startStatusPolling();
     }
+    
+    // Listen for real-time server logs
+    this.setupLogListener();
+  },
+  
+  // Set up real-time log listener
+  setupLogListener() {
+    listen<LogEntry>('server-log', (event) => {
+      const logEntry = event.payload;
+      const currentState = serverManagerStore.get();
+      const newLogs = [...currentState.logs, logEntry];
+      
+      // Keep only last 1000 logs
+      if (newLogs.length > 1000) {
+        newLogs.splice(0, newLogs.length - 1000);
+      }
+      
+      serverManagerStore.setKey('logs', newLogs);
+    });
   },
 };
 

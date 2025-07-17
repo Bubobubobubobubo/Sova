@@ -12,6 +12,8 @@ import { clearRemoteLogs } from '../stores/remoteLogsStore';
 import { updateConnectionState } from '../stores/connectionStateStore';
 import { getAvailableLanguages } from '../languages';
 import { optionsPanelStore, setOptionsPanelSize, setOptionsPanelPosition } from '../stores/optionsPanelStore';
+import { serverManagerStore } from '../stores/serverManagerStore';
+import { serverConfigStore } from '../stores/serverConfigStore';
 import { ResizeHandle } from './ResizeHandle';
 import { useStore } from '@nanostores/react';
 
@@ -40,6 +42,10 @@ export const MainLayout: React.FC = () => {
   // Script editor state
   const scriptEditor = useStore(scriptEditorStore);
   const scene = useStore(sceneStore);
+  
+  // Server manager state
+  const serverState = useStore(serverManagerStore);
+  const serverConfig = useStore(serverConfigStore);
   
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -70,6 +76,33 @@ export const MainLayout: React.FC = () => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Auto-connect to local server when it starts
+  useEffect(() => {
+    // Only auto-connect if:
+    // 1. We're not already connected
+    // 2. A local server is running
+    // 3. We have a process ID (meaning we started it)
+    if (!isConnected && serverState.status === 'Running' && serverState.process_id) {
+      const autoConnect = async () => {
+        try {
+          console.log('Auto-connecting to local server...');
+          await handleConnect(username, serverConfig.ip, serverConfig.port);
+          console.log('Auto-connected successfully');
+        } catch (error) {
+          console.error('Auto-connect failed:', error);
+          setConnectionError('Failed to auto-connect to local server');
+        }
+      };
+      
+      // Small delay to ensure server is fully ready
+      const timeout = setTimeout(autoConnect, 1000);
+      return () => clearTimeout(timeout);
+    }
+    
+    // Return undefined if no cleanup needed
+    return undefined;
+  }, [isConnected, serverState.status, serverState.process_id, serverConfig.ip, serverConfig.port, username]);
 
   const handleConnect = async (name: string, ip: string, port: number): Promise<void> => {
     setConnectionError('');

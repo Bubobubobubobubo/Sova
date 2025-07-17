@@ -19,7 +19,7 @@ pub use shared_types::GridSelection;
 
 // Re-export logging functionality
 pub use logger::{
-    init_standalone, init_embedded, set_embedded_mode, set_standalone_mode,
+    init_standalone, init_embedded, init_network, set_embedded_mode, set_network_mode, set_dual_mode, set_standalone_mode,
     create_log_channel, get_logger, Logger, LoggerMode,
 };
 

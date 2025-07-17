@@ -32,7 +32,12 @@ export const updateConnectionState = (connected: boolean, ip?: string, port?: nu
   const serverState = serverManagerStore.get();
   const serverConfig = serverConfigStore.get();
   
+  // Only consider it a local server if:
+  // 1. Our GUI actually spawned/started a server AND  
+  // 2. The connection details match our spawned server AND
+  // 3. We have a process_id (indicating we started it)
   const isLocalServer = serverState.status === 'Running' &&
+    serverState.process_id !== undefined &&  // We have a PID (we started it)
     (ip === '127.0.0.1' || ip === 'localhost') &&
     port === serverConfig.port;
 

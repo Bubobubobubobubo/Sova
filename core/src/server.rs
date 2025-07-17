@@ -1766,8 +1766,13 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                         // Remove log
                         Some(ServerMessage::SceneValue(p))
                     },
-                    SchedulerNotification::Log(log_msg) => {
-                         Some(ServerMessage::LogString(log_msg.to_string()))
+                    SchedulerNotification::Log(timed_message) => {
+                        // Extract the inner LogMessage from the TimedMessage
+                        if let crate::protocol::payload::ProtocolPayload::LOG(log_message) = &timed_message.message.payload {
+                            Some(ServerMessage::LogString(log_message.to_string()))
+                        } else {
+                            None
+                        }
                     }
                     SchedulerNotification::TempoChanged(_) => {
                         let clock = Clock::from(&state.clock_server);

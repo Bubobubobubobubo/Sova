@@ -19,7 +19,7 @@ interface OptionsPanelProps {
 
 // type TabType = 'colors' | 'settings' | 'devices' | 'files';
 
-export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 'right', onPositionChange, onBackdropClick }) => {
+export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 'right', onPositionChange }) => {
   const editorSettings = useStore(editorSettingsStore);
   const optionsState = useStore(optionsPanelStore);
   const activeTab = optionsState.activeTab;
@@ -28,12 +28,6 @@ export const OptionsPanel: React.FC<OptionsPanelProps> = ({ onClose, position = 
   const handleClose = () => {
     if (!isPinned) {
       onClose();
-    }
-  };
-
-  const handleBackdrop = () => {
-    if (!isPinned && onBackdropClick) {
-      onBackdropClick();
     }
   };
 

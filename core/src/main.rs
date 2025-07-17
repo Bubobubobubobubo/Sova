@@ -2,6 +2,7 @@ use crate::clock::ClockServer;
 use crate::compiler::{Compiler, CompilerCollection, bali::BaliCompiler, dummylang::DummyCompiler};
 use crate::scene::script::Script;
 use crate::server::client::ClientMessage;
+use crate::schedule::notification::SchedulerNotification;
 // TimingConfig import removed for now
 use bubo_engine::{
     engine::AudioEngine,
@@ -15,12 +16,12 @@ use crossbeam_channel::bounded;
 use device_map::DeviceMap;
 use scene::Scene;
 use scene::line::Line;
-use schedule::{Scheduler, message::SchedulerMessage, notification::SchedulerNotification};
+use schedule::{Scheduler, message::SchedulerMessage};
 use server::{BuboCoreServer, ServerState};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{collections::HashMap, sync::Arc, thread};
-use tokio::sync::{Mutex, watch};
+use tokio::sync::Mutex;
 use transcoder::Transcoder;
 use world::World;
 
@@ -259,12 +260,22 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     // ======================================================================
-    // Initialize logger in standalone mode (for main executable)
-    crate::logger::init_standalone();
+    // Parse CLI arguments first
+    let cli = Cli::parse();
     
     // ======================================================================
-    // Parse CLI arguments
-    let cli = Cli::parse();
+    // Initialize logger and immediately set up dual mode for GUI compatibility
+    crate::logger::init_standalone();
+    
+    // Set up notification channel and switch to dual mode IMMEDIATELY
+    // This ensures ALL logs (including startup) reach both terminal and clients
+    let (updater, update_notifier) = tokio::sync::watch::channel(
+        crate::schedule::notification::SchedulerNotification::default()
+    );
+    crate::logger::set_dual_mode(updater.clone());
+    
+    // Test log to verify dual mode works
+    log_info!("Logger initialized in dual mode - all logs will reach terminal and clients");
 
     // Handle --list-devices flag before initialization
     if cli.list_devices {
@@ -345,10 +356,13 @@ async fn main() {
     };
 
     // ======================================================================
+    // Notification channels already created early for immediate dual mode logging
+
+    // ======================================================================
     // Initialize the world (side effect performer)
     let audio_engine_tx = audio_engine_components.as_ref().map(|(tx, _)| tx.clone());
     let (world_handle, world_iface) =
-        World::create(clock_server.clone(), audio_engine_tx, registry_for_world, engine_log_rx);
+        World::create(clock_server.clone(), audio_engine_tx, registry_for_world, engine_log_rx, Some(updater.clone()));
 
     // ======================================================================
     // Extract status receiver and start monitoring thread if audio engine is enabled
@@ -382,7 +396,6 @@ async fn main() {
         world_iface.clone(),
         shared_atomic_is_playing.clone(),
     );
-    let (updater, update_notifier) = watch::channel(SchedulerNotification::default());
 
     // ======================================================================
     // Initialize the default scene loaded when the server starts
@@ -574,7 +587,20 @@ async fn main() {
     );
     // Handle potential errors during server start
     match server.start(server_state).await {
-        Ok(_) => {}
+        Ok(_) => {
+            log_println!("[+] Server listening on {}:{}", server.ip, server.port);
+            
+            // Send a test log every 10 seconds to verify client log reception
+            tokio::spawn(async move {
+                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
+                let mut counter = 1;
+                loop {
+                    interval.tick().await;
+                    log_println!("[TEST] Periodic log message #{} - if you see this in GUI, logs are working!", counter);
+                    counter += 1;
+                }
+            });
+        }
         Err(e) => {
             if e.kind() == ErrorKind::AddrInUse {
                 log_eprintln!(
