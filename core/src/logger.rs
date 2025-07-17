@@ -1,5 +1,7 @@
 use std::sync::{Arc, Mutex, OnceLock};
 use std::io::Write;
+use std::fs::{File, OpenOptions, create_dir_all};
+use std::path::PathBuf;
 use crossbeam_channel::{Sender, Receiver, unbounded};
 use tokio::sync::watch;
 use crate::protocol::log::{LogMessage, Severity};
@@ -12,6 +14,117 @@ use crate::schedule::notification::SchedulerNotification;
 /// Global logger instance
 static GLOBAL_LOGGER: OnceLock<Logger> = OnceLock::new();
 
+/// Log file configuration
+const LOG_FILE_MAX_SIZE: u64 = 1024 * 1024; // 1MB
+const LOG_FILE_MAX_COUNT: usize = 5;
+const LOG_FILE_NAME: &str = "bubocore.log";
+
+/// File-based log writer with rotation
+#[derive(Debug)]
+pub struct LogFileWriter {
+    log_dir: PathBuf,
+    current_file: Option<File>,
+    current_size: u64,
+}
+
+impl LogFileWriter {
+    pub fn new() -> Result<Self, std::io::Error> {
+        let log_dir = Self::get_log_directory()?;
+        create_dir_all(&log_dir)?;
+        
+        Ok(LogFileWriter {
+            log_dir,
+            current_file: None,
+            current_size: 0,
+        })
+    }
+    
+    fn get_log_directory() -> Result<PathBuf, std::io::Error> {
+        let mut path = dirs::config_dir()
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+        path.push("bubocore");
+        path.push("logs");
+        Ok(path)
+    }
+    
+    fn get_current_log_path(&self) -> PathBuf {
+        self.log_dir.join(LOG_FILE_NAME)
+    }
+    
+    fn rotate_logs(&mut self) -> Result<(), std::io::Error> {
+        let current_path = self.get_current_log_path();
+        
+        // Close current file
+        self.current_file = None;
+        
+        // Rotate existing log files
+        for i in (1..LOG_FILE_MAX_COUNT).rev() {
+            let old_path = self.log_dir.join(format!("{}.{}", LOG_FILE_NAME, i));
+            let new_path = self.log_dir.join(format!("{}.{}", LOG_FILE_NAME, i + 1));
+            
+            if old_path.exists() {
+                if i == LOG_FILE_MAX_COUNT - 1 {
+                    // Delete oldest file
+                    std::fs::remove_file(&old_path)?;
+                } else {
+                    // Rename to next number
+                    std::fs::rename(&old_path, &new_path)?;
+                }
+            }
+        }
+        
+        // Move current log to .1
+        if current_path.exists() {
+            let archived_path = self.log_dir.join(format!("{}.1", LOG_FILE_NAME));
+            std::fs::rename(&current_path, &archived_path)?;
+        }
+        
+        self.current_size = 0;
+        Ok(())
+    }
+    
+    fn ensure_file_open(&mut self) -> Result<(), std::io::Error> {
+        if self.current_file.is_none() {
+            let path = self.get_current_log_path();
+            self.current_file = Some(OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)?);
+            
+            // Get current file size
+            if let Ok(metadata) = std::fs::metadata(&path) {
+                self.current_size = metadata.len();
+            }
+        }
+        Ok(())
+    }
+    
+    pub fn write_log(&mut self, log_msg: &LogMessage) -> Result<(), std::io::Error> {
+        self.ensure_file_open()?;
+        
+        let formatted_log = format!("{}\n", log_msg);
+        let log_bytes = formatted_log.as_bytes();
+        
+        // Check if rotation is needed
+        if self.current_size + log_bytes.len() as u64 > LOG_FILE_MAX_SIZE {
+            self.rotate_logs()?;
+            self.ensure_file_open()?;
+        }
+        
+        if let Some(ref mut file) = self.current_file {
+            file.write_all(log_bytes)?;
+            file.flush()?;
+            self.current_size += log_bytes.len() as u64;
+        }
+        
+        Ok(())
+    }
+    
+    pub fn get_log_file_path(&self) -> PathBuf {
+        self.get_current_log_path()
+    }
+}
+
 /// Logger operating mode
 #[derive(Debug, Clone)]
 pub enum LoggerMode {
@@ -23,11 +136,16 @@ pub enum LoggerMode {
     Network(watch::Sender<SchedulerNotification>),
     /// Dual mode: logs to terminal AND sends to clients (preferred for servers)
     Dual(watch::Sender<SchedulerNotification>),
+    /// File mode: logs to file only (for persistent logging)
+    File,
+    /// Full mode: logs to file, terminal, and clients (complete logging solution)
+    Full(watch::Sender<SchedulerNotification>),
 }
 
 /// Core logging system that supports both standalone and embedded modes
 pub struct Logger {
     mode: Arc<Mutex<LoggerMode>>,
+    file_writer: Arc<Mutex<Option<LogFileWriter>>>,
 }
 
 impl Logger {
@@ -35,6 +153,7 @@ impl Logger {
     pub fn new_standalone() -> Self {
         Logger {
             mode: Arc::new(Mutex::new(LoggerMode::Standalone)),
+            file_writer: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -42,6 +161,7 @@ impl Logger {
     pub fn new_embedded(sender: Sender<LogMessage>) -> Self {
         Logger {
             mode: Arc::new(Mutex::new(LoggerMode::Embedded(sender))),
+            file_writer: Arc::new(Mutex::new(None)),
         }
     }
 
@@ -49,6 +169,39 @@ impl Logger {
     pub fn new_network(sender: watch::Sender<SchedulerNotification>) -> Self {
         Logger {
             mode: Arc::new(Mutex::new(LoggerMode::Network(sender))),
+            file_writer: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    /// Create a new logger in file mode (logs to file only)
+    pub fn new_file() -> Self {
+        let file_writer = match LogFileWriter::new() {
+            Ok(writer) => Some(writer),
+            Err(e) => {
+                eprintln!("Failed to create log file writer: {}", e);
+                None
+            }
+        };
+        
+        Logger {
+            mode: Arc::new(Mutex::new(LoggerMode::File)),
+            file_writer: Arc::new(Mutex::new(file_writer)),
+        }
+    }
+
+    /// Create a new logger in full mode (logs to file, terminal, and clients)
+    pub fn new_full(sender: watch::Sender<SchedulerNotification>) -> Self {
+        let file_writer = match LogFileWriter::new() {
+            Ok(writer) => Some(writer),
+            Err(e) => {
+                eprintln!("Failed to create log file writer: {}", e);
+                None
+            }
+        };
+        
+        Logger {
+            mode: Arc::new(Mutex::new(LoggerMode::Full(sender))),
+            file_writer: Arc::new(Mutex::new(file_writer)),
         }
     }
 
@@ -80,9 +233,69 @@ impl Logger {
         }
     }
 
+    /// Switch to file mode
+    pub fn set_file_mode(&self) {
+        if let Ok(mut mode) = self.mode.lock() {
+            *mode = LoggerMode::File;
+        }
+        
+        // Initialize file writer if not already present
+        if let Ok(mut file_writer) = self.file_writer.lock() {
+            if file_writer.is_none() {
+                *file_writer = match LogFileWriter::new() {
+                    Ok(writer) => Some(writer),
+                    Err(e) => {
+                        eprintln!("Failed to create log file writer: {}", e);
+                        None
+                    }
+                };
+            }
+        }
+    }
+
+    /// Switch to full mode (file + terminal + network)
+    pub fn set_full_mode(&self, sender: watch::Sender<SchedulerNotification>) {
+        if let Ok(mut mode) = self.mode.lock() {
+            *mode = LoggerMode::Full(sender);
+        }
+        
+        // Initialize file writer if not already present
+        if let Ok(mut file_writer) = self.file_writer.lock() {
+            if file_writer.is_none() {
+                *file_writer = match LogFileWriter::new() {
+                    Ok(writer) => Some(writer),
+                    Err(e) => {
+                        eprintln!("Failed to create log file writer: {}", e);
+                        None
+                    }
+                };
+            }
+        }
+    }
+
+    /// Get the current log file path (if file logging is enabled)
+    pub fn get_log_file_path(&self) -> Option<PathBuf> {
+        if let Ok(file_writer) = self.file_writer.lock() {
+            file_writer.as_ref().map(|w| w.get_log_file_path())
+        } else {
+            None
+        }
+    }
+
     /// Log a message with the specified severity
     pub fn log(&self, level: Severity, msg: String) {
         let log_msg = LogMessage::new(level, msg);
+        
+        // Helper function to write to file if enabled
+        let write_to_file = |log_msg: &LogMessage| {
+            if let Ok(mut file_writer) = self.file_writer.lock() {
+                if let Some(ref mut writer) = file_writer.as_mut() {
+                    if let Err(e) = writer.write_log(log_msg) {
+                        eprintln!("Failed to write to log file: {}", e);
+                    }
+                }
+            }
+        };
         
         if let Ok(mode) = self.mode.lock() {
             match &*mode {
@@ -142,6 +355,37 @@ impl Logger {
                     };
                     let notification = SchedulerNotification::Log(timed_message);
                     // Explicitly ignore errors - terminal logging is the fallback
+                    let _ = sender.send(notification);
+                }
+                LoggerMode::File => {
+                    // Only write to file in this mode
+                    write_to_file(&log_msg);
+                }
+                LoggerMode::Full(sender) => {
+                    // Write to file first (most important for persistence)
+                    write_to_file(&log_msg);
+                    
+                    // Then log to terminal
+                    match log_msg.level {
+                        Severity::Fatal | Severity::Error => {
+                            eprintln!("{}", log_msg);
+                            let _ = std::io::stderr().flush();
+                        }
+                        _ => {
+                            println!("{}", log_msg);
+                            let _ = std::io::stdout().flush();
+                        }
+                    }
+                    
+                    // Finally send to clients
+                    let timed_message = TimedMessage {
+                        message: ProtocolMessage {
+                            device: Arc::new(ProtocolDevice::Log),
+                            payload: ProtocolPayload::LOG(log_msg.clone()),
+                        },
+                        time: 0, // Immediate execution
+                    };
+                    let notification = SchedulerNotification::Log(timed_message);
                     let _ = sender.send(notification);
                 }
             }
@@ -217,6 +461,31 @@ pub fn set_dual_mode(sender: watch::Sender<SchedulerNotification>) {
 /// Switch the global logger to standalone mode
 pub fn set_standalone_mode() {
     get_logger().set_standalone_mode();
+}
+
+/// Initialize the global logger in file mode
+pub fn init_file() {
+    let _ = GLOBAL_LOGGER.set(Logger::new_file());
+}
+
+/// Initialize the global logger in full mode
+pub fn init_full(sender: watch::Sender<SchedulerNotification>) {
+    let _ = GLOBAL_LOGGER.set(Logger::new_full(sender));
+}
+
+/// Switch the global logger to file mode
+pub fn set_file_mode() {
+    get_logger().set_file_mode();
+}
+
+/// Switch the global logger to full mode (file + terminal + network)
+pub fn set_full_mode(sender: watch::Sender<SchedulerNotification>) {
+    get_logger().set_full_mode(sender);
+}
+
+/// Get the current log file path (if file logging is enabled)
+pub fn get_log_file_path() -> Option<PathBuf> {
+    get_logger().get_log_file_path()
 }
 
 /// Convenience macros for logging
