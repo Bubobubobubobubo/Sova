@@ -7,6 +7,7 @@ use tokio::sync::mpsc;
 use tokio::io::{BufReader, AsyncBufReadExt};
 use std::process::Stdio;
 use regex::Regex;
+use tauri::Emitter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServerConfig {
@@ -18,9 +19,9 @@ pub struct ServerConfig {
     pub audio_engine: bool,
     pub sample_rate: u32,
     pub block_size: u32,
-    pub buffer_size: usize,
-    pub max_audio_buffers: usize,
-    pub max_voices: usize,
+    pub buffer_size: u32,
+    pub max_audio_buffers: u32,
+    pub max_voices: u32,
     pub output_device: Option<String>,
     
     // OSC
@@ -95,6 +96,7 @@ pub struct ServerManager {
     process: Arc<Mutex<Option<Child>>>,
     log_sender: mpsc::UnboundedSender<LogEntry>,
     log_receiver: Arc<Mutex<mpsc::UnboundedReceiver<LogEntry>>>,
+    app_handle: Arc<Mutex<Option<tauri::AppHandle>>>,
 }
 
 impl ServerManager {
@@ -115,6 +117,13 @@ impl ServerManager {
             process: Arc::new(Mutex::new(None)),
             log_sender,
             log_receiver: Arc::new(Mutex::new(log_receiver)),
+            app_handle: Arc::new(Mutex::new(None)),
+        }
+    }
+    
+    pub fn set_app_handle(&self, handle: tauri::AppHandle) {
+        if let Ok(mut app_handle) = self.app_handle.lock() {
+            *app_handle = Some(handle);
         }
     }
     
@@ -146,7 +155,7 @@ impl ServerManager {
             state.config.clone()
         };
         
-        // Check if port is available
+        // Check if port is available before trying to start
         if !self.is_port_available(config.port).await {
             let mut state = self.state.lock().unwrap();
             state.status = ServerStatus::Error(format!("Port {} is already in use", config.port));
@@ -188,12 +197,19 @@ impl ServerManager {
             cmd.arg("--relay-token").arg(token);
         }
         
-        // Configure stdio
+        // Configure stdio and force unbuffered output
         cmd.stdout(Stdio::piped());
         cmd.stderr(Stdio::piped());
+        // Force unbuffered output from spawned process
+        cmd.env("RUST_LOG_SPAN_EVENTS", "full");
+        cmd.env("RUST_BACKTRACE", "1");
         
         // Start the process
-        let mut child = cmd.spawn()?;
+        let mut child = cmd.spawn().map_err(|e| {
+            let mut state = self.state.lock().unwrap();
+            state.status = ServerStatus::Error(format!("Failed to start server process: {}", e));
+            e
+        })?;
         let process_id = child.id();
         
         // Extract stdout and stderr for monitoring
@@ -203,17 +219,56 @@ impl ServerManager {
         // Store process reference
         *self.process.lock().unwrap() = Some(child);
         
-        // Update state
+        // Update state to Starting first
         {
             let mut state = self.state.lock().unwrap();
-            state.status = ServerStatus::Running;
+            state.status = ServerStatus::Starting;
             state.process_id = process_id;
         }
         
         // Start log monitoring with extracted handles
         self.start_log_monitoring_with_handles(stdout, stderr).await;
         
-        self.add_log("info", "Server started successfully");
+        self.add_log("info", "Server process started, waiting for TCP server to be ready...");
+        
+        // Wait for the TCP server to actually be ready to accept connections
+        let config_port = config.port;
+        let max_wait_time = 300; // 30 seconds max wait (300 * 100ms = 30s)
+        let mut waited = 0;
+        
+        while waited < max_wait_time {
+            if !self.is_port_available(config_port).await {
+                // Port is in use, server is listening
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            waited += 1;
+        }
+        
+        if waited >= max_wait_time {
+            // Check if process is still running
+            let mut process_guard = self.process.lock().unwrap();
+            if let Some(child) = process_guard.as_mut() {
+                if let Ok(Some(exit_status)) = child.try_wait() {
+                    // Process has exited
+                    let mut state = self.state.lock().unwrap();
+                    state.status = ServerStatus::Error(format!("Server process exited with status: {}", exit_status));
+                    return Err(anyhow::anyhow!("Server process exited with status: {}", exit_status));
+                }
+            }
+            
+            let mut state = self.state.lock().unwrap();
+            state.status = ServerStatus::Error("Server failed to start listening on port".to_string());
+            return Err(anyhow::anyhow!("Server failed to start listening on port {} within {} seconds", config_port, max_wait_time / 10));
+        }
+        
+        // Now mark as truly running
+        {
+            let mut state = self.state.lock().unwrap();
+            state.status = ServerStatus::Running;
+        }
+        
+        self.add_log("info", "Server is now listening and ready for connections");
         
         Ok(())
     }
@@ -321,7 +376,7 @@ impl ServerManager {
             })
             .collect();
         
-        let mut result = devices;
+        let result = devices;
         
         Ok(result)
     }
@@ -372,38 +427,51 @@ impl ServerManager {
     
     async fn start_log_monitoring_with_handles(&self, stdout: Option<tokio::process::ChildStdout>, stderr: Option<tokio::process::ChildStderr>) {
         let log_sender = self.log_sender.clone();
+        let app_handle = self.app_handle.clone();
+        
+        println!("TAURI DEBUG: Starting log monitoring with handles");
+        eprintln!("TAURI STDERR DEBUG: Starting log monitoring with handles");
         
         if let (Some(stdout), Some(stderr)) = (stdout, stderr) {
             let log_sender_stdout = log_sender.clone();
             let log_sender_stderr = log_sender.clone();
+            let app_handle_stdout = app_handle.clone();
+            let app_handle_stderr = app_handle.clone();
             
             // Spawn task for stdout monitoring
             tokio::spawn(async move {
+                println!("TAURI DEBUG: Starting stdout monitoring task");
                 let stdout_reader = BufReader::new(stdout);
                 let mut lines = stdout_reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     if !line.trim().is_empty() {
-                        Self::parse_and_send_log(&log_sender_stdout, &line, "info");
+                        Self::parse_and_send_log(&log_sender_stdout, &line, "info", &app_handle_stdout);
                     }
                 }
+                println!("TAURI DEBUG: Stdout monitoring task ended");
             });
             
             // Spawn task for stderr monitoring
             tokio::spawn(async move {
+                println!("TAURI DEBUG: Starting stderr monitoring task");
                 let stderr_reader = BufReader::new(stderr);
                 let mut lines = stderr_reader.lines();
                 while let Ok(Some(line)) = lines.next_line().await {
                     if !line.trim().is_empty() {
-                        Self::parse_and_send_log(&log_sender_stderr, &line, "error");
+                        Self::parse_and_send_log(&log_sender_stderr, &line, "error", &app_handle_stderr);
                     }
                 }
+                println!("TAURI DEBUG: Stderr monitoring task ended");
             });
         }
         
         self.add_log("info", "Core log monitoring started");
     }
     
-    fn parse_and_send_log(log_sender: &mpsc::UnboundedSender<LogEntry>, line: &str, default_level: &str) {
+    fn parse_and_send_log(log_sender: &mpsc::UnboundedSender<LogEntry>, line: &str, default_level: &str, app_handle: &Arc<Mutex<Option<tauri::AppHandle>>>) {
+        // DEBUG: Print every line we capture to see what's happening
+        println!("TAURI DEBUG: Captured line ({}): '{}'", default_level, line);
+        eprintln!("TAURI STDERR DEBUG: Captured line ({}): '{}'", default_level, line);
         // Parse multiple log formats:
         // 1. Core format: [LEVEL] message  
         // 2. Timestamped format: YYYY-MM-DDTHH:MM:SS.sssssssZ [LEVEL] message
@@ -435,7 +503,15 @@ impl ServerManager {
             message,
         };
         
-        let _ = log_sender.send(log_entry);
+        // Send to local log channel
+        let _ = log_sender.send(log_entry.clone());
+        
+        // Emit to frontend immediately
+        if let Ok(app_handle_guard) = app_handle.lock() {
+            if let Some(app_handle) = app_handle_guard.as_ref() {
+                let _ = app_handle.emit("server-log", &log_entry);
+            }
+        }
     }
     
     fn add_log(&self, level: &str, message: &str) {

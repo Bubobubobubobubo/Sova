@@ -94,7 +94,7 @@ const serverMessageToLog = (message: ServerMessage): { level: 'info' | 'warn' | 
     
     // Transport and timing
     if ('ClockState' in message) {
-      const [tempo, beat, micros, quantum] = message.ClockState;
+      const [tempo, beat, _micros, quantum] = message.ClockState;
       return { level: 'debug', message: `Clock: ${tempo.toFixed(1)} BPM, beat ${beat.toFixed(2)}, quantum ${quantum}` };
     }
     
@@ -163,9 +163,12 @@ const serverMessageToLog = (message: ServerMessage): { level: 'info' | 'warn' | 
 };
 
 export const handleRemoteLogMessage = (message: ServerMessage) => {
+  console.log('handleRemoteLogMessage called with:', message);
   const logData = serverMessageToLog(message);
+  console.log('Converted to log data:', logData);
   if (logData) {
     addRemoteLog(logData.level, logData.message);
+    console.log('Added remote log:', logData);
   }
 };
 

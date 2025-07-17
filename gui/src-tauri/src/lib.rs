@@ -234,6 +234,9 @@ pub fn run() {
             let link_state: LinkState = Arc::new(LinkClock::new());
             let server_manager_state: ServerManagerState = Arc::new(ServerManager::new());
             
+            // Set the app handle for server manager to emit events
+            server_manager_state.set_app_handle(app.handle().clone());
+            
             app.manage(client_state.clone());
             app.manage(messages_state.clone());
             app.manage(link_state.clone());
