@@ -115,6 +115,21 @@ async fn get_server_state(server_manager: State<'_, ServerManagerState>) -> Resu
     Ok(server_manager.get_state())
 }
 
+#[tauri::command]
+async fn get_local_log_file_path(server_manager: State<'_, ServerManagerState>) -> Result<Option<String>, String> {
+    Ok(server_manager.get_local_log_file_path())
+}
+
+#[tauri::command]
+async fn fs_exists(path: String) -> Result<bool, String> {
+    Ok(std::fs::metadata(&path).is_ok())
+}
+
+#[tauri::command]
+async fn fs_read_text_file(path: String) -> Result<String, String> {
+    std::fs::read_to_string(&path).map_err(|e| e.to_string())
+}
+
 
 #[tauri::command]
 async fn shutdown_app(
@@ -276,6 +291,9 @@ pub fn run() {
             set_link_quantum,
             get_link_quantum,
             get_server_state,
+            get_local_log_file_path,
+            fs_exists,
+            fs_read_text_file,
             update_server_config,
             start_server,
             stop_server,

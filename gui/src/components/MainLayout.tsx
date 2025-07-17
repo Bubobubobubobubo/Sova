@@ -12,8 +12,8 @@ import { clearRemoteLogs } from '../stores/remoteLogsStore';
 import { updateConnectionState } from '../stores/connectionStateStore';
 import { getAvailableLanguages } from '../languages';
 import { optionsPanelStore, setOptionsPanelSize, setOptionsPanelPosition } from '../stores/optionsPanelStore';
-import { serverManagerStore } from '../stores/serverManagerStore';
-import { serverConfigStore } from '../stores/serverConfigStore';
+// import { serverManagerStore } from '../stores/serverManagerStore';
+// import { serverConfigStore } from '../stores/serverConfigStore';
 import { ResizeHandle } from './ResizeHandle';
 import { useStore } from '@nanostores/react';
 
@@ -44,8 +44,8 @@ export const MainLayout: React.FC = () => {
   const scene = useStore(sceneStore);
   
   // Server manager state
-  const serverState = useStore(serverManagerStore);
-  const serverConfig = useStore(serverConfigStore);
+  // const serverState = useStore(serverManagerStore);
+  // const serverConfig = useStore(serverConfigStore);
   
   const panelRef = useRef<HTMLDivElement>(null);
 
@@ -77,7 +77,9 @@ export const MainLayout: React.FC = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Auto-connect to local server when it starts
+  // DISABLED: Auto-connect to local server when it starts
+  // Commented out as requested - users prefer to connect manually
+  /*
   useEffect(() => {
     // Only auto-connect if:
     // 1. We're not already connected
@@ -103,6 +105,7 @@ export const MainLayout: React.FC = () => {
     // Return undefined if no cleanup needed
     return undefined;
   }, [isConnected, serverState.status, serverState.process_id, serverConfig.ip, serverConfig.port, username]);
+  */
 
   const handleConnect = async (name: string, ip: string, port: number): Promise<void> => {
     setConnectionError('');

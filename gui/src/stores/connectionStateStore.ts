@@ -1,6 +1,7 @@
 import { atom } from 'nanostores';
 import { serverManagerStore } from './serverManagerStore';
 import { serverConfigStore } from './serverConfigStore';
+import { initializeLogManager } from './logManagerStore';
 
 export interface ConnectionState {
   isConnected: boolean;
@@ -17,7 +18,7 @@ export const connectionStateStore = atom<ConnectionState>({
 });
 
 // Update connection state when connecting
-export const updateConnectionState = (connected: boolean, ip?: string, port?: number) => {
+export const updateConnectionState = async (connected: boolean, ip?: string, port?: number) => {
   if (!connected) {
     connectionStateStore.set({
       isConnected: false,
@@ -47,6 +48,9 @@ export const updateConnectionState = (connected: boolean, ip?: string, port?: nu
     connectedPort: port || null,
     isConnectedToLocalServer: isLocalServer,
   });
+
+  // Initialize log manager based on connection type
+  await initializeLogManager(isLocalServer);
 };
 
 // Get the current log display mode based on connection state

@@ -264,18 +264,18 @@ async fn main() {
     let cli = Cli::parse();
     
     // ======================================================================
-    // Initialize logger and immediately set up dual mode for GUI compatibility
+    // Initialize logger and immediately set up full mode for complete logging
     crate::logger::init_standalone();
     
-    // Set up notification channel and switch to dual mode IMMEDIATELY
-    // This ensures ALL logs (including startup) reach both terminal and clients
+    // Set up notification channel and switch to full mode IMMEDIATELY
+    // This ensures ALL logs (including startup) reach file, terminal, and clients
     let (updater, update_notifier) = tokio::sync::watch::channel(
         crate::schedule::notification::SchedulerNotification::default()
     );
-    crate::logger::set_dual_mode(updater.clone());
+    crate::logger::set_full_mode(updater.clone());
     
-    // Test log to verify dual mode works
-    log_info!("Logger initialized in dual mode - all logs will reach terminal and clients");
+    // Test log to verify full mode works
+    log_info!("Logger initialized in full mode - all logs will reach file, terminal, and clients");
 
     // Handle --list-devices flag before initialization
     if cli.list_devices {

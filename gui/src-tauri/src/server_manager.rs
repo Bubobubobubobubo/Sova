@@ -131,6 +131,19 @@ impl ServerManager {
         self.state.lock().unwrap().clone()
     }
     
+    pub fn get_local_log_file_path(&self) -> Option<String> {
+        let state = self.state.lock().unwrap();
+        if matches!(state.status, ServerStatus::Running | ServerStatus::Starting) {
+            // When the server is running locally, we can provide the log file path
+            // The core server writes logs to ~/.config/bubocore/logs/bubocore.log
+            if let Some(config_dir) = dirs::config_dir() {
+                let log_path = config_dir.join("bubocore").join("logs").join("bubocore.log");
+                return Some(log_path.to_string_lossy().to_string());
+            }
+        }
+        None
+    }
+    
     pub fn update_config(&self, config: ServerConfig) -> Result<()> {
         let mut state = self.state.lock().unwrap();
         
