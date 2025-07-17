@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useMemo } from 'react';
 import { useStore } from '@nanostores/react';
 import { serverManagerStore, serverManagerActions } from '../stores/serverManagerStore';
+import { serverConfigStore } from '../stores/serverConfigStore';
 import { remoteLogsStore, clearRemoteLogs, RemoteLogEntry } from '../stores/remoteLogsStore';
 import { connectionStateStore, getLogDisplayMode } from '../stores/connectionStateStore';
 import { Trash2, Server, Globe, Link2 } from 'lucide-react';
@@ -15,6 +16,7 @@ interface CombinedLogEntry {
 
 export const ServerLogsPanel: React.FC = () => {
   const serverState = useStore(serverManagerStore);
+  const serverConfig = useStore(serverConfigStore);
   const remoteLogs = useStore(remoteLogsStore);
   const connectionState = useStore(connectionStateStore);
   const logsEndRef = useRef<HTMLDivElement>(null);
@@ -341,7 +343,7 @@ export const ServerLogsPanel: React.FC = () => {
       <div className="flex-1 flex flex-col min-h-0 mt-4">
         <h4 className="text-sm font-medium mb-2 flex items-center gap-2" style={{ color: 'var(--color-text)' }}>
           <Server size={14} />
-          Local Server (127.0.0.1:{serverState.config.port})
+          Local Server (127.0.0.1:{serverConfig.port})
         </h4>
         
         <div 
