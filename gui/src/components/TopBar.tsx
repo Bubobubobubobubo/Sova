@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Play, Square, Settings, LogOut, Grid3X3, Code, SplitSquareHorizontal } from 'lucide-react';
+import { Play, Square, Settings, LogOut, Grid3X3, Code, SplitSquareHorizontal, HelpCircle } from 'lucide-react';
 import { useLinkClock } from '../hooks/useLinkClock';
 import { useStore } from '@nanostores/react';
 import { playbackStore } from '../stores/sceneStore';
@@ -16,6 +16,8 @@ interface TopBarProps {
   onChangeOptionsPanelPosition?: (position: 'left' | 'right' | 'bottom') => void;
   currentView: 'editor' | 'grid' | 'split';
   onViewChange: (view: 'editor' | 'grid' | 'split') => void;
+  isHelpOpen?: boolean;
+  onToggleHelp?: () => void;
 }
 
 export const TopBar: React.FC<TopBarProps> = ({ 
@@ -25,7 +27,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   onToggleOptions,
   client,
   currentView,
-  onViewChange
+  onViewChange,
+  isHelpOpen,
+  onToggleHelp
 }) => {
   const playback = useStore(playbackStore);
   const isPlaying = playback.isPlaying;
@@ -219,6 +223,19 @@ export const TopBar: React.FC<TopBarProps> = ({
               </div>
             </>
           )}
+          
+          <button
+            onClick={onToggleHelp}
+            className="p-2 border-2 transition-all hover:opacity-80"
+            style={{ 
+              borderColor: isHelpOpen ? 'var(--color-primary)' : 'var(--color-border)',
+              backgroundColor: isHelpOpen ? 'var(--color-primary)' : 'transparent',
+              color: isHelpOpen ? 'white' : 'var(--color-text)'
+            }}
+            title="Help"
+          >
+            <HelpCircle size={16} />
+          </button>
           
           <button
             onClick={onToggleOptions}

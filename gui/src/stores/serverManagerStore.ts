@@ -68,20 +68,6 @@ export const serverManagerActions = {
   setLoading: (loading: boolean) => serverManagerUIStore.setKey('isLoading', loading),
   setError: (error: string | null) => serverManagerUIStore.setKey('error', error),
 
-  // Server detection
-  async detectRunningServer() {
-    try {
-      const isRunning = await invoke<boolean>('detect_running_server');
-      if (isRunning) {
-        await this.refreshState();
-        this.startStatusPolling();
-      }
-      return isRunning;
-    } catch (error) {
-      console.error('Failed to detect running server:', error);
-      return false;
-    }
-  },
 
   // Server state actions
   async refreshState() {
@@ -139,7 +125,7 @@ export const serverManagerActions = {
       this.startStatusPolling();
     } catch (error) {
       console.error('Failed to start server:', error);
-      this.setError(error instanceof Error ? error.message : 'Failed to start server');
+      this.setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       this.setLoading(false);
@@ -165,7 +151,7 @@ export const serverManagerActions = {
       this.stopStatusPolling();
     } catch (error) {
       console.error('Failed to stop server:', error);
-      this.setError(error instanceof Error ? error.message : 'Failed to stop server');
+      this.setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       this.setLoading(false);
@@ -183,7 +169,7 @@ export const serverManagerActions = {
       await this.refreshState();
     } catch (error) {
       console.error('Failed to restart server:', error);
-      this.setError(error instanceof Error ? error.message : 'Failed to restart server');
+      this.setError(error instanceof Error ? error.message : String(error));
       throw error;
     } finally {
       this.setLoading(false);

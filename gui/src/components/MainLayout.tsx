@@ -6,6 +6,7 @@ import { OptionsPanel } from './OptionsPanel';
 import { Splash } from './Splash';
 import { GridComponent } from './GridComponent';
 import { CommandPalette } from './CommandPalette';
+import { HelpView } from './HelpView';
 import { BuboCoreClient } from '../client';
 import { handleServerMessage, peersStore, scriptEditorStore, sceneStore, setScriptLanguage, updateGridSelection } from '../stores/sceneStore';
 import { clearRemoteLogs } from '../stores/remoteLogsStore';
@@ -26,6 +27,7 @@ export const MainLayout: React.FC = () => {
   const [isOptionsPanelOpen, setIsOptionsPanelOpen] = useState(false);
   const [editorContent, setEditorContent] = useState('// Welcome to BuboCore Editor\n// Start typing your code here...\n');
   const [currentView, setCurrentView] = useState<'editor' | 'grid' | 'split'>('split');
+  const [isHelpOpen, setIsHelpOpen] = useState(false);
   const optionsPanelState = useStore(optionsPanelStore);
   const layout = useStore(layoutStore);
   const [serverAddress, setServerAddress] = useState<string>('');
@@ -292,6 +294,8 @@ export const MainLayout: React.FC = () => {
           client={client}
           currentView={currentView}
           onViewChange={setCurrentView}
+          isHelpOpen={isHelpOpen}
+          onToggleHelp={() => setIsHelpOpen(!isHelpOpen)}
         />
         
         
@@ -337,7 +341,7 @@ export const MainLayout: React.FC = () => {
             />
           )}
           
-          {/* Grid View */}
+          {/* Grid View / Help View */}
           {(currentView === 'grid' || currentView === 'split') && (
             <div 
               className="relative flex flex-col"
@@ -350,11 +354,15 @@ export const MainLayout: React.FC = () => {
                   '100%'
               }}
             >
-              <GridComponent
-                width={getGridWidth()}
-                height={getGridHeight()}
-                client={client}
-              />
+              {isHelpOpen ? (
+                <HelpView />
+              ) : (
+                <GridComponent
+                  width={getGridWidth()}
+                  height={getGridHeight()}
+                  client={client}
+                />
+              )}
             </div>
           )}
         </div>

@@ -10,6 +10,7 @@ use link::LinkClock;
 use disk::ProjectInfo;
 use server_manager::{ServerManager, ServerConfig, ServerState};
 use std::sync::Arc;
+use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tokio::sync::{Mutex, RwLock};
 use tokio::signal::unix::{signal, SignalKind};
@@ -137,19 +138,34 @@ async fn shutdown_app(
     server_manager: State<'_, ServerManagerState>,
     client_state: State<'_, ClientState>,
 ) -> Result<(), String> {
-    // First disconnect the client
-    {
-        let mut client = client_state.lock().await;
-        client.disconnect();
-    }
+    // Set a timeout for the entire shutdown process
+    let shutdown_timeout = Duration::from_secs(10);
     
-    // Then stop the server if it's running
-    let server_state = server_manager.get_state();
-    if matches!(server_state.status, server_manager::ServerStatus::Running) {
-        server_manager.stop_server().await.map_err(|e| e.to_string())?;
+    match tokio::time::timeout(shutdown_timeout, async {
+        // First disconnect the client
+        {
+            let mut client = client_state.lock().await;
+            client.disconnect();
+        }
+        
+        // Small delay to ensure disconnect is processed
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        
+        // Then stop the server if it's running
+        let server_state = server_manager.get_state();
+        if matches!(server_state.status, server_manager::ServerStatus::Running | server_manager::ServerStatus::Starting) {
+            server_manager.stop_server().await.map_err(|e| e.to_string())?;
+        }
+        
+        Ok::<(), String>(())
+    }).await {
+        Ok(result) => result,
+        Err(_) => {
+            eprintln!("Shutdown timed out after {} seconds", shutdown_timeout.as_secs());
+            // Return Ok anyway to allow the app to close
+            Ok(())
+        }
     }
-    
-    Ok(())
 }
 
 #[tauri::command]

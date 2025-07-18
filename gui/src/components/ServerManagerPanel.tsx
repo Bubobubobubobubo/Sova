@@ -31,6 +31,7 @@ export const ServerManagerPanel: React.FC = () => {
         background: 'rgba(0, 0, 0, 0.4)',
         backdropFilter: 'blur(2px)'
       }}
+      onClick={() => serverManagerActions.hide()}
     >
       <div 
         className="shadow-2xl w-full max-w-7xl max-h-[90vh] flex flex-col"
@@ -39,6 +40,7 @@ export const ServerManagerPanel: React.FC = () => {
           color: 'var(--color-text)',
           border: '1px solid var(--color-border)'
         }}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b" style={{ borderColor: 'var(--color-border)' }}>
