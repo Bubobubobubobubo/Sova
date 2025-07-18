@@ -3,7 +3,7 @@ use crate::messages::Snapshot;
 use directories::UserDirs;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
-use std::{error::Error, fmt, io, path::Path, str::FromStr};
+use std::{error::Error, fmt, io, path::Path};
 use tokio::{
     fs::{self, DirEntry, ReadDir},
     io::ErrorKind,

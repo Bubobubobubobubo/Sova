@@ -116,7 +116,7 @@ export const Splash: React.FC<SplashProps> = ({ onConnect, error: externalError 
       }
     } catch (err) {
       console.error('Server toggle failed:', err);
-      setError(err instanceof Error ? err.message : 'Server operation failed');
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setIsServerLoading(false);
     }

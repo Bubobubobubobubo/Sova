@@ -217,6 +217,13 @@ impl ServerManager {
         cmd.env("RUST_LOG_SPAN_EVENTS", "full");
         cmd.env("RUST_BACKTRACE", "1");
         
+        // On Unix, create a new process group for the server and its children
+        #[cfg(unix)]
+        {
+            use std::os::unix::process::CommandExt;
+            cmd.process_group(0); // Create new process group
+        }
+        
         // Start the process
         let mut child = cmd.spawn().map_err(|e| {
             let mut state = self.state.lock().unwrap();
@@ -305,17 +312,83 @@ impl ServerManager {
             state.status = ServerStatus::Stopping;
         }
         
-        let mut process_guard = self.process.lock().unwrap();
-        if let Some(mut child) = process_guard.take() {
+        // Take the child process out of the mutex guard to avoid holding it across await
+        let child = {
+            let mut process_guard = self.process.lock().unwrap();
+            process_guard.take()
+        };
+        
+        if let Some(mut child) = child {
+            // On Unix, kill the entire process group
+            #[cfg(unix)]
+            {
+                if let Some(pid) = child.id() {
+                    // Send SIGTERM to the process group (negative PID)
+                    unsafe {
+                        libc::kill(-(pid as i32), libc::SIGTERM);
+                    }
+                    self.add_log("info", &format!("Sent SIGTERM to process group {}", pid));
+                }
+            }
+            
             // Try graceful shutdown first
             if let Err(e) = child.terminate() {
                 eprintln!("Failed to terminate process gracefully: {}", e);
-                // Force kill if graceful termination fails
-                let _ = child.kill();
+                self.add_log("warn", &format!("Failed to terminate process gracefully: {}", e));
             }
             
-            // Wait for process to exit
-            let _ = child.wait();
+            // Give the process some time to shutdown gracefully
+            let timeout = Duration::from_secs(5);
+            let start = tokio::time::Instant::now();
+            
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        self.add_log("info", &format!("Server process exited with status: {}", status));
+                        break;
+                    }
+                    Ok(None) => {
+                        // Process is still running
+                        if start.elapsed() >= timeout {
+                            self.add_log("warn", "Server did not exit gracefully within timeout, force killing");
+                            
+                            // Force kill the process and its group
+                            #[cfg(unix)]
+                            {
+                                if let Some(pid) = child.id() {
+                                    // Send SIGKILL to the process group
+                                    unsafe {
+                                        libc::kill(-(pid as i32), libc::SIGKILL);
+                                    }
+                                }
+                            }
+                            
+                            // Also try to kill the child directly
+                            let _ = child.kill();
+                            
+                            // Wait for the process to actually exit
+                            match child.wait().await {
+                                Ok(status) => {
+                                    self.add_log("info", &format!("Server process force killed with status: {}", status));
+                                }
+                                Err(e) => {
+                                    self.add_log("error", &format!("Failed to wait for process exit: {}", e));
+                                }
+                            }
+                            break;
+                        }
+                        
+                        // Check again in 100ms
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(e) => {
+                        self.add_log("error", &format!("Error checking process status: {}", e));
+                        // Try to kill anyway
+                        let _ = child.kill();
+                        break;
+                    }
+                }
+            }
         }
         
         // Update state

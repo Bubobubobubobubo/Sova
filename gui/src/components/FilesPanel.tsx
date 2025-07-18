@@ -30,6 +30,32 @@ export const FilesPanel: React.FC = () => {
     loadProjects();
   }, []);
 
+  // Handle keyboard events for modals
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (state.showDeleteConfirmation) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          hideDeleteConfirmation();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmDelete();
+        }
+      } else if (state.showSaveOverwriteConfirmation) {
+        if (e.key === 'Escape') {
+          e.preventDefault();
+          hideSaveOverwriteConfirmation();
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          confirmOverwrite();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [state.showDeleteConfirmation, state.showSaveOverwriteConfirmation, state.projectToDelete, state.projectToOverwrite]);
+
   // Also refresh when this component becomes visible (when Files tab is clicked)
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -469,11 +495,18 @@ export const FilesPanel: React.FC = () => {
 
       {/* Confirmation dialogs */}
       {state.showDeleteConfirmation && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white border p-6 max-w-sm mx-4" style={{ 
-            backgroundColor: 'var(--color-surface)',
-            borderColor: 'var(--color-border)'
-          }}>
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={hideDeleteConfirmation}
+        >
+          <div 
+            className="border p-6 max-w-sm mx-4 shadow-2xl" 
+            style={{ 
+              backgroundColor: 'var(--color-surface)',
+              borderColor: 'var(--color-border)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
               Confirm Delete
             </h3>
@@ -485,6 +518,7 @@ export const FilesPanel: React.FC = () => {
                 onClick={confirmDelete}
                 className="flex-1 px-4 py-2 font-medium text-white hover:bg-opacity-80 transition-colors"
                 style={{ backgroundColor: 'var(--color-error)' }}
+                autoFocus
               >
                 Delete
               </button>
@@ -505,11 +539,18 @@ export const FilesPanel: React.FC = () => {
       )}
 
       {state.showSaveOverwriteConfirmation && (
-        <div className="absolute inset-0 bg-black bg-opacity-50 flex items-center justify-center">
-          <div className="bg-white border p-6 max-w-sm mx-4" style={{ 
-            backgroundColor: 'var(--color-surface)',
-            borderColor: 'var(--color-border)'
-          }}>
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center"
+          onClick={hideSaveOverwriteConfirmation}
+        >
+          <div 
+            className="border p-6 max-w-sm mx-4 shadow-2xl" 
+            style={{ 
+              backgroundColor: 'var(--color-surface)',
+              borderColor: 'var(--color-border)'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
             <h3 className="text-lg font-semibold mb-4" style={{ color: 'var(--color-text)' }}>
               Confirm Overwrite
             </h3>
@@ -521,6 +562,7 @@ export const FilesPanel: React.FC = () => {
                 onClick={confirmOverwrite}
                 className="flex-1 px-4 py-2 font-medium text-white hover:bg-opacity-80 transition-colors"
                 style={{ backgroundColor: 'var(--color-primary)' }}
+                autoFocus
               >
                 Overwrite
               </button>
