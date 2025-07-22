@@ -13,8 +13,8 @@ use lalrpop_util::ParseError;
 #[derive(Debug)]
 pub struct BaliCompiler;
 impl Compiler for BaliCompiler {
-    fn name(&self) -> String {
-        "bali".to_string()
+    fn name(&self) -> &str {
+        "bali"
     }
 
     fn compile(&self, script: &str) -> Result<Program, CompilationError> {

@@ -93,7 +93,9 @@ impl From<String> for Script {
     }
 }
 
+#[derive(Debug, Default, Clone)]
 pub enum ReturnInfo {
+    #[default]
     None,
     IndexChange(usize),
     RelIndexChange(i64),

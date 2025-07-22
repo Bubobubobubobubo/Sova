@@ -136,7 +136,7 @@ impl Scheduler {
                 calculate_frame_index(&self.clock, scene_len, line, date);
             if frame < usize::MAX && line.is_frame_enabled(frame) {
                 let script = &line.scripts[frame];
-                Self::execute_script(&mut self.executions, script, line.index, date);
+                Self::execute_script(&mut self.executions, script, line.index, scheduled_date);
             }
         }
 
