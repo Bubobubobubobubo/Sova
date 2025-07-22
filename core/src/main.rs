@@ -1,5 +1,6 @@
 use crate::clock::ClockServer;
 use crate::compiler::{bali::BaliCompiler, dummylang::DummyCompiler};
+use crate::lang::interpreter::directory::InterpreterDirectory;
 use crate::scene::script::Script;
 use crate::server::client::ClientMessage;
 use crate::schedule::notification::SchedulerNotification;
@@ -373,12 +374,14 @@ async fn main() {
     };
 
     // ======================================================================
-    // Initialize the transcoder (list of available compilers)
+    // Initialize the transcoder (list of available compilers) and interpreter directory
     let mut transcoder = Transcoder::default();
     transcoder.add_compiler(BaliCompiler);
     transcoder.add_compiler(DummyCompiler);
-    transcoder.set_active_compiler("bali");
-    let transcoder = Arc::new(tokio::sync::Mutex::new(transcoder));
+    let _ = transcoder.set_active_compiler("bali");
+
+    let interpreter_directory = InterpreterDirectory::new(transcoder);
+    let interpreter_directory = Arc::new(tokio::sync::Mutex::new(interpreter_directory));
 
     // Shared flag for transport state (playing/stopped)
     let shared_atomic_is_playing = Arc::new(AtomicBool::new(false));
