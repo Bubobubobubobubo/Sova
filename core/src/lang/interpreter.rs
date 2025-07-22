@@ -1,6 +1,12 @@
-use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, variable::VariableStore}, scene::line::Line};
+use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent}};
 
+pub mod factory;
+pub mod directory;
 pub mod asm_interpreter;
+
+pub mod boinx;
+
+pub use factory::InterpreterFactory;
 
 pub trait Interpreter {
 
@@ -15,10 +21,3 @@ pub trait Interpreter {
 
 }
 
-pub trait InterpreterFactory {
-
-    fn name(&self) -> String;
-
-    fn make_instance(&self, content : String) -> Box<dyn Interpreter>;
-
-}

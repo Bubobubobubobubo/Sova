@@ -77,11 +77,11 @@ impl Transcoder {
     /// # Returns
     ///
     /// The transcoder with the new compiler added.
-    pub fn add_compiler(&mut self, compiler: Box<dyn Compiler>) {
-        let name = compiler.name();
-        self.compilers.insert(name.clone(), compiler);
+    pub fn add_compiler(&mut self, compiler: impl Compiler + 'static) {
+        let name : String = compiler.name().into();
+        self.compilers.insert(name.clone(), Box::new(compiler));
         if self.active_compiler.is_none() {
-            self.active_compiler = Some(name);
+            self.active_compiler = Some(name.into());
         }
     }
 

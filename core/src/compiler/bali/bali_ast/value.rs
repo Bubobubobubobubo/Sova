@@ -49,7 +49,7 @@ impl Value {
         }
     }
 
-    pub fn as_note(name: &String) -> Option<&i64> {
+    pub fn as_note(name: &str) -> Option<&i64> {
         NOTE_MAP.get(name)
     }
 

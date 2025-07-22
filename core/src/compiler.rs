@@ -94,7 +94,7 @@ pub trait Compiler: Send + Sync + std::fmt::Debug {
     ///
     /// This name is used for identification and potentially for locating related resources
     /// like syntax definition files.
-    fn name(&self) -> String;
+    fn name(&self) -> &str;
 
     /// Compiles the given source code text into a [`Program`].
     ///
@@ -128,8 +128,8 @@ pub struct ExternalCompiler(
 
 impl Compiler for ExternalCompiler {
     /// Returns the name of the compiler, which is the executable name/path.
-    fn name(&self) -> String {
-        self.0.clone()
+    fn name(&self) -> &str {
+        &self.0
     }
 
     /// Executes the external compiler process to compile the source code.

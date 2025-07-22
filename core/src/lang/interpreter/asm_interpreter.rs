@@ -1,7 +1,6 @@
-use std::sync::Arc;
+use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter}, Instruction, Program}, scene::{script::ReturnInfo}, transcoder::Transcoder};
 
-use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}, variable::VariableStore, Instruction, Program}, scene::{line::Line, script::ReturnInfo}, transcoder::Transcoder};
-
+#[derive(Debug, Default, Clone)]
 pub struct ASMInterpreter {
     prog: Program,
     instruction_index: usize,
@@ -9,6 +8,12 @@ pub struct ASMInterpreter {
 }
 
 impl ASMInterpreter {
+
+    pub fn new(prog : Program) -> Self {
+        Self {
+            prog, instruction_index: 0, return_stack: Vec::new()
+        }
+    }
 
     #[inline]
     pub fn current_instruction(&self) -> &Instruction {
@@ -42,6 +47,12 @@ impl ASMInterpreter {
         };
     }
 
+}
+
+impl From<Program> for ASMInterpreter  {
+    fn from(value: Program) -> Self {
+        ASMInterpreter::new(value)
+    }
 }
 
 impl Interpreter for ASMInterpreter {
@@ -86,26 +97,23 @@ impl Interpreter for ASMInterpreter {
 
 }
 
+#[derive(Debug, Default)]
 pub struct ASMInterpreterFactory {
     pub transcoder : Transcoder
 }
 
+/// Does not behave the same as the factory trait, as it needs to pass forward the language name to the transcoder
 impl ASMInterpreterFactory {
 
     pub fn new(transcoder : Transcoder) -> Self {
         ASMInterpreterFactory { transcoder }
     }
 
-}
-
-impl InterpreterFactory for ASMInterpreterFactory {
-
-    fn name(&self) -> String {
-        todo!()
-    }
-
-    fn make_instance(&self, content : String) -> Box<dyn Interpreter> {
-        todo!()
+    pub fn make_instance(&self, lang: &str, content : String) -> Option<Box<dyn Interpreter>> {
+        let Ok(prog) = self.transcoder.compile(&content, lang) else {
+            return None;
+        };
+        Some(Box::new(ASMInterpreter::new(prog)))
     }
 
 }

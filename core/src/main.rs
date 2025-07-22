@@ -1,5 +1,5 @@
 use crate::clock::ClockServer;
-use crate::compiler::{Compiler, CompilerCollection, bali::BaliCompiler, dummylang::DummyCompiler};
+use crate::compiler::{bali::BaliCompiler, dummylang::DummyCompiler};
 use crate::scene::script::Script;
 use crate::server::client::ClientMessage;
 use crate::schedule::notification::SchedulerNotification;
@@ -20,7 +20,7 @@ use schedule::{Scheduler, message::SchedulerMessage};
 use server::{BuboCoreServer, ServerState};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::{collections::HashMap, sync::Arc, thread};
+use std::{sync::Arc, thread};
 use tokio::sync::Mutex;
 use transcoder::Transcoder;
 use world::World;
@@ -175,7 +175,7 @@ fn initialize_sova_engine(
 #[derive(Parser, Debug)]
 #[clap(author = "Raphaël Forment <raphael.forment@gmail.com>")]
 #[clap(author = "Loïg Jezequel <loig.jezequel@univ-nantes.fr>")]
-#[clap(author = "Tanguy Dubois <email@address.com>")]
+#[clap(author = "Tanguy Dubois <tanguy.dubois@ls2n.fr>")]
 #[command(
     version = "0.0.1",
     about = "BuboCore: A live coding environment server.",
@@ -374,16 +374,11 @@ async fn main() {
 
     // ======================================================================
     // Initialize the transcoder (list of available compilers)
-    let mut compilers: CompilerCollection = HashMap::new();
-    // 1) The BaLi compiler
-    let bali_compiler = BaliCompiler;
-    let dummy_compiler = DummyCompiler;
-    compilers.insert(bali_compiler.name(), Box::new(bali_compiler));
-    compilers.insert(dummy_compiler.name(), Box::new(dummy_compiler));
-    let transcoder = Arc::new(tokio::sync::Mutex::new(Transcoder::new(
-        compilers,
-        Some("bali".to_string()),
-    )));
+    let mut transcoder = Transcoder::default();
+    transcoder.add_compiler(BaliCompiler);
+    transcoder.add_compiler(DummyCompiler);
+    transcoder.set_active_compiler("bali");
+    let transcoder = Arc::new(tokio::sync::Mutex::new(transcoder));
 
     // Shared flag for transport state (playing/stopped)
     let shared_atomic_is_playing = Arc::new(AtomicBool::new(false));

@@ -10,8 +10,8 @@ use crate::compiler::dummylang::dummygrammar;
 #[derive(Debug)]
 pub struct DummyCompiler;
 impl Compiler for DummyCompiler {
-    fn name(&self) -> String {
-        "dummy".to_string()
+    fn name(&self) -> &str {
+        "dummy"
     }
 
     fn compile(&self, script: &str) -> Result<Program, CompilationError> {
