@@ -5,6 +5,7 @@ pub mod directory;
 pub mod asm_interpreter;
 
 pub mod boinx;
+pub mod external;
 
 pub use factory::InterpreterFactory;
 

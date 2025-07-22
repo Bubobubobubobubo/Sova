@@ -1,4 +1,4 @@
-use crate::lang::interpreter::{Interpreter, InterpreterFactory};
+use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}}};
 
 pub struct BoinxInterpreter {
 
@@ -8,8 +8,8 @@ impl Interpreter for BoinxInterpreter {
 
     fn execute_next(
         &mut self,
-        ctx : &mut crate::lang::evaluation_context::EvaluationContext
-    ) -> (Option<crate::lang::event::ConcreteEvent>, Option<crate::clock::SyncTime>) {
+        ctx : &mut EvaluationContext
+    ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
         todo!()
     }
 
@@ -33,7 +33,7 @@ impl InterpreterFactory for BoinxInterpreterFactory {
         "boinx"
     }
 
-    fn make_instance(&self, content : String) -> Box<dyn Interpreter> {
+    fn make_instance(&self, content : &str) -> Box<dyn Interpreter> {
         todo!()
     }
 

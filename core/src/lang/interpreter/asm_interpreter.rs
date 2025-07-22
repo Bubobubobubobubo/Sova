@@ -109,8 +109,8 @@ impl ASMInterpreterFactory {
         ASMInterpreterFactory { transcoder }
     }
 
-    pub fn make_instance(&self, lang: &str, content : String) -> Option<Box<dyn Interpreter>> {
-        let Ok(prog) = self.transcoder.compile(&content, lang) else {
+    pub fn make_instance(&self, lang: &str, content : &str) -> Option<Box<dyn Interpreter>> {
+        let Ok(prog) = self.transcoder.compile(content, lang) else {
             return None;
         };
         Some(Box::new(ASMInterpreter::new(prog)))

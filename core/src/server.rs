@@ -1,4 +1,4 @@
-use crate::scene::script::Script;
+use crate::{lang::interpreter::directory::InterpreterDirectory, scene::script::Script};
 use client::ClientMessage;
 use crossbeam_channel::Sender;
 use serde::{Deserialize, Serialize};
@@ -64,8 +64,8 @@ pub struct ServerState {
     /// A snapshot of the current scene state, shared across threads.
     /// Updated by a dedicated maintenance thread listening to scheduler notifications.
     pub scene_image: Arc<Mutex<Scene>>,
-    /// Handles script compilation (e.g., Baliscript).
-    pub transcoder: Arc<Mutex<Transcoder>>,
+    /// Handles script compilation (e.g., Baliscript) and interpretation.
+    pub interpreter_directory: Arc<Mutex<InterpreterDirectory>>,
     /// Shared flag indicating current transport status, updated by the Scheduler.
     pub shared_atomic_is_playing: Arc<AtomicBool>,
     /// Optional relay client for remote collaboration
@@ -94,7 +94,7 @@ impl ServerState {
         sched_iface: Sender<SchedulerMessage>,
         update_sender: watch::Sender<SchedulerNotification>,
         update_receiver: watch::Receiver<SchedulerNotification>,
-        transcoder: Arc<Mutex<Transcoder>>,
+        interpreter_directory: Arc<Mutex<InterpreterDirectory>>,
         shared_atomic_is_playing: Arc<AtomicBool>,
     ) -> Self {
         ServerState {
@@ -106,7 +106,7 @@ impl ServerState {
             update_receiver,
             clients: Arc::new(Mutex::new(Vec::new())),
             scene_image,
-            transcoder,
+            interpreter_directory,
             shared_atomic_is_playing,
             relay_client: None,
         }

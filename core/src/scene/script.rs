@@ -9,7 +9,7 @@ use crate::{device_map::DeviceMap, lang::interpreter::Interpreter};
 use crate::{
     clock::{Clock, SyncTime},
     lang::{
-        Instruction, Program,
+        Program,
         evaluation_context::EvaluationContext,
         event::ConcreteEvent,
         variable::{VariableStore, VariableValue},
