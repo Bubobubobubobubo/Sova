@@ -1,10 +1,10 @@
 use crate::{
     clock::{Clock, SyncTime},
     log_println,
-    scene::{Scene, script::ScriptExecution},
+    scene::{script::ScriptExecution, Scene},
     schedule::{
         frame_index::calculate_frame_index, notification::SchedulerNotification,
-        scheduler_state::PlaybackState,
+        scheduler_state::PlaybackState, Scheduler,
     },
 };
 use crossbeam_channel::Sender;
@@ -191,7 +191,7 @@ impl PlaybackManager {
                 && rep == 0
             {
                 let script = Arc::clone(&line.scripts[frame]);
-                executions.push(ScriptExecution::execute_at(script, line.index, start_date));
+                Scheduler::execute_script(executions, &script, line.index, start_date);
                 log_println!(
                     "[SCHEDULER] Queued script for Line {} Frame {} at start",
                     line.index, frame

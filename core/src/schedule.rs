@@ -4,7 +4,7 @@ use crate::{
     lang::variable::{VariableStore, VariableValue},
     log_println,
     protocol::message::TimedMessage,
-    scene::{Scene, script::ScriptExecution},
+    scene::{script::{Script, ScriptExecution}, Scene},
     schedule::{
         action_timing::ActionTiming,
         execution::ExecutionManager,
@@ -135,12 +135,8 @@ impl Scheduler {
             let (frame, _, _, scheduled_date, _) =
                 calculate_frame_index(&self.clock, scene_len, line, date);
             if frame < usize::MAX && line.is_frame_enabled(frame) {
-                let script = Arc::clone(&line.scripts[frame]);
-                self.executions.push(ScriptExecution::execute_at(
-                    script,
-                    line.index,
-                    scheduled_date,
-                ));
+                let script = &line.scripts[frame];
+                Self::execute_script(&mut self.executions, script, line.index, date);
             }
         }
 
@@ -354,12 +350,8 @@ impl Scheduler {
                     }
 
                     if frame < usize::MAX && has_changed && line.is_frame_enabled(frame) {
-                        let script = Arc::clone(&line.scripts[frame]);
-                        self.executions.push(ScriptExecution::execute_at(
-                            script,
-                            line.index,
-                            scheduled_date,
-                        ));
+                        let script = &line.scripts[frame];
+                        Self::execute_script(&mut self.executions, script, line.index, scheduled_date);
                         if frame != line.current_frame || iter != line.current_iteration {
                             line.frames_executed += 1;
                         }
@@ -435,4 +427,15 @@ impl Scheduler {
     pub fn kill_all(&mut self) {
         self.executions.clear();
     }
+
+    pub fn execute_script(executions : &mut Vec<ScriptExecution>, script : &Arc<Script>, line_index : usize, date : SyncTime) {
+        todo!();
+        // executions.push(ScriptExecution::execute_at(
+        //     Arc::clone(script), 
+        //     interpreter, 
+        //     line_index, 
+        //     date
+        // ));
+    }
+
 }

@@ -1,6 +1,4 @@
-use std::sync::Arc;
-
-use crate::{clock::{Clock, SyncTime}, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, variable::VariableStore}, scene::line::Line};
+use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, variable::VariableStore}, scene::line::Line};
 
 pub mod asm_interpreter;
 
