@@ -51,25 +51,7 @@ impl Script {
             index,
         }
     }
-}
 
-pub enum ReturnInfo {
-    None,
-    IndexChange(usize),
-    RelIndexChange(i64),
-    ProgChange(usize, Program),
-}
-
-pub struct ScriptExecution {
-    pub script: Arc<Script>,
-    pub line_index: usize,
-    pub instance_vars: VariableStore,
-    pub stack: Vec<VariableValue>,
-    pub scheduled_time: SyncTime,
-    pub interpreter: Box<dyn Interpreter>
-}
-
-impl Script {
     #[inline]
     pub fn is_empty(&self) -> bool {
         self.content.is_empty()
@@ -109,6 +91,22 @@ impl From<String> for Script {
             ..Default::default()
         }
     }
+}
+
+pub enum ReturnInfo {
+    None,
+    IndexChange(usize),
+    RelIndexChange(i64),
+    ProgChange(usize, Program),
+}
+
+pub struct ScriptExecution {
+    pub script: Arc<Script>,
+    pub line_index: usize,
+    pub instance_vars: VariableStore,
+    pub stack: Vec<VariableValue>,
+    pub scheduled_time: SyncTime,
+    pub interpreter: Box<dyn Interpreter>
 }
 
 impl ScriptExecution {
@@ -155,21 +153,19 @@ impl ScriptExecution {
             device_map,
         };
         let (opt_ev, opt_wait) = self.interpreter.execute_next(&mut ctx);
+        if opt_ev.is_none() && opt_wait.is_none() {
+            return None;
+        }
         let wait = match opt_wait {
             Some(dt) => dt,
             _ => 0
         };
+        let mut res = (ConcreteEvent::Nop, self.scheduled_time);
         if let Some(ev) = opt_ev {
-
+            res.0 = ev;
         };
         self.scheduled_time += wait;
-        if let Some((ev, wait)) = self.interpreter.execute_next(&mut ctx) {
-            let res = Some((ev, self.scheduled_time));
-            
-            res
-        } else {
-            None
-        }
+        Some(res)
     }
 
     #[inline]
