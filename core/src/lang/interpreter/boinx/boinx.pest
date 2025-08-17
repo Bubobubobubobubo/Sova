@@ -1,0 +1,74 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE }
+COMMENT = _{ "//" ~ (!NEWLINE ~ ANY)* }
+
+note_letter = { 'A'..'G' }
+letter = _{ ASCII_ALPHA }
+digit = _{ ASCII_DIGIT }
+int = @{ digit+ }
+prev = { "$" }
+stop = { "!" }
+
+seq_var = { "§" }
+env_func = { "_" }
+qualif = _{ seq_var | env_func }
+
+sharp = { "#" }
+flat = { "b" }
+
+compo_op = { "|" }
+iter_op = { "°" }
+
+cond_op = _{ "?" }
+else_op = _{ ":" }
+
+note = ${ note_letter ~ int? ~ (sharp | flat)* ~ !letter }
+
+real = @{ int ~ "." ~ int }
+number = _{ real | int }
+micros = ${ number ~ "u" } 
+semibeats = ${ number ~ "''" } 
+beats = ${ number ~ "'" } 
+
+add = { "+" }
+sub = { "-" }
+mul = { "*" }
+div = { "/" }
+rem = { "-" }
+shl = { "<<" }
+shr = { ">>" }
+pow = { "^" }
+
+bin_op = _{ add | sub | mul | div | rem | shl | shr | pow }
+minus = { "-" }
+comp_op = { "<" | "<=" | "==" | ">=" | ">" | "!=" }
+
+name = { (letter | digit | "_")+ }
+ident = ${ !note ~ qualif? ~ name }
+
+duration = _{ micros | semibeats | beats | real }
+
+mute = { "_" }
+placeholder = { "." }
+
+sub_prog = { "{" ~ block ~ "}" }
+cond = { item ~ comp_op ~ item }
+if_else = { cond_op ~ cond ~ sub_prog ~ else_op ~ sub_prog }
+el = _{ sub_prog | simul | seque | if_else | placeholder | stop | prev | note | duration | number | ident | mute }
+item = { minus? ~ el ~ (bin_op ~ item)? }
+seque = { "[" ~ item* ~ "]" }
+
+simul = { "(" ~ item* ~ ")" }
+atomic_compo = _{ seque | simul | item }
+compo = _{ atomic_compo ~ ( (compo_op | iter_op) ~ atomic_compo )* }
+
+dev = { (!":" ~ ANY)+ }
+chan = { int | ident }
+target = _{ dev? ~ ":" ~ chan }
+
+output = { compo ~ ("@" ~ target)? }
+assign = { ident ~ "=" ~ output }
+
+statement = _{ assign | output }
+block = _{ statement+ }
+
+prog = _{ SOI ~ block* ~ EOI }

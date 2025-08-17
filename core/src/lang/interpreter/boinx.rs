@@ -1,5 +1,7 @@
 use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}}, scene::script::Script};
 
+mod boinx_ast;
+
 pub struct BoinxInterpreter {
 
 }
