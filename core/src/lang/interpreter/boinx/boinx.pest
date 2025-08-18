@@ -92,4 +92,8 @@ kick | [ . _ ] @: 3
 snare | [ _ . ] @: 3
 hh | [[..]] @: 3
 
+after = [_ .] ° [. 1.0]
+
+(pattern delay) ° after
+
 */

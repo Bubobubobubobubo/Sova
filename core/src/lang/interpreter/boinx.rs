@@ -1,9 +1,14 @@
-use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}}, scene::script::Script};
+use crate::{clock::{SyncTime, TimeSpan}, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}}, scene::script::Script};
 
 mod boinx_ast;
 
-pub struct BoinxInterpreter {
+use boinx_ast::*;
 
+pub struct BoinxInterpreter {
+    pub prog: BoinxProg,
+    pub execution_lines: Vec<f64>,
+    pub time_span: TimeSpan,
+    pub return_value: BoinxItem
 }
 
 impl Interpreter for BoinxInterpreter {
