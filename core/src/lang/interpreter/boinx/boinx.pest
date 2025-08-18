@@ -17,6 +17,7 @@ flat = { "b" }
 
 compo_op = { "|" }
 iter_op = { "°" }
+each_op = { "~" }
 
 cond_op = _{ "?" }
 else_op = _{ ":" }
@@ -59,7 +60,7 @@ seque = { "[" ~ item* ~ "]" }
 
 simul = { "(" ~ item* ~ ")" }
 atomic_compo = _{ seque | simul | item }
-compo = _{ atomic_compo ~ ( (compo_op | iter_op) ~ atomic_compo )* }
+compo = _{ atomic_compo ~ ( (compo_op | iter_op | each_op) ~ atomic_compo )* }
 
 dev = { (!":" ~ ANY)+ }
 chan = { int | ident }
@@ -72,3 +73,23 @@ statement = _{ assign | output }
 block = _{ statement+ }
 
 prog = _{ SOI ~ block* ~ EOI }
+
+/*
+Example track:
+
+chords = [ C4 A3 F3 G5 ]
+
+maj = (. .+4 .+7)
+min = (. .+3 .+7)
+
+chords ° [ maj min maj maj ] @: 1
+
+chords ~ (. - 12) ~ [....] ° [....] @: 2
+
+kick = 1 snare = 2 hh = 3  
+
+kick | [ . _ ] @: 3
+snare | [ _ . ] @: 3
+hh | [[..]] @: 3
+
+*/
