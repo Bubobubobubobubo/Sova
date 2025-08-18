@@ -9,7 +9,7 @@ pub struct BoinxCondition(Box<BoinxItem>, String, Box<BoinxItem>);
 
 pub struct BoinxIfElse(BoinxCondition, Box<BoinxProg>, Box<BoinxProg>);
 
-pub enum BoinxArithemicOp {
+pub enum BoinxArithmeticOp {
     Add, Sub, Mul, Div, Rem, Shl, Shr, Pow
 }
 pub struct BoinxArithmetic(Box<BoinxItem>, BoinxArithmeticOp, Box<BoinxItem>);
