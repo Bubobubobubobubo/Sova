@@ -220,6 +220,11 @@ impl From<TimeSpan> for VariableValue {
         VariableValue::Dur(value)
     }
 }
+impl From<HashMap<String, VariableValue>> for VariableValue {
+    fn from(value: HashMap<String, VariableValue>) -> Self {
+        VariableValue::Map(value)
+    }
+}
 
 impl VariableValue {
     pub fn clone_type(&self) -> VariableValue {

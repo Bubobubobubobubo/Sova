@@ -1,11 +1,13 @@
-use std::fmt::Display;
+use std::{collections::HashMap, fmt::Display};
 
 use crate::{
     clock::TimeSpan,
     lang::{Program, evaluation_context::EvaluationContext, variable::VariableValue},
 };
 
+#[derive(Debug, Clone, Default)]
 pub enum BoinxIdentQualif {
+    #[default]
     LocalVar,
     SeqVar,
     EnvFunc,
@@ -21,11 +23,18 @@ impl Display for BoinxIdentQualif {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct BoinxIdent(String, BoinxIdentQualif);
 
 impl From<String> for BoinxIdent {
     fn from(value: String) -> Self {
-        todo!()
+        if value.starts_with("_") {
+            BoinxIdent(value.split_at(1).1.to_owned(), BoinxIdentQualif::EnvFunc)
+        } else if value.starts_with("§") {
+            BoinxIdent(value.split_at(1).1.to_owned(), BoinxIdentQualif::SeqVar)
+        } else {
+            BoinxIdent(value, BoinxIdentQualif::LocalVar)
+        }
     }
 }
 
@@ -35,15 +44,45 @@ impl Display for BoinxIdent {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub enum BoinxConditionOp {
     Less,
     LessEq,
+    #[default]
     Equal,
     NotEqual,
     GreaterEq,
     Greater,
 }
 
+impl BoinxConditionOp {
+    pub fn parse(txt: &str) -> Self {
+        match txt {
+            "<" => Self::Less,
+            "<=" => Self::LessEq,
+            "==" => Self::Equal,
+            "!=" => Self::NotEqual,
+            ">=" => Self::GreaterEq,
+            ">" => Self::Greater,
+            _ => Self::Equal,
+        }
+    }
+}
+
+impl Display for BoinxConditionOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoinxConditionOp::Less => write!(f, "<"),
+            BoinxConditionOp::LessEq => write!(f, "<="),
+            BoinxConditionOp::Equal => write!(f, "=="),
+            BoinxConditionOp::NotEqual => write!(f, "!="),
+            BoinxConditionOp::GreaterEq => write!(f, ">="),
+            BoinxConditionOp::Greater => write!(f, ">"),
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct BoinxCondition(Box<BoinxItem>, BoinxConditionOp, Box<BoinxItem>);
 
 impl BoinxCondition {
@@ -52,7 +91,9 @@ impl BoinxCondition {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub enum BoinxArithmeticOp {
+    #[default]
     Add,
     Sub,
     Mul,
@@ -63,7 +104,40 @@ pub enum BoinxArithmeticOp {
     Pow,
 }
 
+impl BoinxArithmeticOp {
+    pub fn parse(txt: &str) -> Self {
+        match txt {
+            "+" => Self::Add,
+            "-" => Self::Sub,
+            "*" => Self::Mul,
+            "/" => Self::Div,
+            "%" => Self::Rem,
+            "<<" => Self::Shl,
+            ">>" => Self::Shr,
+            "^" => Self::Pow,
+            _ => Self::Add,
+        }
+    }
+}
+
+impl Display for BoinxArithmeticOp {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BoinxArithmeticOp::Add => write!(f, "+"),
+            BoinxArithmeticOp::Sub => write!(f, "-"),
+            BoinxArithmeticOp::Mul => write!(f, "*"),
+            BoinxArithmeticOp::Div => write!(f, "/"),
+            BoinxArithmeticOp::Rem => write!(f, "%"),
+            BoinxArithmeticOp::Shl => write!(f, "<<"),
+            BoinxArithmeticOp::Shr => write!(f, ">>"),
+            BoinxArithmeticOp::Pow => write!(f, "^"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub enum BoinxItem {
+    #[default]
     Mute,
     Placeholder,
     Stop,
@@ -120,26 +194,58 @@ impl BoinxItem {
             BoinxItem::External(_) => 14,
         }
     }
+
+    fn generate_map(&self) -> HashMap<String, VariableValue> {
+        let mut map = HashMap::new();
+        map.insert("_type_id".to_owned(), self.type_id().into());
+        map
+    }
 }
 
 impl From<BoinxItem> for VariableValue {
     fn from(value: BoinxItem) -> Self {
+        let mut map = value.generate_map();
         match value {
-            BoinxItem::Mute => todo!(),
-            BoinxItem::Placeholder => todo!(),
-            BoinxItem::Stop => todo!(),
-            BoinxItem::Previous => todo!(),
-            BoinxItem::Note(_) => todo!(),
-            BoinxItem::Number(_) => todo!(),
-            BoinxItem::Sequence(boinx_items) => todo!(),
-            BoinxItem::Simultaneous(boinx_items) => todo!(),
-            BoinxItem::Duration(boinx_duration) => todo!(),
-            BoinxItem::Condition(boinx_condition, boinx_prog, boinx_prog1) => todo!(),
-            BoinxItem::Identity(boinx_ident) => todo!(),
-            BoinxItem::SubProg(boinx_prog) => todo!(),
-            BoinxItem::Arithmetic(boinx_item, boinx_arithmetic_op, boinx_item1) => todo!(),
-            BoinxItem::WithDuration(boinx_item, boinx_duration) => todo!(),
-            BoinxItem::External(instructions) => todo!(),
+            BoinxItem::Mute | BoinxItem::Placeholder | BoinxItem::Stop | BoinxItem::Previous => {
+                map.into()
+            }
+            BoinxItem::Note(i) => i.into(),
+            BoinxItem::Number(f) => f.into(),
+            BoinxItem::Sequence(items) | BoinxItem::Simultaneous(items) => {
+                map.insert("_len".to_owned(), (items.len() as i64).into());
+                for (i, item) in items.into_iter().enumerate() {
+                    map.insert(format!("{}", i), item.into());
+                }
+                map.into()
+            }
+            BoinxItem::Duration(dur) => dur.into(),
+            BoinxItem::Condition(cond, p1, p2) => {
+                let BoinxCondition(i1, op, i2) = cond;
+                map.insert("0".to_owned(), (*i1).into());
+                map.insert("1".to_owned(), (*i2).into());
+                map.insert("_op".to_owned(), format!("{}", op).into());
+                map.insert("_if".to_owned(), (*p1).into());
+                map.insert("_else".to_owned(), (*p2).into());
+                map.into()
+            }
+            BoinxItem::Identity(ident) => format!("{}", ident).into(),
+            BoinxItem::SubProg(prog) => {
+                map.insert("_prog".to_owned(), (*prog).into());
+                map.into()
+            }
+            BoinxItem::Arithmetic(i1, op, i2) => {
+                let op = format!("{}", op);
+                map.insert("0".to_owned(), (*i1).into());
+                map.insert("1".to_owned(), (*i2).into());
+                map.insert("_op".to_owned(), op.into());
+                map.into()
+            }
+            BoinxItem::WithDuration(boinx_item, dur) => {
+                map.insert("_item".to_owned(), (*boinx_item).into());
+                map.insert("_dur".to_owned(), dur.into());
+                map.into()
+            }
+            BoinxItem::External(prog) => VariableValue::Func(prog),
         }
     }
 }
@@ -149,13 +255,15 @@ impl From<VariableValue> for BoinxItem {
         match value {
             VariableValue::Integer(i) => BoinxItem::Note(i),
             VariableValue::Float(f) => BoinxItem::Number(f),
-            VariableValue::Decimal(_, _, _) => todo!(),
+            VariableValue::Decimal(s, p, q) => {
+                BoinxItem::Number((s as f64) * (p as f64) / (q as f64))
+            }
             VariableValue::Bool(b) => BoinxItem::Note(b as i64),
             VariableValue::Str(s) => BoinxItem::Identity(s.into()),
             VariableValue::Dur(time_span) => BoinxItem::Duration(time_span),
             VariableValue::Func(instructions) => BoinxItem::External(instructions),
-            VariableValue::Map(map) => {
-                let Some(VariableValue::Integer(type_id)) = map.get("type_id") else {
+            VariableValue::Map(mut map) => {
+                let Some(VariableValue::Integer(type_id)) = map.remove("_type_id") else {
                     return BoinxItem::Mute;
                 };
                 match type_id {
@@ -163,9 +271,69 @@ impl From<VariableValue> for BoinxItem {
                     1 => BoinxItem::Placeholder,
                     2 => BoinxItem::Stop,
                     3 => BoinxItem::Previous,
-                    6 => {}
-                    7 => {}
-                    9 => {}
+                    6 | 7 => {
+                        let Some(VariableValue::Integer(len)) = map.remove("_len") else {
+                            return BoinxItem::Mute;
+                        };
+                        let mut vec: Vec<BoinxItem> = Vec::new();
+                        for i in 0..len {
+                            let index = format!("{}", i);
+                            let Some(item) = map.remove(&index) else {
+                                return BoinxItem::Mute;
+                            };
+                            vec.push(item.into());
+                        }
+                        if type_id == 6 {
+                            return BoinxItem::Sequence(vec);
+                        } else {
+                            return BoinxItem::Simultaneous(vec);
+                        }
+                    }
+                    9 => {
+                        let (Some(i1), Some(i2)) = (map.remove("0"), map.remove("1")) else {
+                            return BoinxItem::Mute;
+                        };
+                        let (Some(p1), Some(p2)) = (map.remove("_if"), map.remove("_else")) else {
+                            return BoinxItem::Mute;
+                        };
+                        let Some(VariableValue::Str(op)) = map.get("_op") else {
+                            return BoinxItem::Mute;
+                        };
+                        let condition = BoinxCondition(
+                            Box::new(i1.into()),
+                            BoinxConditionOp::parse(op),
+                            Box::new(i2.into()),
+                        );
+                        BoinxItem::Condition(condition, Box::new(p1.into()), Box::new(p2.into()))
+                    }
+                    11 => {
+                        let Some(prog) = map.remove("_prog") else {
+                            return BoinxItem::Mute;
+                        };
+                        BoinxItem::SubProg(Box::new(prog.into()))
+                    }
+                    12 => {
+                        let (Some(i1), Some(i2)) = (map.remove("0"), map.remove("1")) else {
+                            return BoinxItem::Mute;
+                        };
+                        let Some(VariableValue::Str(op)) = map.get("_op") else {
+                            return BoinxItem::Mute;
+                        };
+                        BoinxItem::Arithmetic(
+                            Box::new(i1.into()),
+                            BoinxArithmeticOp::parse(op),
+                            Box::new(i2.into()),
+                        )
+                    }
+                    13 => {
+                        let Some(item) = map.remove("_item") else {
+                            return BoinxItem::Mute;
+                        };
+                        let Some(VariableValue::Dur(time_span)) = map.remove("_dur") else {
+                            return BoinxItem::Mute;
+                        };
+                        BoinxItem::WithDuration(Box::new(item.into()), time_span)
+                    }
                     _ => BoinxItem::Mute,
                 }
             }
@@ -173,32 +341,144 @@ impl From<VariableValue> for BoinxItem {
     }
 }
 
+#[derive(Debug, Clone, Default)]
 pub enum BoinxCompoOp {
+    #[default]
     Compose,
     Iterate,
     Each,
 }
 
+#[derive(Debug, Clone)]
 pub struct BoinxCompo {
     pub item: BoinxItem,
     pub next: Option<(BoinxCompoOp, Box<BoinxCompo>)>,
 }
 
+impl From<VariableValue> for BoinxCompo {
+    fn from(value: VariableValue) -> Self {
+        todo!()
+    }
+}
+
+impl From<BoinxCompo> for VariableValue {
+    fn from(value: BoinxCompo) -> Self {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct BoinxOutput {
     pub compo: BoinxCompo,
     pub device: Option<BoinxItem>,
     pub channel: Option<BoinxItem>,
 }
 
+impl From<VariableValue> for BoinxOutput {
+    fn from(value: VariableValue) -> Self {
+        let VariableValue::Map(mut map) = value else {
+            return Self::default();
+        };
+        let Some(output) = map.remove("_out") else {
+            return Self::default();
+        };
+    }
+}
+
+impl From<BoinxOutput> for VariableValue {
+    fn from(value: BoinxOutput) -> Self {
+        todo!()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum BoinxStatement {
     Output(BoinxOutput),
     Assign(String, BoinxOutput),
 }
 
+impl Default for BoinxStatement {
+    fn default() -> Self {
+        let output = BoinxOutput {
+            compo: BoinxCompo {
+                item: BoinxItem::Mute,
+                next: None,
+            },
+            device: None,
+            channel: None,
+        };
+        Self::Output(output)
+    }
+}
+
+impl From<VariableValue> for BoinxStatement {
+    fn from(value: VariableValue) -> Self {
+        let VariableValue::Map(mut map) = value else {
+            return Self::default();
+        };
+        let Some(output) = map.remove("_out") else {
+            return Self::default();
+        };
+        if let Some(VariableValue::Str(target)) = map.remove("_target") {
+            Self::Assign(target, output.into())
+        } else {
+            Self::Output(output.into())
+        }
+    }
+}
+
+impl From<BoinxStatement> for VariableValue {
+    fn from(value: BoinxStatement) -> Self {
+        let mut map: HashMap<String, VariableValue> = HashMap::new();
+        match value {
+            BoinxStatement::Output(output) => {
+                map.insert("_out".to_owned(), output.into());
+            }
+            BoinxStatement::Assign(name, output) => {
+                map.insert("_out".to_owned(), output.into());
+                map.insert("_target".to_owned(), name.into());
+            }
+        };
+        map.into()
+    }
+}
+
+#[derive(Debug, Clone, Default)]
 pub struct BoinxProg(Vec<BoinxStatement>);
 
 impl BoinxProg {
     pub fn has_slot(&self, ctx: &EvaluationContext) -> bool {
         todo!()
+    }
+}
+
+impl From<VariableValue> for BoinxProg {
+    fn from(value: VariableValue) -> Self {
+        let VariableValue::Map(mut map) = value else {
+            return Self::default();
+        };
+        let Some(VariableValue::Integer(len)) = map.remove("_len") else {
+            return Self::default();
+        };
+        let mut prog: Vec<BoinxStatement> = Vec::new();
+        for i in 0..len {
+            let index = format!("{}", i);
+            let Some(item) = map.remove(&index) else {
+                return Self::default();
+            };
+            prog.push(item.into());
+        }
+        BoinxProg(prog)
+    }
+}
+
+impl From<BoinxProg> for VariableValue {
+    fn from(value: BoinxProg) -> Self {
+        let mut map: HashMap<String, VariableValue> = HashMap::new();
+        map.insert("_len".to_owned(), (value.0.len() as i64).into());
+        for (i, item) in value.0.into_iter().enumerate() {
+            map.insert(format!("{}", i), item.into());
+        }
+        map.into()
     }
 }
