@@ -20,7 +20,8 @@ impl Interpreter for BoinxInterpreter {
     ) -> (Option<ConcreteEvent>, Option<SyncTime>) { 
         for line in self.execution_lines.iter() {
 
-        }
+        };
+        (None, None)
     }
 
     fn has_terminated(&self) -> bool {

@@ -2,7 +2,7 @@ use std::{collections::HashMap, fmt::Display, iter};
 
 use crate::{
     clock::TimeSpan,
-    lang::{Program, evaluation_context::EvaluationContext, variable::VariableValue},
+    lang::{evaluation_context::EvaluationContext, variable::{Variable, VariableValue}, Program},
 };
 
 #[derive(Debug, Clone, Default)]
@@ -101,6 +101,10 @@ impl BoinxCondition {
     pub fn has_slot(&self, ctx: &EvaluationContext) -> bool {
         self.0.has_slot(ctx) || self.2.has_slot(ctx)
     }
+    
+    pub fn slots<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut BoinxItem> + 'a> {
+        Box::new(self.0.slots().chain(self.2.slots()))
+    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -186,32 +190,39 @@ impl BoinxItem {
     pub fn evaluate(&self, ctx : &EvaluationContext) -> BoinxItem {
         match self {
             Self::Identity(x) => x.evaluate(ctx),
-            _ => self
+            _ => self.clone()
         }
     }
 
-    pub fn slots(&mut self) -> Box<dyn Iterator<Item = &mut BoinxItem>> {
-        Box::new(match self {
-            Self::Sequence(v) | Self::Simultaneous(v) => 
-                v.iter().map(|i| i.slots()).flatten(),
-            Self::Duration(_) | Self::Placeholder => iter::once(self),
-            Self::Condition(c, prog1, prog2) => {
-                c.slots().chain(prog1.slots()).chain(prog2.slots())
-            }
-            Self::Identity(x) => iter::empty(),
-            Self::SubProg(p) => p.slots(),
-            Self::Arithmetic(a, _, b) => 
-                a.slots().chain(b.slots()),
-            Self::WithDuration(i, _) => i.slots(),
-            _ => iter::empty(),
-        })
+    pub fn slots<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut BoinxItem> + 'a> {
+        match self {
+            Self::Sequence(v) | Self::Simultaneous(v)
+                => Box::new(v.iter_mut().map(|i| i.slots()).flatten()),
+            Self::Duration(_) | Self::Placeholder => Box::new(iter::once(self)),
+            Self::Condition(c, prog1, prog2)
+                => Box::new(c.slots().chain(prog1.slots()).chain(prog2.slots())),
+            Self::Identity(_) => Box::new(iter::empty()),
+            Self::SubProg(p) => Box::new(p.slots()),
+            Self::Arithmetic(a, _, b)
+                => Box::new(a.slots().chain(b.slots())),
+            Self::WithDuration(i, _) => Box::new(i.slots()),
+            _ => Box::new(iter::empty()),
+        }
     }
 
-    pub fn items(&self) -> Box<dyn Iterator<Item = &BoinxItem>> {
+    pub fn items<'a>(&'a self) -> Box<dyn Iterator<Item = &'a BoinxItem> + 'a> {
         match self {
             BoinxItem::Sequence(items) | BoinxItem::Simultaneous(items) 
-                => items.iter(),
-            _ => iter::once(self),
+                => Box::new(items.iter()),
+            _ => Box::new(iter::once(self)),
+        }
+    }
+
+    pub fn items_mut<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut BoinxItem> + 'a> {
+        match self {
+            BoinxItem::Sequence(items) | BoinxItem::Simultaneous(items) 
+                => Box::new(items.iter_mut()),
+            _ => Box::new(iter::once(self)),
         }
     }
 
@@ -397,6 +408,7 @@ impl BoinxCompoOp {
             "|" => Self::Compose,
             "°" => Self::Iterate,
             "~" => Self::Each,
+            _ => Self::Compose
         }
     }
 }
@@ -422,31 +434,46 @@ impl BoinxCompo {
         self.item.has_slot(ctx)
     }
 
-    pub fn slots(&mut self) -> Box<dyn Iterator<Item = &mut BoinxItem>> {
+    pub fn slots<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut BoinxItem> + 'a> {
         self.item.slots()
     }
 
-    pub fn flatten(&self, ctx: &EvaluationContext) -> BoinxItem {
-        let Some((op, next)) = self.next else {
-            return self.item.clone();
+    pub fn flatten(self, ctx: &EvaluationContext) -> BoinxItem {
+        let mut item = self.item;
+        let Some((op, mut next)) = self.next else {
+            return item;
         };
-        let item = self.item;
-        let mut next = next.clone();
         match op {
             BoinxCompoOp::Compose => {
                 for slot in next.slots() {
-                    *slot = self.item.clone();
+                    *slot = item.clone();
                 }
             },
             BoinxCompoOp::Iterate => {
-                let items = item.items().cycle();
+                let mut items = item.items();
                 for slot in next.slots() {
+                    let mut to_insert = BoinxItem::default();
                     if let Some(i) = items.next() {
-                        *slot = i.clone();
-                    };
+                        to_insert = i.clone();
+                    } else {
+                        items = item.items();
+                        if let Some(i) = items.next() {
+                            to_insert = i.clone();
+                        };
+                    }
+                    *slot = to_insert;
                 }
             },
-            BoinxCompoOp::Each => todo!(),
+            BoinxCompoOp::Each => {
+                for i in item.items_mut() {
+                    let mut n = next.item.clone();
+                    for slot in n.slots() {
+                        *slot = i.clone();
+                    }
+                    *i = n;
+                }
+                next.item = item;
+            },
         }
         next.flatten(ctx)
     }
@@ -454,7 +481,7 @@ impl BoinxCompo {
 
 impl From<VariableValue> for BoinxCompo {
     fn from(value: VariableValue) -> Self {
-        let Map(mut map) = value else {
+        let VariableValue::Map(mut map) = value else {
             return Self::default();
         };
         let Some(item) = map.remove("_item") else {
@@ -463,9 +490,9 @@ impl From<VariableValue> for BoinxCompo {
         let item = BoinxItem::from(item);
         let mut compo = BoinxCompo { item, next: None };
         if let (Some(VariableValue::Str(op)), Some(next)) = (map.remove("_op"), map.remove("_next")) {
-            let op = BoinxCompoOp::parse(op);
+            let op = BoinxCompoOp::parse(&op);
             let next = BoinxCompo::from(next);
-            compo.next = Some((op, next));
+            compo.next = Some((op, Box::new(next)));
         };
         compo
     }
@@ -475,9 +502,9 @@ impl From<BoinxCompo> for VariableValue {
     fn from(value: BoinxCompo) -> Self {
         let mut map : HashMap<String, VariableValue> = HashMap::new();
         let BoinxCompo { item, next } = value;
-        map.insert("_item".to_owned(), item);
+        map.insert("_item".to_owned(), item.into());
         if let Some((op, compo)) = next {
-            map.insert("_op".to_owned(), op.to_string());
+            map.insert("_op".to_owned(), op.to_string().into());
             map.insert("_next".to_owned(), (*compo).into());
         };
         map.into()
@@ -493,7 +520,7 @@ impl Default for BoinxCompo {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct BoinxOutput {
     pub compo: BoinxCompo,
     pub device: Option<BoinxItem>,
@@ -520,11 +547,11 @@ impl From<VariableValue> for BoinxOutput {
 impl From<BoinxOutput> for VariableValue {
     fn from(value: BoinxOutput) -> Self {
         let mut map : HashMap<String, VariableValue> = HashMap::new();
-        map.insert("_out".to_owned(), self.compo.into());
-        if let Some(item) = self.device {
+        map.insert("_out".to_owned(), value.compo.into());
+        if let Some(item) = value.device {
             map.insert("_dev".to_owned(), item.into());
         };
-        if let Some(item) = self.channel {
+        if let Some(item) = value.channel {
             map.insert("_chan".to_owned(), item.into());
         };
         map.into()
@@ -540,15 +567,15 @@ pub enum BoinxStatement {
 impl BoinxStatement {
     pub fn compo(&self) -> &BoinxCompo {
         match self {
-            Output(out) => &out.compo,
-            Assign(name, out) => &out.compo
+            Self::Output(out) => &out.compo,
+            Self::Assign(_, out) => &out.compo
         }
     }
 
     pub fn compo_mut(&mut self) -> &mut BoinxCompo {
         match self {
-            Output(out) => &mut out.compo,
-            Assign(name, out) => &mut out.compo
+            Self::Output(out) => &mut out.compo,
+            Self::Assign(_, out) => &mut out.compo
         }
     }
 }
@@ -604,9 +631,9 @@ impl BoinxProg {
         self.0.iter().any(|s| s.compo().has_slot(ctx))
     }
     
-    pub fn slots(&mut self) -> Box<dyn Iterator<Item = &mut BoinxItem>> {
+    pub fn slots<'a>(&'a mut self) -> Box<dyn Iterator<Item = &'a mut BoinxItem> + 'a> {
         Box::new(self.0.iter_mut().map(|s| {
-            s.compo().slots()
+            s.compo_mut().slots()
         }).flatten())
     }
 }
