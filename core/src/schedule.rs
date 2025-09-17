@@ -15,7 +15,6 @@ use crate::{
     schedule::{
         action_timing::ActionTiming,
         execution::ExecutionManager,
-        frame_index::calculate_frame_index,
         message::SchedulerMessage,
         notification::SchedulerNotification,
         playback::PlaybackManager,
@@ -26,7 +25,6 @@ use crate::{
 };
 
 use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
-pub use scheduler_state::DuplicatedFrameData;
 use std::{
     sync::{Arc, atomic::AtomicBool},
     thread::JoinHandle,
@@ -37,7 +35,6 @@ use thread_priority::ThreadBuilder;
 
 pub mod action_timing;
 pub mod execution;
-pub mod frame_index;
 pub mod message;
 pub mod notification;
 pub mod playback;
@@ -142,7 +139,7 @@ impl Scheduler {
         self.transcoder.compile_scene(&mut scene);
 
         for line in scene.lines_iter_mut() {
-            let (frame, iter, _rep, _, _) = calculate_frame_index(&self.clock, line, date);
+            let (frame, iter, _rep, _, _) = line.calculate_frame_index(&self.clock, date);
             line.current_frame = frame;
             line.current_iteration = iter;
             line.first_iteration_index = iter;
@@ -151,9 +148,9 @@ impl Scheduler {
         self.executions.clear();
 
         for line in scene.lines.iter() {
-            let (frame, _, _, scheduled_date, _) = calculate_frame_index(&self.clock, line, date);
+            let (frame, _, _, scheduled_date, _) = line.calculate_frame_index(&self.clock, date);
             if frame < usize::MAX && line.is_frame_enabled(frame) {
-                let script = &line.scripts[frame];
+                let script = &line.frame(frame).script;
                 Self::execute_script(
                     &mut self.executions,
                     script,
@@ -347,7 +344,7 @@ impl Scheduler {
 
                 for line in self.scene.lines_iter_mut() {
                     let (frame, iter, rep, scheduled_date, track_frame_delay) =
-                        calculate_frame_index(&self.clock, line, date);
+                        line.calculate_frame_index(&self.clock, date);
                     next_frame_delay = std::cmp::min(next_frame_delay, track_frame_delay);
 
                     self.current_positions.push((frame, rep));
@@ -364,7 +361,7 @@ impl Scheduler {
                     }
 
                     if frame < usize::MAX && has_changed && line.is_frame_enabled(frame) {
-                        let script = &line.scripts[frame];
+                        let script = &line.frame(frame).script;
                         Self::execute_script(
                             &mut self.executions,
                             script,

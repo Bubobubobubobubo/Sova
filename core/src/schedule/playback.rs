@@ -1,6 +1,6 @@
 use crate::{
     clock::{Clock, SyncTime}, lang::interpreter::InterpreterDirectory, log_println, scene::{script::ScriptExecution, Scene}, schedule::{
-        frame_index::calculate_frame_index, notification::SchedulerNotification,
+        notification::SchedulerNotification,
         scheduler_state::PlaybackState, Scheduler,
     }
 };
@@ -182,13 +182,13 @@ impl PlaybackManager {
     ) {
         for line in scene.lines.iter() {
             let (frame, iter, rep, _scheduled_date, _) =
-                calculate_frame_index(clock, line, start_date);
+                line.calculate_frame_index(clock, start_date);
             if frame == line.get_effective_start_frame()
                 && line.is_frame_enabled(frame)
                 && iter == 0
                 && rep == 0
             {
-                let script = Arc::clone(&line.scripts[frame]);
+                let script = Arc::clone(&line.frame(frame).script);
                 Scheduler::execute_script(executions, &script, interpreters, start_date);
                 log_println!(
                     "[SCHEDULER] Queued script for Line {} Frame {} at start",
