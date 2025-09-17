@@ -1,8 +1,7 @@
-use super::DuplicatedFrameData;
+use crate::scene::Frame;
 use crate::scene::{Scene, Line, script::Script};
 use crate::schedule::action_timing::ActionTiming;
 use serde::{Deserialize, Serialize};
-use std::sync::Arc;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum SchedulerMessage {
@@ -52,16 +51,14 @@ pub enum SchedulerMessage {
     InternalDuplicateFrame {
         target_line_idx: usize,
         target_insert_idx: usize,
-        frame_length: f64,
-        is_enabled: bool,
-        script: Option<Arc<Script>>,
+        frame_data: Frame,
         timing: ActionTiming,
     },
     /// Internal: Duplicate a range of frames (used by server handler)
     InternalDuplicateFrameRange {
         target_line_idx: usize,
         target_insert_idx: usize,
-        frames_data: Vec<DuplicatedFrameData>,
+        frames_data: Vec<Frame>,
         timing: ActionTiming,
     },
     /// Internal: Remove frames across potentially multiple lines.
@@ -72,7 +69,7 @@ pub enum SchedulerMessage {
     /// Internal: Insert blocks of duplicated frame data.
     InternalInsertDuplicatedBlocks {
         // Vec<Vec<...>>: Outer Vec = columns, Inner Vec = rows within that column
-        duplicated_data: Vec<Vec<DuplicatedFrameData>>,
+        duplicated_data: Vec<Vec<Frame>>,
         target_line_idx: usize,  // Top-left line index for insertion
         target_frame_idx: usize, // Top-left frame index for insertion
         timing: ActionTiming,

@@ -5,8 +5,10 @@ use serde::{Deserialize, Serialize};
 use std::usize;
 mod line;
 pub mod script;
+mod frame;
 
 pub use line::Line;
+pub use frame::Frame;
 
 /// Default speed factor for lines if not specified.
 /// Returns `1.0`. Used for serde default.

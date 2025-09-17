@@ -1,4 +1,4 @@
-use crate::scene::{default_speed_factor, script::Script};
+use crate::scene::{default_speed_factor, script::Script, Frame};
 use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
@@ -17,23 +17,8 @@ use crate::{
 /// and support looping, repetition of individual frames, and enabling/disabling specific frames.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub struct Line {
-    /// The duration of each frame in beats.
-    /// The core data defining the timing of the line.
-    pub frames: Vec<f64>,
-    /// Tracks whether each corresponding frame in `frames` is currently active for playback.
-    /// Disabled frames are skipped during iteration. Must have the same length as `frames`.
-    pub enabled_frames: Vec<bool>,
-    /// Scripts associated with each frame. Executed when the frame becomes active.
-    /// Stored in `Arc` for potentially shared ownership or cheaper cloning. Must have the same length as `frames`.
-    pub scripts: Vec<Arc<Script>>,
-    /// Optional user-defined names for each frame. Useful for identification in UIs or debugging.
-    /// Must have the same length as `frames`. Defaults to `None` for each frame.
-    #[serde(default)]
-    pub frame_names: Vec<Option<String>>,
-    /// Specifies how many times each frame should repeat consecutively before moving to the next.
-    /// A value of `1` means the frame plays once. Must have the same length as `frames`. Defaults to `1`.
-    #[serde(default)]
-    pub frame_repetitions: Vec<usize>,
+    /// Frames of the line
+    pub frames: Vec<Frame>,
     /// A multiplier applied to the duration of beats. `1.0` is normal speed, `< 1.0` is slower, `> 1.0` is faster.
     #[serde(default = "default_speed_factor")]
     pub speed_factor: f64,
@@ -79,27 +64,14 @@ pub struct Line {
 impl Line {
     /// Creates a new `Line` with the given frame durations.
     ///
-    /// Initializes associated vectors (`enabled_frames`, `scripts`, `frame_names`, `frame_repetitions`)
+    /// Initializes associated Frames
     /// to default values matching the number of frames provided.
     /// Runtime state fields are initialized to indicate no playback has started.
-    pub fn new(frames: Vec<f64>) -> Self {
-        let n_frames = frames.len();
-        let scripts = (0..n_frames)
-            .map(|i| {
-                let mut script = script::Script::default();
-                script.index = i;
-                script.line_index = usize::MAX;
-                Arc::new(script)
-            })
-            .collect();
-        Line {
-            frames,
+    pub fn new(frames_dur: Vec<f64>) -> Self {
+        let mut line = Line {
+            frames: frames_dur.into_iter().map(|d| d.into()).collect(),
             index: usize::MAX,
-            enabled_frames: vec![true; n_frames],
             vars: VariableStore::new(),
-            scripts,
-            frame_names: vec![None; n_frames],
-            frame_repetitions: vec![1; n_frames],
             speed_factor: 1.0f64,
             current_frame: 0,
             frames_executed: 0,
@@ -111,7 +83,9 @@ impl Line {
             start_frame: None,
             end_frame: None,
             custom_length: None,
-        }
+        };
+        line.make_consistent();
+        line
     }
 
     /// Ensures the consistency of the line's internal state.
@@ -128,47 +102,14 @@ impl Line {
     pub fn make_consistent(&mut self) {
         let n_frames = self.n_frames();
 
-        if self.frame_names.len() != n_frames {
-            self.frame_names.resize(n_frames, None);
-        }
-        if self.enabled_frames.len() != n_frames {
-            self.enabled_frames.resize(n_frames, true);
-        }
-        if self.frame_repetitions.len() != n_frames {
-            self.frame_repetitions.resize(n_frames, 1);
-        }
-        while self.scripts.len() < n_frames {
-            let mut script = script::Script::default();
-            script.index = self.scripts.len();
-            script.line_index = self.index;
-            self.scripts.push(Arc::new(script));
-            self.enabled_frames.push(true);
-            self.frame_repetitions.push(1);
-        }
-        if self.scripts.len() > n_frames {
-            self.scripts.drain(n_frames..);
-            if self.enabled_frames.len() > n_frames {
-                self.enabled_frames.drain(n_frames..);
+        for (i,frame) in self.frames.iter_mut().enumerate() {
+            if frame.repetitions == 0 {
+                frame.repetitions = 1;
             }
-            if self.frame_names.len() > n_frames {
-                self.frame_names.drain(n_frames..);
-            }
-            if self.frame_repetitions.len() > n_frames {
-                self.frame_repetitions.drain(n_frames..);
-            }
-        }
-        for (i, script_arc) in self.scripts.iter_mut().enumerate() {
-            if script_arc.index != i || script_arc.line_index != i {
-                let new_script = Arc::make_mut(script_arc);
+            if frame.script.index != i || frame.script.line_index != self.index {
+                let new_script = Arc::make_mut(&mut frame.script);
                 new_script.index = i;
                 new_script.line_index = self.index;
-            }
-        }
-
-        // Ensure frame_repetitions contains valid values (at least 1)
-        for reps in self.frame_repetitions.iter_mut() {
-            if *reps == 0 {
-                *reps = 1;
             }
         }
 
@@ -212,9 +153,8 @@ impl Line {
         let start = self.start_frame.unwrap_or(0);
         let end = self.start_frame.unwrap_or(self.n_frames() - 1);
         let mut len = 0.0;
-        let n_frames = self.n_frames();
         for i in start..=end {
-            len += self.frames[i % n_frames] * (self.frame_repetitions[i % n_frames] as f64);
+            len += self.frame(i).effective_duration();
         }
         len
     }
@@ -223,6 +163,25 @@ impl Line {
     #[inline]
     pub fn n_frames(&self) -> usize {
         self.frames.len()
+    }
+
+    /// Returns true if line has no frame
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
+    /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
+    #[inline]
+    pub fn frame(&self, index: usize) -> &Frame {
+        &self.frames[index % self.n_frames()]
+    }
+
+    /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
+    #[inline]
+    pub fn frame_mut(&mut self, index: usize) -> &mut Frame {
+        let index = index % self.n_frames();
+        &mut self.frames[index]
     }
 
     /// Calculates the total duration of the line in beats by summing the durations of *all* frames.
@@ -239,43 +198,31 @@ impl Line {
 
     /// Returns an iterator over the durations (`f64`) of all frames in the line.
     #[inline]
-    pub fn frames_iter(&self) -> impl Iterator<Item = &f64> {
+    pub fn frames_iter(&self) -> impl Iterator<Item = &Frame> {
         self.frames.iter()
     }
 
     /// Returns a mutable iterator over the durations (`f64`) of all frames in the line.
     #[inline]
-    pub fn frames_iter_mut(&mut self) -> impl Iterator<Item = &mut f64> {
+    pub fn frames_iter_mut(&mut self) -> impl Iterator<Item = &mut Frame> {
         self.frames.iter_mut()
     }
 
     /// Returns an iterator over the scripts of all frames in the line.
     #[inline]
     pub fn scripts_iter(&self) -> impl Iterator<Item = &Script> {
-        self.scripts.iter().map(|s| &**s)
+        self.frames_iter().map(|f| &*f.script)
     }
 
     /// Returns a mutable iterator over the arc of scripts of all frames in the line.
     #[inline]
     pub fn scripts_iter_mut(&mut self) -> impl Iterator<Item = &mut Arc<Script>> {
-        self.scripts.iter_mut()
-    }
-
-    /// Returns the duration in beats of the frame at the specified index.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    /// Returns `f64::INFINITY` if the line has no frames.
-    pub fn frame_len(&self, index: usize) -> f64 {
-        if self.frames.is_empty() {
-            return f64::INFINITY;
-        }
-        let index = index % self.frames.len();
-        self.frames[index]
+        self.frames_iter_mut().map(|f| &mut f.script)
     }
 
     /// Returns a slice containing the durations of all frames.
     #[inline]
-    pub fn frames(&self) -> &[f64] {
+    pub fn frames(&self) -> &[Frame] {
         &self.frames
     }
 
@@ -285,28 +232,14 @@ impl Line {
     /// to match the new number of frames, potentially adding defaults or truncating.
     /// Finally, it calls `make_consistent` to ensure internal state integrity.
     pub fn set_frames(&mut self, new_frames: Vec<f64>) {
-        let new_n_frames = new_frames.len();
-
-        self.frames = new_frames;
-
-        if self.frame_names.len() != new_n_frames {
-            self.frame_names.resize(new_n_frames, None);
+        let n_frames = self.n_frames();
+        for (i, duration) in new_frames.into_iter().enumerate() {
+            if i < n_frames {
+                self.frame_mut(i).duration = duration;
+            } else {
+                self.frames.push(duration.into());
+            }
         }
-        if self.enabled_frames.len() != new_n_frames {
-            self.enabled_frames.resize(new_n_frames, true);
-        }
-        if self.frame_repetitions.len() != new_n_frames {
-            self.frame_repetitions.resize(new_n_frames, 1);
-        }
-
-        while self.scripts.len() < new_n_frames {
-            let script = script::Script::default();
-            self.scripts.push(Arc::new(script));
-        }
-        if self.scripts.len() > new_n_frames {
-            self.scripts.drain(new_n_frames..);
-        }
-
         self.make_consistent();
     }
 
@@ -320,30 +253,14 @@ impl Line {
     /// # Panics
     /// Although the code prints an error, it does not panic if `position > self.frames.len()`.
     /// It simply returns early in that case. Insertion is allowed at `position == self.frames.len()`.
-    pub fn insert_frame(&mut self, position: usize, value: f64) {
+    pub fn insert_frame(&mut self, position: usize, value: Frame) {
         if position > self.frames.len() {
             // Allow inserting at the end (position == len)
             log_eprintln!("[!] Frame::insert_frame: Invalid position {}", position);
             return;
         }
-
         // Insert into frames
         self.frames.insert(position, value);
-
-        // Insert default enabled state
-        self.enabled_frames.insert(position, true);
-
-        // Insert default script
-        let default_script = script::Script::default();
-        // Index will be fixed by make_consistent
-        self.scripts.insert(position, Arc::new(default_script));
-
-        // Insert default name (None)
-        self.frame_names.insert(position, None);
-
-        // Insert default repetitions (1)
-        self.frame_repetitions.insert(position, 1);
-
         // Ensure consistency (updates indices, bounds, etc.)
         self.make_consistent();
     }
@@ -366,23 +283,15 @@ impl Line {
 
         // Remove from vectors
         log_println!(
-            "[LINE DEBUG] remove_frame({}): BEFORE - frames={}, enabled={}, scripts={}",
+            "[LINE DEBUG] remove_frame({}): BEFORE - frames={}",
             position,
-            self.frames.len(),
-            self.enabled_frames.len(),
-            self.scripts.len()
+            self.frames.len()
         );
         self.frames.remove(position);
-        self.enabled_frames.remove(position);
-        self.scripts.remove(position);
-        self.frame_names.remove(position);
-        self.frame_repetitions.remove(position);
         log_println!(
-            "[LINE DEBUG] remove_frame({}): AFTER - frames={}, enabled={}, scripts={}",
+            "[LINE DEBUG] remove_frame({}): AFTER - frames={}",
             position,
-            self.frames.len(),
-            self.enabled_frames.len(),
-            self.scripts.len()
+            self.frames.len()
         );
 
         // Ensure consistency (updates indices, bounds, etc.)
@@ -397,8 +306,7 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let index = index % self.frames.len();
-        self.frames[index] = value
+        self.frame_mut(index).duration = value;
     }
 
     /// Associates the given `script` with the frame at the specified `index`.
@@ -411,10 +319,35 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let index = index % self.frames.len();
         script.index = index;
         script.line_index = self.index;
-        self.scripts[index] = Arc::new(script);
+        self.frame_mut(index).script = Arc::new(script);
+    }
+
+    /// Returns a reference to the frame's script at a given index.
+    /// If the line contains no frame, then the function returns None.
+    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
+    pub fn script(&self, index: usize) -> Option<&Script> {
+        if self.frames.is_empty() {
+            return None;
+        }
+        return Some(&self.frame(index).script)
+    }
+
+    /// Returns the frame absolute duration, without repetitions of enabledness
+    pub fn frame_len(&self, index: usize) -> f64 {
+        if self.frames.is_empty() {
+            return f64::INFINITY;
+        }
+        self.frame(index).duration
+    }
+
+    /// Returns the effective duration of the frame
+    pub fn effective_frame_len(&self, index: usize) -> f64 {
+        if self.frames.is_empty() {
+            return f64::INFINITY;
+        }
+        self.frame(index).effective_duration()
     }
 
     /// Enables the frame at the specified `frame` index for playback.
@@ -425,8 +358,7 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let index = frame % self.frames.len();
-        self.enabled_frames[index] = true;
+        self.frame_mut(frame).enabled = true;
     }
 
     /// Disables the frame at the specified `frame` index for playback.
@@ -438,8 +370,7 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let index = frame % self.frames.len();
-        self.enabled_frames[index] = false;
+        self.frame_mut(frame).enabled = false;
     }
 
     /// Enables multiple frames specified by their indices in the `frames` slice.
@@ -451,12 +382,8 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let n_frames = self.frames.len();
         for &frame_index in frames {
-            let index = frame_index % n_frames;
-            if index < self.enabled_frames.len() {
-                self.enabled_frames[index] = true;
-            }
+            self.enable_frame(frame_index);
         }
     }
 
@@ -469,12 +396,8 @@ impl Line {
         if self.frames.is_empty() {
             return;
         }
-        let n_frames = self.frames.len();
         for &frame_index in frames {
-            let index = frame_index % n_frames;
-            if index < self.enabled_frames.len() {
-                self.enabled_frames[index] = false;
-            }
+            self.disable_frame(frame_index);
         }
     }
 
@@ -486,8 +409,7 @@ impl Line {
         if self.frames.is_empty() {
             return false;
         }
-        let index = index % self.frames.len();
-        self.enabled_frames[index]
+        self.frame(index).enabled
     }
 
     /// Gets the effective start frame index for playback.
@@ -519,7 +441,7 @@ impl Line {
     /// Returns a slice representing the frame durations within the effective playback range.
     /// Uses the indices determined by `get_effective_start_frame` and `get_effective_end_frame`.
     /// Returns an empty slice if the line has no frames.
-    pub fn get_effective_frames(&self) -> &[f64] {
+    pub fn get_effective_frames(&self) -> &[Frame] {
         if self.n_frames() == 0 {
             return &[];
         }
@@ -534,17 +456,116 @@ impl Line {
     /// Uses high-precision rational arithmetic to eliminate cumulative floating-point rounding errors.
     pub fn effective_beats_len(&self) -> f64 {
         use crate::util::decimal_operations::precise_sum;
-        precise_sum(self.get_effective_frames().iter().copied())
+        precise_sum(self.get_effective_frames().iter().map(|f| f.duration))
     }
 
     /// Sets the optional name for the frame at the specified `frame_index`.
     ///
     /// If `frame_index` is out of bounds, an error is printed to stderr and no change is made.
     pub fn set_frame_name(&mut self, frame_index: usize, name: Option<String>) {
-        if frame_index < self.frame_names.len() {
-            self.frame_names[frame_index] = name;
+        if !self.frames.is_empty() {
+            self.frame_mut(frame_index).name = name;
         } else {
-            log_eprintln!("[!] Line::set_frame_name: Invalid index {}", frame_index);
+            log_eprintln!("[!] Line::set_frame_name: No frame in line");
         }
+    }
+
+    pub fn calculate_frame_index(
+        &self,
+        clock: &Clock,
+        date: SyncTime,
+    ) -> (usize, usize, usize, SyncTime, SyncTime) {
+        let effective_loop_length_beats = self.length();
+
+        if effective_loop_length_beats <= 0.0 {
+            return (usize::MAX, usize::MAX, 0, SyncTime::MAX, SyncTime::MAX);
+        }
+
+        let current_absolute_beat = clock.beat_at_date(date);
+        if current_absolute_beat < 0.0 {
+            return (usize::MAX, usize::MAX, 0, SyncTime::MAX, SyncTime::MAX);
+        }
+
+        use crate::util::decimal_operations::precise_beat_modulo;
+
+        let beat_in_effective_loop =
+            precise_beat_modulo(current_absolute_beat, effective_loop_length_beats);
+        let loop_iteration = (current_absolute_beat / effective_loop_length_beats).floor() as usize;
+
+        let effective_start_frame = self.get_effective_start_frame();
+        let effective_num_frames = self.get_effective_num_frames();
+
+        if effective_num_frames == 0 {
+            return (usize::MAX, loop_iteration, 0, SyncTime::MAX, SyncTime::MAX);
+        }
+
+        let mut cumulative_beats_in_line = 0.0;
+        for frame_idx_in_range in 0..effective_num_frames {
+            let absolute_frame_index = effective_start_frame + frame_idx_in_range;
+
+            let speed_factor = if self.speed_factor == 0.0 {
+                1.0
+            } else {
+                self.speed_factor
+            };
+            use crate::util::decimal_operations::precise_beat_division;
+            let single_rep_len_beats =
+                precise_beat_division(self.frame_len(absolute_frame_index), speed_factor);
+            let total_repetitions = self.frame(absolute_frame_index).repetitions;
+
+            let total_frame_len_beats = single_rep_len_beats * total_repetitions as f64;
+
+            if single_rep_len_beats <= 0.0 {
+                continue;
+            }
+
+            let frame_end_beat_in_line = cumulative_beats_in_line + total_frame_len_beats;
+
+            if beat_in_effective_loop >= cumulative_beats_in_line
+                && beat_in_effective_loop < frame_end_beat_in_line
+            {
+                let beat_within_frame = beat_in_effective_loop - cumulative_beats_in_line;
+                let current_repetition_index =
+                    (beat_within_frame / single_rep_len_beats).floor().max(0.0) as usize;
+                let current_repetition_index = current_repetition_index.min(total_repetitions - 1);
+
+                let absolute_beat_at_loop_start = loop_iteration as f64 * effective_loop_length_beats;
+                let frame_first_rep_start_beat_absolute =
+                    absolute_beat_at_loop_start + cumulative_beats_in_line;
+                let current_rep_start_beat_absolute = frame_first_rep_start_beat_absolute
+                    + (current_repetition_index as f64 * single_rep_len_beats);
+                let current_repetition_start_date = clock.date_at_beat(current_rep_start_beat_absolute);
+
+                let current_rep_end_beat_in_line = cumulative_beats_in_line
+                    + (single_rep_len_beats * (current_repetition_index + 1) as f64);
+                let remaining_beats_in_rep = current_rep_end_beat_in_line - beat_in_effective_loop;
+                let remaining_micros_in_rep = clock.beats_to_micros(remaining_beats_in_rep);
+
+                let remaining_beats_in_loop = effective_loop_length_beats - beat_in_effective_loop;
+                let remaining_micros_in_loop = clock.beats_to_micros(remaining_beats_in_loop);
+
+                let next_event_delay = remaining_micros_in_rep.min(remaining_micros_in_loop);
+
+                return (
+                    absolute_frame_index,
+                    loop_iteration,
+                    current_repetition_index,
+                    current_repetition_start_date,
+                    next_event_delay,
+                );
+            }
+
+            cumulative_beats_in_line += total_frame_len_beats;
+        }
+
+        let remaining_beats_in_loop = effective_loop_length_beats - beat_in_effective_loop;
+        let remaining_micros_in_loop = clock.beats_to_micros(remaining_beats_in_loop);
+        (
+            usize::MAX,
+            loop_iteration,
+            0,
+            SyncTime::MAX,
+            remaining_micros_in_loop,
+        )
     }
 }

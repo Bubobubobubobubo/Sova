@@ -1,19 +1,8 @@
 use crate::{
     clock::SyncTime,
-    scene::{Line, script::Script},
+    scene::Line,
     schedule::{action_timing::ActionTiming, message::SchedulerMessage},
 };
-use serde::{Deserialize, Serialize};
-use std::sync::Arc;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct DuplicatedFrameData {
-    pub length: f64,
-    pub is_enabled: bool,
-    pub script: Option<Arc<Script>>,
-    pub name: Option<String>,
-    pub repetitions: usize,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum PlaybackState {
