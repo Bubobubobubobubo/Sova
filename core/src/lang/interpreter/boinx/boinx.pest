@@ -67,7 +67,7 @@ chan = { int | ident }
 target = _{ dev? ~ ":" ~ chan }
 
 output = { compo ~ ("@" ~ target)? }
-assign = { ident ~ "=" ~ output }
+assign = { ident ~ "=" ~ compo }
 
 statement = _{ assign | output }
 block = _{ statement+ }
