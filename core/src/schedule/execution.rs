@@ -31,6 +31,8 @@ impl ExecutionManager {
         let mut next_timeout = SyncTime::MAX;
         audio_engine_events.clear();
 
+        let mut new_executions : Vec<ScriptExecution> = Vec::new();
+
         executions.retain_mut(|exec| {
             if !exec.is_ready(scheduled_date) {
                 next_timeout = std::cmp::min(next_timeout, exec.remaining_before(scheduled_date));
@@ -59,6 +61,11 @@ impl ExecutionManager {
                         audio_engine_events.push((event.clone(), date));
                         None
                     }
+                    ConcreteEvent::StartProgram(ref prog) => {
+                        let exec = ScriptExecution::execute_child_program_at(exec.script.clone(), prog.clone(), scheduled_date);
+                        new_executions.push(exec);
+                        None
+                    }
                     ConcreteEvent::Nop => None,
                 };
 
@@ -72,6 +79,8 @@ impl ExecutionManager {
 
             !exec.has_terminated()
         });
+
+        executions.append(&mut new_executions);
 
         for (event, date) in audio_engine_events.drain(..) {
             Self::handle_audio_engine_event(event, date, world_iface);
