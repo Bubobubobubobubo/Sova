@@ -9,10 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     clock::{Clock, SyncTime},
     lang::{
-        Program,
-        evaluation_context::EvaluationContext,
-        event::ConcreteEvent,
-        variable::{VariableStore, VariableValue},
+        evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::asm_interpreter::{ASMInterpreter, ASMInterpreterFactory}, variable::{VariableStore, VariableValue}, Program
     },
 };
 use crate::{device_map::DeviceMap, lang::interpreter::Interpreter};
@@ -155,6 +152,15 @@ impl ScriptExecution {
             stack: Vec::new(),
             interpreter,
         }
+    }
+
+    pub fn execute_child_program_at(
+        parent: Arc<Script>,
+        program: Program,
+        date: SyncTime
+    ) -> Self {
+        let interpreter = Box::new(ASMInterpreter::new(program));
+        Self::execute_at(parent, interpreter, date)
     }
 
     pub fn execute_next(

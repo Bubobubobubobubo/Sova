@@ -2,6 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 use crate::clock::SyncTime;
+use crate::lang::Program;
 use crate::protocol::osc::{Argument, OSCMessage};
 use crate::util::decimal_operations::float64_from_decimal;
 use crate::log_eprintln;
@@ -9,7 +10,7 @@ use crate::log_eprintln;
 use super::variable::VariableValue;
 use super::{evaluation_context::EvaluationContext, variable::Variable};
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum ConcreteEvent {
     Nop,
@@ -37,6 +38,7 @@ pub enum ConcreteEvent {
         args: Vec<Argument>,
         device_id: usize,
     },
+    StartProgram(Program)
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -70,6 +72,7 @@ pub enum Event {
         params: HashMap<String, Variable>,
         device_id: Variable,
     },
+    StartProgram(Variable)
 }
 
 impl Event {
@@ -275,6 +278,13 @@ impl Event {
                 }
 
                 ConcreteEvent::AudioEngine { args, device_id }
+            },
+            Event::StartProgram(var) => {
+                if let VariableValue::Func(fun) = ctx.evaluate(var) {
+                    ConcreteEvent::StartProgram(fun)
+                } else {
+                    ConcreteEvent::StartProgram(Program::default())
+                }
             }
         }
     }
