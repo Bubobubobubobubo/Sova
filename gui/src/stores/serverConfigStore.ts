@@ -1,9 +1,27 @@
-import { persistentAtom } from '@nanostores/persistent';
-import { ServerConfig } from './serverManagerStore';
-import { updateStore } from '../utils/store-helpers';
+import { atom } from 'nanostores';
+import { invoke } from '@tauri-apps/api/core';
 
-// Default server configuration
-export const DEFAULT_SERVER_CONFIG: ServerConfig = {
+export interface ServerConfig {
+  ip: string;
+  port: number;
+  audio_engine: boolean;
+  sample_rate: number;
+  block_size: number;
+  buffer_size: number;
+  max_audio_buffers: number;
+  max_voices: number;
+  output_device?: string;
+  osc_port: number;
+  osc_host: string;
+  timestamp_tolerance_ms: number;
+  audio_files_location: string;
+  audio_priority: number;
+  relay?: string;
+  instance_name: string;
+  relay_token?: string;
+}
+
+const DEFAULT_CONFIG: ServerConfig = {
   ip: '0.0.0.0',
   port: 8080,
   audio_engine: false,
@@ -18,40 +36,44 @@ export const DEFAULT_SERVER_CONFIG: ServerConfig = {
   audio_files_location: './samples',
   audio_priority: 80,
   instance_name: 'local',
-  list_devices: false,
 };
 
-// Persistent configuration store
-export const serverConfigStore = persistentAtom<ServerConfig>('serverConfig', DEFAULT_SERVER_CONFIG, {
-  encode: JSON.stringify,
-  decode: JSON.parse,
-});
+export const serverConfigStore = atom<ServerConfig>(DEFAULT_CONFIG);
 
-// Additional persistent settings
-export const serverSettingsStore = persistentAtom<{
-  autoStart: boolean;
-  lastKnownStatus: string;
-}>('serverSettings', {
-  autoStart: false,
-  lastKnownStatus: 'Stopped',
-}, {
-  encode: JSON.stringify,
-  decode: JSON.parse,
-});
+export const configDirtyStore = atom<boolean>(false);
 
-// Helper functions
-export const updateServerConfig = (config: Partial<ServerConfig>) => {
-  updateStore(serverConfigStore, config);
+export const loadConfig = async (): Promise<void> => {
+  try {
+    const config = await invoke<ServerConfig>('get_server_config');
+    serverConfigStore.set(config);
+    configDirtyStore.set(false);
+  } catch (error) {
+    console.error('Failed to load config:', error);
+  }
 };
 
-export const getServerConfig = (): ServerConfig => {
-  return serverConfigStore.get();
+export const saveConfig = async (): Promise<void> => {
+  try {
+    const config = serverConfigStore.get();
+    await invoke('save_server_config', { config });
+    configDirtyStore.set(false);
+  } catch (error) {
+    console.error('Failed to save config:', error);
+    throw error;
+  }
 };
 
-export const updateServerSettings = (settings: Partial<{ autoStart: boolean; lastKnownStatus: string }>) => {
-  updateStore(serverSettingsStore, settings);
+export const updateConfig = (updates: Partial<ServerConfig>): void => {
+  const current = serverConfigStore.get();
+  serverConfigStore.set({ ...current, ...updates });
+  configDirtyStore.set(true);
 };
 
-export const getServerSettings = () => {
-  return serverSettingsStore.get();
+export const getConfigFilePath = async (): Promise<string> => {
+  try {
+    return await invoke<string>('get_config_file_path');
+  } catch (error) {
+    console.error('Failed to get config file path:', error);
+    return 'unknown';
+  }
 };

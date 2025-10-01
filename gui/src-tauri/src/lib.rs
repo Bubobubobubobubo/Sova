@@ -2,12 +2,14 @@ mod client;
 mod link;
 mod disk;
 mod server_manager;
+mod config;
 
 use client::ClientManager;
 use sova_core::server::{ServerMessage, Snapshot, client::ClientMessage};
 use link::LinkClock;
 use disk::ProjectInfo;
-use server_manager::{ServerManager, ServerConfig, ServerState};
+use server_manager::{ServerManager, ServerState};
+use config::ServerConfig;
 use std::sync::Arc;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -174,11 +176,22 @@ async fn close_app(app_handle: AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn update_server_config(
+async fn get_server_config() -> Result<ServerConfig, String> {
+    config::load_config().await
+}
+
+#[tauri::command]
+async fn save_server_config(
     config: ServerConfig,
     server_manager: State<'_, ServerManagerState>,
 ) -> Result<(), String> {
+    config::save_config(&config).await?;
     server_manager.update_config(config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn get_config_file_path() -> Result<String, String> {
+    config::get_config_file_path()
 }
 
 #[tauri::command]
@@ -274,15 +287,16 @@ async fn perform_cleanup(client_state: &ClientState, server_manager: &ServerMana
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    tauri::async_runtime::set(runtime.handle().clone());
-    
+    let runtime_handle = runtime.handle().clone();
+    tauri::async_runtime::set(runtime_handle.clone());
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .setup(|app| {
+        .setup(move |app| {
             let client_state: ClientState = Arc::new(Mutex::new(ClientManager::new()));
             let messages_state: MessagesState = Arc::new(RwLock::new(Vec::new()));
             let link_state: LinkState = Arc::new(LinkClock::new());
-            let server_manager_state: ServerManagerState = Arc::new(ServerManager::new());
+            let server_manager_state: ServerManagerState = Arc::new(runtime_handle.block_on(ServerManager::new()));
             
             // Set the app handle for server manager to emit events
             server_manager_state.set_app_handle(app.handle().clone());
@@ -350,7 +364,9 @@ pub fn run() {
             get_local_log_file_path,
             fs_exists,
             fs_read_text_file,
-            update_server_config,
+            get_server_config,
+            save_server_config,
+            get_config_file_path,
             start_server,
             stop_server,
             restart_server,
