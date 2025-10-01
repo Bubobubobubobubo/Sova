@@ -46,3 +46,13 @@ export function pastedDataToFrame(data: PastedFrameData): Frame {
     repetitions: data.repetitions || 1,
   };
 }
+
+export function defaultFrame(): Frame {
+  return {
+    duration: 1.0,
+    enabled: true,
+    name: null,
+    script: { content: '', lang: 'bali' },
+    repetitions: 1
+  };
+}

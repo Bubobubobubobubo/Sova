@@ -8,12 +8,12 @@ mod tests;
 // addition
 pub fn add_decimal(
     x_sign: i8,
-    x_num: u64,
-    x_den: u64,
+    x_num: u128,
+    x_den: u128,
     y_sign: i8,
-    y_num: u64,
-    y_den: u64,
-) -> (i8, u64, u64) {
+    y_num: u128,
+    y_den: u128,
+) -> (i8, u128, u128) {
     let x_num_for_add = x_num * y_den;
     let y_num_for_add = y_num * x_den;
     let res_sign = if (x_sign < 0 && y_sign < 0) || (x_sign >= 0 && y_sign >= 0) {
@@ -37,12 +37,12 @@ pub fn add_decimal(
 // subtraction
 pub fn sub_decimal(
     x_sign: i8,
-    x_num: u64,
-    x_den: u64,
+    x_num: u128,
+    x_den: u128,
     y_sign: i8,
-    y_num: u64,
-    y_den: u64,
-) -> (i8, u64, u64) {
+    y_num: u128,
+    y_den: u128,
+) -> (i8, u128, u128) {
     let y_sign_for_add = if y_sign < 0 { 1 } else { -1 };
     add_decimal(x_sign, x_num, x_den, y_sign_for_add, y_num, y_den)
 }
@@ -50,12 +50,12 @@ pub fn sub_decimal(
 // multiplication
 pub fn mul_decimal(
     x_sign: i8,
-    x_num: u64,
-    x_den: u64,
+    x_num: u128,
+    x_den: u128,
     y_sign: i8,
-    y_num: u64,
-    y_den: u64,
-) -> (i8, u64, u64) {
+    y_num: u128,
+    y_den: u128,
+) -> (i8, u128, u128) {
     let sign = x_sign * y_sign;
     let num = x_num * y_num;
     let den = x_den * y_den;
@@ -65,12 +65,12 @@ pub fn mul_decimal(
 // division, dividing by 0 returns 0
 pub fn div_decimal(
     x_sign: i8,
-    x_num: u64,
-    x_den: u64,
+    x_num: u128,
+    x_den: u128,
     y_sign: i8,
-    y_num: u64,
-    y_den: u64,
-) -> (i8, u64, u64) {
+    y_num: u128,
+    y_den: u128,
+) -> (i8, u128, u128) {
     let sign = x_sign * y_sign;
     let num = x_num * y_den;
     let den = y_num * x_den;
@@ -81,7 +81,7 @@ pub fn div_decimal(
 }
 
 // (strictly) lower than test
-pub fn lt_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_den: u64) -> bool {
+pub fn lt_decimal(x_sign: i8, x_num: u128, x_den: u128, y_sign: i8, y_num: u128, y_den: u128) -> bool {
     let x_for_cmp = x_num * y_den;
     let y_for_cmp = y_num * x_den;
     (x_sign < 0 && y_sign >= 0)
@@ -90,7 +90,7 @@ pub fn lt_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_
 }
 
 // lower or equal than test
-pub fn leq_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_den: u64) -> bool {
+pub fn leq_decimal(x_sign: i8, x_num: u128, x_den: u128, y_sign: i8, y_num: u128, y_den: u128) -> bool {
     let x_for_cmp = x_num * y_den;
     let y_for_cmp = y_num * x_den;
     (x_for_cmp == 0 && y_for_cmp == 0)
@@ -100,7 +100,7 @@ pub fn leq_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y
 }
 
 // equality test
-pub fn eq_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_den: u64) -> bool {
+pub fn eq_decimal(x_sign: i8, x_num: u128, x_den: u128, y_sign: i8, y_num: u128, y_den: u128) -> bool {
     let x_for_cmp = x_num * y_den;
     let y_for_cmp = y_num * x_den;
     (x_sign < 0 && y_sign < 0 && x_for_cmp == y_for_cmp)
@@ -108,18 +108,18 @@ pub fn eq_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_
 }
 
 // difference test
-pub fn neq_decimal(x_sign: i8, x_num: u64, x_den: u64, y_sign: i8, y_num: u64, y_den: u64) -> bool {
+pub fn neq_decimal(x_sign: i8, x_num: u128, x_den: u128, y_sign: i8, y_num: u128, y_den: u128) -> bool {
     !eq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)
 }
 
 // fraction simplification
-fn simplify_decimal(sign: i8, num: u64, den: u64) -> (i8, u64, u64) {
+fn simplify_decimal(sign: i8, num: u128, den: u128) -> (i8, u128, u128) {
     if num == 0 {
         return (1, 0, 1);
     }
 
     // gcd computation
-    let gcd = || -> u64 {
+    let gcd = || -> u128 {
         let mut max = if num > den { num } else { den };
         let mut min = if num > den { den } else { num };
 
@@ -142,12 +142,12 @@ fn simplify_decimal(sign: i8, num: u64, den: u64) -> (i8, u64, u64) {
 
 // get decimal number from float
 // WARNING: due to representation of floats, this will not work for very large floats
-pub fn decimal_from_float64(x: f64) -> (i8, u64, u64) {
+pub fn decimal_from_float64(x: f64) -> (i8, u128, u128) {
     let sign = if x < 0.0 { -1 } else { 1 };
 
     let x = if x < 0.0 { -x } else { x };
 
-    let integer_part = x.trunc() as u64;
+    let integer_part = x.trunc() as u128;
     let mut decimal_part = x.fract();
     let mut num_decimal = 10;
 
@@ -156,7 +156,7 @@ pub fn decimal_from_float64(x: f64) -> (i8, u64, u64) {
 
     while num_decimal > 0 {
         decimal_part *= 10.0;
-        let new_num = decimal_part.trunc() as u64;
+        let new_num = decimal_part.trunc() as u128;
         decimal_part = decimal_part.fract();
 
         denominator *= 10;
@@ -169,7 +169,7 @@ pub fn decimal_from_float64(x: f64) -> (i8, u64, u64) {
 }
 
 // get float from decimal number
-pub fn float64_from_decimal(sign: i8, num: u64, den: u64) -> f64 {
+pub fn float64_from_decimal(sign: i8, num: u128, den: u128) -> f64 {
     let mut as_float = (num as f64) / (den as f64);
     if sign < 0 {
         as_float = -as_float;
@@ -178,7 +178,7 @@ pub fn float64_from_decimal(sign: i8, num: u64, den: u64) -> f64 {
 }
 
 // Display decimal number
-pub fn string_from_decimal(sign: i8, num: u64, den: u64) -> String {
+pub fn string_from_decimal(sign: i8, num: u128, den: u128) -> String {
     let sign = if sign < 0 { "-" } else { "" };
     sign.to_owned() + &num.to_string() + "/" + &den.to_string()
 }
@@ -224,12 +224,12 @@ pub fn precise_beat_division(numerator: f64, denominator: f64) -> f64 {
 // Reminder of the division of two decimal numbers
 pub fn rem_decimal(
     x_sign: i8,
-    x_num: u64,
-    x_den: u64,
+    x_num: u128,
+    x_den: u128,
     _y_sign: i8,
-    y_num: u64,
-    y_den: u64,
-) -> (i8, u64, u64) {
+    y_num: u128,
+    y_den: u128,
+) -> (i8, u128, u128) {
     if y_num == 0 {
         return (x_sign, x_num, x_den);
     }
