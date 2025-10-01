@@ -1,10 +1,11 @@
+import { Script } from "../types";
+
 export interface Frame {
   duration: number;
   enabled: boolean;
   name: string | null;
-  script: string | null;
+  script: Script;
   repetitions: number;
-  lang?: string;
 }
 
 export interface FramePosition {
@@ -16,10 +17,10 @@ export interface DraggedFrame extends Frame {
   position: FramePosition;
 }
 
-export interface PastedFrameData {
+export interface PastedFrameData { // TODO: tout faire en frame ?
   length: number;
   is_enabled: boolean;
-  script_content: string | undefined;
+  script_content: string;
   name: string | undefined;
   repetitions: number | undefined;
 }
@@ -29,7 +30,7 @@ export function frameTopastedData(frame: Frame): PastedFrameData {
   return {
     length: frame.duration,
     is_enabled: frame.enabled,
-    script_content: frame.script || undefined,
+    script_content: frame.script?.content || "",
     name: frame.name || undefined,
     repetitions: frame.repetitions || undefined,
   };
@@ -41,7 +42,7 @@ export function pastedDataToFrame(data: PastedFrameData): Frame {
     duration: data.length,
     enabled: data.is_enabled,
     name: data.name || null,
-    script: data.script_content || null,
+    script: { content: data.script_content },
     repetitions: data.repetitions || 1,
   };
 }

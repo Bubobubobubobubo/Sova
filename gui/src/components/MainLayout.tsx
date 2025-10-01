@@ -219,7 +219,7 @@ export const MainLayout: React.FC = () => {
     const { line_idx, frame_idx } = scriptEditor.selectedFrame;
     const line = scene.lines[line_idx];
     if (!line) return 'bali';
-    const script = line.scripts.find(s => s.index === frame_idx);
+    const script = line.frames[frame_idx]?.script;
     return script?.lang || 'bali';
   })();
   

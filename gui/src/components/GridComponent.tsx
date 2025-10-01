@@ -1,7 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
 import { GridTable } from './GridTable';
-import { sceneStore, gridUIStore, updateGridSelection, getMaxFrames, addFrame, removeFrame, insertLineAfter, removeLine, setSceneLength } from '../stores/sceneStore';
+import { sceneStore, gridUIStore, updateGridSelection, getMaxFrames, addFrame, removeFrame, insertLineAfter, removeLine } from '../stores/sceneStore';
 import { globalVariablesStore, formatVariableValue } from '../stores/globalVariablesStore';
 import { useColorContext } from '../context/ColorContext';
 
@@ -24,8 +24,6 @@ export const GridComponent: React.FC<GridComponentProps> = ({
   const [cellWidth] = useState(140);
   const [cellHeight] = useState(80);
   const [renamingCell, setRenamingCell] = useState<[number, number] | null>(null); // [row, col]
-  const [editingSceneLength, setEditingSceneLength] = useState(false);
-  const [sceneLengthInput, setSceneLengthInput] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Clear renaming state when selection changes
@@ -41,22 +39,6 @@ export const GridComponent: React.FC<GridComponentProps> = ({
       }
     }
   }, [gridUI.selection, renamingCell]);
-
-  const handleSceneLengthSubmit = () => {
-    if (!client || !scene) return;
-    const newLength = parseInt(sceneLengthInput);
-    if (isNaN(newLength) || newLength <= 0) return;
-
-    const operation = setSceneLength(newLength, "EndOfScene");
-    client.sendMessage(operation).catch(console.error);
-    setEditingSceneLength(false);
-  };
-
-  const startEditingSceneLength = () => {
-    if (!scene) return;
-    setSceneLengthInput(scene.length.toString());
-    setEditingSceneLength(true);
-  };
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!scene) return;
@@ -225,34 +207,6 @@ export const GridComponent: React.FC<GridComponentProps> = ({
           height: '41px' // h-10 (40px) + 1px
         }}
       >
-        <div className="flex items-center space-x-2">
-          <span style={{ color: 'var(--color-muted)' }}>Scene Length:</span>
-          {editingSceneLength ? (
-            <input
-              type="number"
-              value={sceneLengthInput}
-              onChange={(e) => setSceneLengthInput(e.target.value)}
-              onBlur={() => setEditingSceneLength(false)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleSceneLengthSubmit();
-                if (e.key === 'Escape') setEditingSceneLength(false);
-              }}
-              className="w-12 px-1 bg-transparent border-b border-current outline-none"
-              style={{ color: 'var(--color-text)', fontSize: '12px' }}
-              autoFocus
-              min="1"
-            />
-          ) : (
-            <button
-              onClick={startEditingSceneLength}
-              className="hover:opacity-80 underline"
-              style={{ color: 'var(--color-text)' }}
-            >
-              {scene.length}
-            </button>
-          )}
-        </div>
-
         {/* Global Variables Display */}
         <div className="flex items-center space-x-4">
           {['A', 'B', 'C', 'D', 'W', 'X', 'Y', 'Z'].map(varName => {

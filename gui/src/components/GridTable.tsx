@@ -8,6 +8,7 @@ import { dragStore, endDrag } from '../stores/dragStore';
 import { clipboardStore, copyFrame } from '../stores/clipboardStore';
 import { useColorContext } from '../context/ColorContext';
 import { Plus, Minus } from 'lucide-react';
+import { Frame } from '../types';
 
 export interface GridTableProps {
   cellWidth: number;
@@ -331,13 +332,7 @@ export const GridTable: React.FC<GridTableProps> = ({
       await new Promise(resolve => setTimeout(resolve, 100));
 
       // Extract frame data
-      const frameData = {
-        duration: sourceLine.frames[sourceFrameIndex],
-        enabled: sourceLine.enabled_frames[sourceFrameIndex],
-        script: scriptEditorStore.get().currentScript,
-        name: sourceLine.frame_names[sourceFrameIndex],
-        repetitions: sourceLine.frame_repetitions[sourceFrameIndex] || 1,
-      };
+      const frameData = sourceLine.frames[sourceFrameIndex] as Frame;
 
       // Step 1: Insert the frame at the target position
       const insertOperation = addFrame(targetLineIndex, targetInsertIndex);
@@ -355,12 +350,12 @@ export const GridTable: React.FC<GridTableProps> = ({
 
       // Step 4: Set script content if it exists
       if (frameData.script) {
-        const scriptOperation = setScript(targetLineIndex, targetInsertIndex, frameData.script);
+        const scriptOperation = setScript(targetLineIndex, targetInsertIndex, frameData.script.content);
         await client.sendMessage(scriptOperation);
       }
 
       // Step 5: Set enabled/disabled state
-      if (frameData.enabled) {
+      if (frameData?.enabled) {
         const enableOperation = enableFrames(targetLineIndex, [targetInsertIndex]);
         await client.sendMessage(enableOperation);
       } else {
@@ -369,7 +364,7 @@ export const GridTable: React.FC<GridTableProps> = ({
       }
 
       // Step 6: Set repetitions if not 1
-      if (frameData.repetitions !== 1) {
+      if (frameData?.repetitions !== 1) {
         const repetitionOperation = setFrameRepetitions(targetLineIndex, targetInsertIndex, frameData.repetitions);
         await client.sendMessage(repetitionOperation);
       }
@@ -420,13 +415,8 @@ export const GridTable: React.FC<GridTableProps> = ({
         attempts++;
       }
       
-      const frameData = {
-        duration: line.frames[rowIndex] ?? 1,
-        enabled: line.enabled_frames[rowIndex] ?? false,
-        script: scriptContent || null, // Use the retrieved script content
-        name: line.frame_names[rowIndex] ?? null,
-        repetitions: line.frame_repetitions[rowIndex] || 1,
-      };
+      let frameData = line.frames[rowIndex] as Frame;
+      frameData.script.content = scriptContent;
 
       console.log('Copying frame data:', frameData);
       copyFrame(colIndex, rowIndex, frameData);
@@ -485,8 +475,8 @@ export const GridTable: React.FC<GridTableProps> = ({
       }
 
       // Step 5: Set script content if it exists (do this last as it may trigger compilation)
-      if (frameData.script && frameData.script.trim() !== '') {
-        const scriptOperation = setScript(colIndex, insertIndex, frameData.script);
+      if (frameData.script && frameData.script.content.trim() !== '') {
+        const scriptOperation = setScript(colIndex, insertIndex, frameData.script.content);
         await client.sendMessage(scriptOperation);
         await new Promise(resolve => setTimeout(resolve, 150)); // Longer wait for script compilation
       }

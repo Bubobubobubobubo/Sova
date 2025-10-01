@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     clock::{Clock, SyncTime},
     lang::{
-        evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::asm_interpreter::{ASMInterpreter, ASMInterpreterFactory}, variable::{VariableStore, VariableValue}, Program
+        evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::asm_interpreter::ASMInterpreter, variable::{VariableStore, VariableValue}, Program
     },
 };
 use crate::{device_map::DeviceMap, lang::interpreter::Interpreter};
@@ -23,7 +23,7 @@ pub struct Script {
     #[serde(skip_serializing, default)]
     pub compiled: Program,
     #[serde(skip_serializing, default)]
-    pub frame_vars: Mutex<VariableStore>,
+    pub frame_vars: Mutex<VariableStore>, //TODO: passer dans la frame
     pub index: usize,
     pub line_index: usize,
     pub args: HashMap<String, String>,
