@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
-import { useColorContext } from '../context/ColorContext';
+import { useColorContext } from '../../context/ColorContext';
 
 interface DropdownOption {
   value: string;

@@ -1,9 +1,9 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
 import { GridTable } from './GridTable';
-import { sceneStore, gridUIStore, updateGridSelection, getMaxFrames, addFrame, removeFrame, insertLineAfter, removeLine } from '../stores/sceneStore';
-import { globalVariablesStore, formatVariableValue } from '../stores/globalVariablesStore';
-import { useColorContext } from '../context/ColorContext';
+import { sceneStore, gridUIStore, updateGridSelection, getMaxFrames, addFrame, removeFrame, insertLineAfter, removeLine } from '../../stores/sceneStore';
+import { globalVariablesStore, formatVariableValue } from '../../stores/globalVariablesStore';
+import { useColorContext } from '../../context/ColorContext';
 
 export interface GridComponentProps {
   width: number;

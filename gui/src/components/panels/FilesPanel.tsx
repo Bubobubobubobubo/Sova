@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Save, Trash2, Clock, Hash, RefreshCw, Download, RotateCcw, Timer, FileText, FolderOpen } from 'lucide-react';
 import { useStore } from '@nanostores/react';
-import { ProjectsAPI, ProjectInfo, Snapshot } from '../api/projects';
+import { ProjectsAPI, ProjectInfo, Snapshot } from '../../api/projects';
 import { invoke } from '@tauri-apps/api/core';
-import { optionsPanelStore } from '../stores/optionsPanelStore';
-import { 
+import { optionsPanelStore } from '../../stores/optionsPanelStore';
+import {
   projectStore,
   setProjects,
   setSearchQuery,
@@ -17,8 +17,8 @@ import {
   hideSaveOverwriteConfirmation,
   getFilteredProjects,
   setPendingSaveProjectName
-} from '../stores/projectStore';
-import { ActionTiming } from '../types';
+} from '../../stores/projectStore';
+import { ActionTiming } from '../../types';
 
 export const FilesPanel: React.FC = () => {
   const state = useStore(projectStore);

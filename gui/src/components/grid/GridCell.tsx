@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Frame, Line } from '../types';
-import { useColorContext } from '../context/ColorContext';
+import { Frame, Line } from '../../types';
+import { useColorContext } from '../../context/ColorContext';
 import { X } from 'lucide-react';
 import { useStore } from '@nanostores/react';
-import { dragStore, startDrag } from '../stores/dragStore';
-import { clipboardStore } from '../stores/clipboardStore';
+import { dragStore, startDrag } from '../../stores/dragStore';
+import { clipboardStore } from '../../stores/clipboardStore';
 
 export interface GridCellProps {
   line: Line;

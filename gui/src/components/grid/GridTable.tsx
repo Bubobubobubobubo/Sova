@@ -3,12 +3,12 @@ import { useStore } from '@nanostores/react';
 import { GridCell } from './GridCell';
 import { DragOverlay } from './DragOverlay';
 import { DropZone } from './DropZone';
-import { sceneStore, gridUIStore, updateGridSelection, playbackStore, addFrame, removeFrame, addLine, insertLineAfter, removeLine, resizeFrame, setFrameName, scriptEditorStore, setLineLength, setScript, enableFrames, disableFrames, setFrameRepetitions } from '../stores/sceneStore';
-import { dragStore, endDrag } from '../stores/dragStore';
-import { clipboardStore, copyFrame } from '../stores/clipboardStore';
-import { useColorContext } from '../context/ColorContext';
+import { sceneStore, gridUIStore, updateGridSelection, playbackStore, addFrame, removeFrame, addLine, insertLineAfter, removeLine, resizeFrame, setFrameName, scriptEditorStore, setLineLength, setScript, enableFrames, disableFrames, setFrameRepetitions } from '../../stores/sceneStore';
+import { dragStore, endDrag } from '../../stores/dragStore';
+import { clipboardStore, copyFrame } from '../../stores/clipboardStore';
+import { useColorContext } from '../../context/ColorContext';
 import { Plus, Minus } from 'lucide-react';
-import { Frame } from '../types';
+import { Frame } from '../../types';
 
 export interface GridTableProps {
   cellWidth: number;

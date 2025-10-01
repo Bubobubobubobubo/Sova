@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Music, Wifi, Plus, Trash2, Hash, Play, Square, Tag } from 'lucide-react';
-import { createBuboClient } from '../client';
-import type { DeviceInfo, ClientMessage, ServerMessage } from '../types';
+import { createBuboClient } from '../../client';
+import type { DeviceInfo, ClientMessage, ServerMessage } from '../../types';
 
 const client = createBuboClient();
 

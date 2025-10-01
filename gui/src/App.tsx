@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useStore } from "@nanostores/react";
-import { MainLayout } from "./components/MainLayout";
-import { ServerManagerPanel } from "./components/ServerManagerPanel";
-import { ConfirmCloseModal } from "./components/ConfirmCloseModal";
+import { MainLayout } from "./components/layout/MainLayout";
+import { ServerManagerPanel } from "./components/panels/ServerManagerPanel";
+import { ConfirmCloseModal } from "./components/ui/ConfirmCloseModal";
 import { ColorProvider } from "./context/ColorContext";
 import { initializeLanguages } from "./languages";
 import { editorSettingsStore } from "./stores/editorSettingsStore";

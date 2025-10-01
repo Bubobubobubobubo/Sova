@@ -1,7 +1,7 @@
 import React, { useRef, useEffect } from 'react';
 import { useStore } from '@nanostores/react';
-import { dragStore, setDropTarget } from '../stores/dragStore';
-import { useColorContext } from '../context/ColorContext';
+import { dragStore, setDropTarget } from '../../stores/dragStore';
+import { useColorContext } from '../../context/ColorContext';
 
 interface DropZoneProps {
   lineIndex: number;

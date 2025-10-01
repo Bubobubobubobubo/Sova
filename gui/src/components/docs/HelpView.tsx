@@ -1,14 +1,14 @@
 import React, { useState, Suspense } from 'react';
 import { ChevronLeft, ChevronRight, Menu } from 'lucide-react';
-import '../styles/mdx.css';
+import '../../styles/mdx.css';
 
 // Import MDX files
-import GettingStarted from '../docs/getting-started.mdx';
-import InterfaceOverview from '../docs/interface-overview.mdx';
-import CodeEditor from '../docs/code-editor.mdx';
-import GridInterface from '../docs/grid-interface.mdx';
-import Collaboration from '../docs/collaboration.mdx';
-import TipsAndTricks from '../docs/tips-and-tricks.mdx';
+import GettingStarted from '../../docs/getting-started.mdx';
+import InterfaceOverview from '../../docs/interface-overview.mdx';
+import CodeEditor from '../../docs/code-editor.mdx';
+import GridInterface from '../../docs/grid-interface.mdx';
+import Collaboration from '../../docs/collaboration.mdx';
+import TipsAndTricks from '../../docs/tips-and-tricks.mdx';
 
 interface DocSection {
   id: string;

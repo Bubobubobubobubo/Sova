@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Command } from 'cmdk';
-import { useColorContext } from '../context/ColorContext';
-import { SovaClient } from '../client';
+import { useColorContext } from '../../context/ColorContext';
+import { SovaClient } from '../../client';
 import { 
   Search, Settings, ToggleLeft, ToggleRight, RefreshCw,
   Play, Square, Pause, RotateCcw, Grid3X3, Code, SplitSquareHorizontal,

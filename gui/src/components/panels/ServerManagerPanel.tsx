@@ -1,15 +1,15 @@
 import React, { useEffect } from 'react';
 import { useStore } from '@nanostores/react';
-import { 
-  serverManagerStore, 
-  serverManagerUIStore, 
+import {
+  serverManagerStore,
+  serverManagerUIStore,
   serverManagerActions,
   getServerStatusText,
   getServerStatusColor
-} from '../stores/serverManagerStore';
+} from '../../stores/serverManagerStore';
 import { X, Settings } from 'lucide-react';
-import { ServerControls } from './ServerControls';
-import { ServerConfigForm } from './ServerConfigForm';
+import { ServerControls } from '../server/ServerControls';
+import { ServerConfigForm } from '../server/ServerConfigForm';
 import { ServerLogsPanel } from './ServerLogsPanel';
 
 export const ServerManagerPanel: React.FC = () => {
