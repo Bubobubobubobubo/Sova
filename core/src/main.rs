@@ -188,7 +188,7 @@ fn initialize_sova_engine(
 )]
 struct Cli {
     /// IP address to bind the server to
-    #[arg(short, long, value_name = "IP_ADDRESS", default_value = "127.0.0.1")]
+    #[arg(short, long, value_name = "IP_ADDRESS", default_value = "0.0.0.0")]
     ip: String,
 
     /// Port to bind the server to
