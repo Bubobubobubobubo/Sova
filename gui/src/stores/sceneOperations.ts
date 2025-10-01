@@ -108,7 +108,9 @@ export const resizeFrame = (lineIndex: number, frameIndex: number, newDuration: 
   
   // Create new frames array with updated duration
   const newFrames = [...line.frames];
-  newFrames[frameIndex] = clampedDuration;
+  if(newFrames[frameIndex]) {
+    newFrames[frameIndex].duration = clampedDuration;
+  }
   
   return {
     UpdateLineFrames: [lineIndex, newFrames, timing]
@@ -118,12 +120,6 @@ export const resizeFrame = (lineIndex: number, frameIndex: number, newDuration: 
 export const setFrameName = (lineIndex: number, frameIndex: number, name: string | null, timing: ActionTiming = "Immediate") => {
   return {
     SetFrameName: [lineIndex, frameIndex, name, timing]
-  };
-};
-
-export const setSceneLength = (length: number, timing: ActionTiming = "Immediate") => {
-  return {
-    SetSceneLength: [length, timing]
   };
 };
 

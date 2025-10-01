@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Line } from '../types';
+import { Frame, Line } from '../types';
 import { useColorContext } from '../context/ColorContext';
 import { X } from 'lucide-react';
 import { useStore } from '@nanostores/react';
@@ -46,30 +46,30 @@ export const GridCell: React.FC<GridCellProps> = ({
   const { palette } = useColorContext();
   const dragState = useStore(dragStore);
   const clipboardState = useStore(clipboardStore);
-  const frameValue = line.frames[frameIndex];
-  const isEnabled = line.enabled_frames[frameIndex];
-  const frameName = line.frame_names[frameIndex];
-  const repetitions = line.frame_repetitions[frameIndex] || 1;
+  const frameValue = line.frames[frameIndex] as Frame;
+  const isEnabled = frameValue.enabled;
+  const frameName = frameValue.name;
+  const repetitions = frameValue.repetitions;
   
   // Get the language for this frame
   const frameLanguage = (() => {
-    const script = line.scripts.find(s => s.index === frameIndex);
+    const script = line.frames[frameIndex]?.script;
     return script?.lang || 'bali'; // Default to 'bali' if no script found
   })();
   
   const [isResizing, setIsResizing] = useState(false);
   const [, setResizeStartY] = useState(0);
   const [, setResizeStartValue] = useState(0);
-  const [currentResizeValue, setCurrentResizeValue] = useState(frameValue);
+  const [currentResizeValue, setCurrentResizeValue] = useState(frameValue?.duration);
   
   // Keep currentResizeValue in sync with frameValue when not resizing
   useEffect(() => {
     if (!isResizing) {
-      setCurrentResizeValue(frameValue);
+      setCurrentResizeValue(frameValue?.duration);
     }
   }, [frameValue, isResizing]);
   const [isEditing, setIsEditing] = useState(false);
-  const [editValue, setEditValue] = useState(frameValue?.toFixed(2) ?? '0.00');
+  const [editValue, setEditValue] = useState(frameValue?.duration.toFixed(2) ?? '0.00');
   const [editNameValue, setEditNameValue] = useState(frameName || '');
   const [isEditingRepetitions, setIsEditingRepetitions] = useState(false);
   const [editRepetitionsValue, setEditRepetitionsValue] = useState(repetitions.toString());
@@ -82,7 +82,7 @@ export const GridCell: React.FC<GridCellProps> = ({
   
   // Calculate actual height based on duration (proportional to baseHeight)
   // Use currentResizeValue during resizing for immediate visual feedback
-  const displayValue = isResizing ? currentResizeValue : frameValue;
+  const displayValue = isResizing ? currentResizeValue : frameValue?.duration;
   // Ensure minimum visual height of baseHeight (size for duration 1.0) for cosmetic reasons
   const actualHeight = Math.max(baseHeight, baseHeight * (displayValue ?? 1));
 
@@ -192,13 +192,12 @@ export const GridCell: React.FC<GridCellProps> = ({
     e.preventDefault();
     
     const startY = e.clientY;
-    const startValue = frameValue ?? 1;
-    let latestValue = startValue; // Track the latest value in closure
+    let latestValue = frameValue.duration; // Track the latest value in closure
     
     setIsResizing(true);
     setResizeStartY(startY);
-    setResizeStartValue(startValue);
-    setCurrentResizeValue(startValue);
+    setResizeStartValue(frameValue.duration);
+    setCurrentResizeValue(frameValue.duration);
     
     // Add global mouse event listeners
     const handleMouseMove = (moveEvent: MouseEvent) => {
@@ -206,7 +205,7 @@ export const GridCell: React.FC<GridCellProps> = ({
       const increment = moveEvent.shiftKey ? 0.01 : 0.1;
       const pixelsPerIncrement = 10; // 10px per increment for smooth feel
       const steps = Math.round(deltaY / pixelsPerIncrement);
-      const newValue = startValue + (steps * increment);
+      const newValue = frameValue.duration + (steps * increment);
       
       // Clamp between 0.1 and 8.0
       const clampedValue = Math.max(0.1, Math.min(8.0, newValue));
@@ -223,7 +222,7 @@ export const GridCell: React.FC<GridCellProps> = ({
       setIsResizing(false);
       
       // Only send to server on mouse release if value changed
-      if (onResize && Math.abs(latestValue - startValue) > 0.001) {
+      if (onResize && Math.abs(latestValue - frameValue.duration) > 0.001) {
         onResize(latestValue);
       }
     };
@@ -236,7 +235,7 @@ export const GridCell: React.FC<GridCellProps> = ({
     e.stopPropagation();
     if (!isResizing) {
       setIsEditing(true);
-      setEditValue(frameValue?.toFixed(2) ?? '0.00');
+      setEditValue(frameValue.duration.toFixed(2) ?? '0.00');
     }
   };
 
@@ -248,14 +247,14 @@ export const GridCell: React.FC<GridCellProps> = ({
       handleValueSubmit();
     } else if (e.key === 'Escape') {
       setIsEditing(false);
-      setEditValue(frameValue?.toFixed(2) ?? '0.00');
+      setEditValue(frameValue.duration.toFixed(2) ?? '0.00');
     }
   };
 
   const handleValueSubmit = () => {
     const newValue = parseFloat(editValue);
     if (!isNaN(newValue) && newValue >= 0.1 && newValue <= 8.0) {
-      if (onResize && newValue !== frameValue) {
+      if (onResize && newValue !== frameValue.duration) {
         onResize(newValue);
       }
     }
@@ -363,19 +362,9 @@ export const GridCell: React.FC<GridCellProps> = ({
     e.stopPropagation();
 
     const startPos = { x: e.clientX, y: e.clientY };
-    
-    // For drag operations, we'll get the script content during the actual move operation
-    // This is just temporary data for the drag preview
-    const frameData = {
-      duration: frameValue ?? 1,
-      enabled: isEnabled ?? false,
-      name: frameName ?? null,
-      script: null, // Will be fetched during actual drop operation
-      repetitions: repetitions,
-    };
 
     // Start drag immediately on Shift+Click
-    startDrag(lineIndex, frameIndex, frameData, startPos);
+    startDrag(lineIndex, frameIndex, frameValue, startPos);
   };
 
   // Regular click handler
@@ -406,7 +395,7 @@ export const GridCell: React.FC<GridCellProps> = ({
       onClick={handleCellClick}
       onMouseDown={handleMouseDown}
       onDoubleClick={onDoubleClick}
-      title={`${frameName || 'Frame'} - Duration: ${frameValue?.toFixed(2) ?? '0.00'}s${repetitions > 1 ? ` × ${repetitions}` : ''}\nShift+Click to drag\nCtrl+C to copy, Ctrl+V to paste`}
+      title={`${frameName || 'Frame'} - Duration: ${frameValue.duration.toFixed(2) ?? '0.00'}s${repetitions > 1 ? ` × ${repetitions}` : ''}\nShift+Click to drag\nCtrl+C to copy, Ctrl+V to paste`}
     >
       {/* Top row - language, play marker and delete button */}
       <div className="flex justify-between items-start h-4">

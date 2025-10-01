@@ -58,7 +58,7 @@ pub struct DeviceMap {
     pub output_connections: Mutex<HashMap<String, DeviceItem>>,
     /// Maps user-assigned Slot IDs (1-N) to the system or virtual device name assigned to it.
     /// Slot 0 is implicitly the Log device and is not stored here.
-    pub slot_assignments: Mutex<HashMap<usize, String>>,
+    pub slot_assignments: Mutex<HashMap<usize, String>>, // pub slot_assignments: Mutex<[Option<String> ; MAX_DEVICE_SLOTS]>,
     /// Optional handle to the system's MIDI input interface, managed by `midir`.
     midi_in: Option<Arc<Mutex<MidiInput>>>,
     /// Optional handle to the system's MIDI output interface, managed by `midir`.

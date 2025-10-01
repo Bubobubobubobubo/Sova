@@ -10,20 +10,15 @@ export type ActionTiming =
 
 // Re-export frame types for convenience
 export type { Frame, FramePosition, DraggedFrame, PastedFrameData } from './types/frame';
-import type { PastedFrameData } from './types/frame';
+import type { Frame, PastedFrameData } from './types/frame';
 
 export interface Script {
   content: string;
-  lang: string;
-  index: number;
+  lang?: string;
 }
 
 export interface Line {
-  frames: number[];
-  enabled_frames: boolean[];
-  scripts: Script[];
-  frame_names: (string | null)[];
-  frame_repetitions: number[];
+  frames: Frame[];
   speed_factor: number;
   index: number;
   start_frame: number | undefined;
@@ -32,7 +27,6 @@ export interface Line {
 }
 
 export interface Scene {
-  length: number;
   lines: Line[];
 }
 
@@ -96,8 +90,6 @@ export type ClientMessage =
   | { UpdateGridSelection: GridSelection }
   | { StartedEditingFrame: [number, number] }
   | { StoppedEditingFrame: [number, number] }
-  | "GetSceneLength"
-  | { SetSceneLength: [number, ActionTiming] }
   | { SetLineLength: [number, number | null, ActionTiming] }
   | { SetLineSpeedFactor: [number, number, ActionTiming] }
   | { TransportStart: ActionTiming }
@@ -168,7 +160,6 @@ export type ServerMessage =
       frame_idx: number;
     } }
   | { CompilationErrorOccurred: CompilationError }
-  | { SceneLength: number }
   | "TransportStarted"
   | "TransportStopped"
   | { ClockState: [number, number, number, number] }
