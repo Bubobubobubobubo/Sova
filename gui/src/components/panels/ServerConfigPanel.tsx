@@ -1,7 +1,7 @@
 import React, { useEffect } from 'react';
-import { serverManagerActions } from '../stores/serverManagerStore';
-import { ServerControls } from './ServerControls';
-import { ServerConfigForm } from './ServerConfigForm';
+import { serverManagerActions } from '../../stores/serverManagerStore';
+import { ServerControls } from '../server/ServerControls';
+import { ServerConfigForm } from '../server/ServerConfigForm';
 
 export const ServerConfigPanel: React.FC = () => {
   // Initialize on mount

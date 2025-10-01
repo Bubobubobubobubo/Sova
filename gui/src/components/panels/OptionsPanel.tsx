@@ -1,14 +1,14 @@
 import React from 'react';
 import { X, Palette, Settings as SettingsIcon, Monitor, FileText, ArrowLeft, ArrowRight, ArrowDown, Type, AlignLeft, FileType, Server, ScrollText, Pin } from 'lucide-react';
 import { useStore } from '@nanostores/react';
-import { MaterialColorPalette } from './MaterialColorPalette';
+import { MaterialColorPalette } from '../ui/MaterialColorPalette';
 import { DevicesPanel } from './DevicesPanel';
 import { FilesPanel } from './FilesPanel';
 import { ServerConfigPanel } from './ServerConfigPanel';
 import { ServerLogsPanel } from './ServerLogsPanel';
-import { editorSettingsStore, setFontSize, setTabSize, toggleVimMode, setFontFamily } from '../stores/editorSettingsStore';
-import { optionsPanelStore, setOptionsPanelActiveTab, toggleOptionsPanelPin } from '../stores/optionsPanelStore';
-import { Dropdown } from './Dropdown';
+import { editorSettingsStore, setFontSize, setTabSize, toggleVimMode, setFontFamily } from '../../stores/editorSettingsStore';
+import { optionsPanelStore, setOptionsPanelActiveTab, toggleOptionsPanelPin } from '../../stores/optionsPanelStore';
+import { Dropdown } from '../ui/Dropdown';
 
 interface OptionsPanelProps {
   onClose: () => void;

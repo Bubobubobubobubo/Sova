@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { dragStore, updateDragPreview } from '../stores/dragStore';
-import { useColorContext } from '../context/ColorContext';
+import { dragStore, updateDragPreview } from '../../stores/dragStore';
+import { useColorContext } from '../../context/ColorContext';
 
 export const DragOverlay: React.FC = () => {
   const { palette } = useColorContext();

@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { useColorContext } from '../context/ColorContext';
-import { scriptEditorStore } from '../stores/sceneStore';
+import { useColorContext } from '../../context/ColorContext';
+import { scriptEditorStore } from '../../stores/sceneStore';
 import { ChevronUp, ChevronDown, CheckCircle, XCircle, Info, Code } from 'lucide-react';
-import { Dropdown } from './Dropdown';
+import { Dropdown } from '../ui/Dropdown';
 
 interface EditorLogPanelProps {
   onEvaluate: (() => void) | undefined;

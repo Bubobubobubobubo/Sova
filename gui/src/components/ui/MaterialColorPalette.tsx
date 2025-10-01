@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useColorContext } from '../context/ColorContext';
+import { useColorContext } from '../../context/ColorContext';
 import { Sun, Moon, RefreshCw } from 'lucide-react';
 
 export const MaterialColorPalette: React.FC = () => {

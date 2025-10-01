@@ -2,13 +2,13 @@ import React, { useMemo } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { vim } from '@replit/codemirror-vim';
 import { useStore } from '@nanostores/react';
-import { useColorContext } from '../context/ColorContext';
-import { editorSettingsStore } from '../stores/editorSettingsStore';
-import { createCustomTheme } from '../themes/customTheme';
+import { useColorContext } from '../../context/ColorContext';
+import { editorSettingsStore } from '../../stores/editorSettingsStore';
+import { createCustomTheme } from '../../themes/customTheme';
 import { flashField } from './FlashField';
 import { evalKeymap } from './EvalKeymap';
 import { EditorLogPanel } from './EditorLogPanel';
-import { getLanguageSupport } from '../languages';
+import { getLanguageSupport } from '../../languages';
 
 interface CodeEditorProps {
   value?: string;
