@@ -349,21 +349,21 @@ impl Clock {
         let sixty_million = (1, 60_000_000, 1); // 60,000,000 microseconds per minute
 
         // Exact calculation: beats * (60,000,000 / tempo)
-        let micros_per_beat = div_decimal(
-            sixty_million.0,
-            sixty_million.1,
-            sixty_million.2,
+        let minute_part = div_decimal(
+            beats_rational.0,
+            beats_rational.1,
+            beats_rational.2,
             tempo_rational.0,
             tempo_rational.1,
             tempo_rational.2,
         );
         let result_rational = mul_decimal(
-            beats_rational.0,
-            beats_rational.1,
-            beats_rational.2,
-            micros_per_beat.0,
-            micros_per_beat.1,
-            micros_per_beat.2,
+            sixty_million.0,
+            sixty_million.1,
+            sixty_million.2,
+            minute_part.0,
+            minute_part.1,
+            minute_part.2,
         );
 
         float64_from_decimal(result_rational.0, result_rational.1, result_rational.2).round()

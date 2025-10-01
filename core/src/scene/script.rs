@@ -24,8 +24,11 @@ pub struct Script {
     pub compiled: Program,
     #[serde(skip_serializing, default)]
     pub frame_vars: Mutex<VariableStore>, //TODO: passer dans la frame
+    #[serde(skip_serializing, default)]
     pub index: usize,
+    #[serde(skip_serializing, default)]
     pub line_index: usize,
+    #[serde(skip_serializing_if = "HashMap::is_empty", default)]
     pub args: HashMap<String, String>,
 }
 

@@ -1,4 +1,5 @@
 import type { ActionTiming, Scene } from '../types';
+import { defaultFrame } from '../types/frame';
 import { sceneStore } from './sceneStore';
 
 // Frame and line operations
@@ -46,11 +47,7 @@ export const insertLineAfter = (afterIndex: number, timing: ActionTiming = "Imme
   if (!scene || afterIndex >= scene.lines.length) return null;
   
   const newLine = {
-    frames: [1.0], // Start with one frame
-    enabled_frames: [true],
-    scripts: [],
-    frame_names: [null],
-    frame_repetitions: [1],
+    frames: [defaultFrame()], // Start with one frame
     speed_factor: 1.0,
     index: afterIndex + 1, // Will be updated below
     start_frame: undefined,
