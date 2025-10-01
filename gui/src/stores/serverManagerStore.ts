@@ -1,30 +1,7 @@
 import { map } from 'nanostores';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { serverConfigStore, updateServerConfig, updateServerSettings } from './serverConfigStore';
 import { addLog } from './optimizedLogStore';
-
-// Types matching the Rust backend
-export interface ServerConfig {
-  ip: string;
-  port: number;
-  audio_engine: boolean;
-  sample_rate: number;
-  block_size: number;
-  buffer_size: number;
-  max_audio_buffers: number;
-  max_voices: number;
-  output_device?: string;
-  osc_port: number;
-  osc_host: string;
-  timestamp_tolerance_ms: number;
-  audio_files_location: string;
-  audio_priority: number;
-  relay?: string;
-  instance_name: string;
-  relay_token?: string;
-  list_devices: boolean;
-}
 
 export interface LogEntry {
   timestamp: string;
@@ -72,36 +49,10 @@ export const serverManagerActions = {
   // Server state actions
   async refreshState() {
     try {
-      const state = await invoke<ServerState & { config: ServerConfig }>('get_server_state');
-      // Update runtime state
-      const runtimeState: ServerState = {
-        status: state.status,
-        logs: state.logs,
-      };
-      if (state.process_id !== undefined) {
-        runtimeState.process_id = state.process_id;
-      }
-      serverManagerStore.set(runtimeState);
-      // Update last known status
-      updateServerSettings({ lastKnownStatus: typeof state.status === 'string' ? state.status : 'Error' });
+      const state = await invoke<ServerState>('get_server_state');
+      serverManagerStore.set(state);
     } catch (error) {
       console.error('Failed to refresh server state:', error);
-    }
-  },
-
-  async updateConfig(config: Partial<ServerConfig>) {
-    try {
-      const currentConfig = serverConfigStore.get();
-      const newConfig = { ...currentConfig, ...config };
-      
-      // Update persistent store first
-      updateServerConfig(config);
-      
-      // Then update backend
-      await invoke('update_server_config', { config: newConfig });
-    } catch (error) {
-      console.error('Failed to update config:', error);
-      throw error;
     }
   },
 
@@ -136,14 +87,9 @@ export const serverManagerActions = {
     try {
       this.setLoading(true);
       this.setError(null);
-      
+
       await invoke('stop_server');
-      
-      // Update last known status
-      updateServerSettings({ lastKnownStatus: 'Stopped' });
-      
-      // Stop log manager
-      
+
       // Refresh state
       await this.refreshState();
       

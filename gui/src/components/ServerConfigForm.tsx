@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useStore } from '@nanostores/react';
-import { serverManagerActions, type ServerConfig } from '../stores/serverManagerStore';
-import { serverConfigStore } from '../stores/serverConfigStore';
-import { Monitor } from 'lucide-react';
+import { serverConfigStore, configDirtyStore, updateConfig, saveConfig, loadConfig, type ServerConfig } from '../stores/serverConfigStore';
+import { serverManagerActions } from '../stores/serverManagerStore';
+import { Monitor, Save, RotateCcw } from 'lucide-react';
 import { Dropdown } from './Dropdown';
 
 interface ServerConfigFormProps {
@@ -14,17 +14,16 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
   onConfigChange,
   compact = false
 }) => {
-  const persistedConfig = useStore(serverConfigStore);
-  const [localConfig, setLocalConfig] = useState<ServerConfig>(persistedConfig);
+  const config = useStore(serverConfigStore);
+  const isDirty = useStore(configDirtyStore);
   const [audioDevices, setAudioDevices] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Update local config when persisted config changes
   useEffect(() => {
-    setLocalConfig(persistedConfig);
-  }, [persistedConfig]);
+    loadConfig();
+  }, []);
 
-  // Load audio devices
   useEffect(() => {
     const loadAudioDevices = async () => {
       const devices = await serverManagerActions.listAudioDevices();
@@ -33,26 +32,32 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
     loadAudioDevices();
   }, []);
 
-  // Notify parent of config changes
   useEffect(() => {
     if (onConfigChange) {
-      onConfigChange(localConfig);
+      onConfigChange(config);
     }
-  }, [localConfig, onConfigChange]);
+  }, [config, onConfigChange]);
 
-  const handleConfigChange = async (key: keyof ServerConfig, value: any) => {
-    const newConfig = { ...localConfig, [key]: value };
-    setLocalConfig(newConfig);
-    
-    // Auto-save configuration
+  const handleConfigChange = (key: keyof ServerConfig, value: any) => {
+    updateConfig({ [key]: value });
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setError(null);
     try {
-      await serverManagerActions.updateConfig({ [key]: value });
-    } catch (error) {
-      console.error('Failed to auto-save config:', error);
-      setError(error instanceof Error ? error.message : 'Failed to save configuration');
+      await saveConfig();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to save configuration');
+    } finally {
+      setIsSaving(false);
     }
   };
 
+  const handleReload = async () => {
+    setError(null);
+    await loadConfig();
+  };
 
   const inputClass = compact ? 'w-full px-2 py-1 border text-sm' : 'w-full px-3 py-2 border';
   const labelClass = compact ? 'text-xs' : 'text-sm';
@@ -60,6 +65,43 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
 
   return (
     <div className={compact ? 'space-y-4' : 'space-y-6'}>
+      {/* Save/Reload buttons */}
+      <div className="flex gap-2">
+        <button
+          onClick={handleSave}
+          disabled={!isDirty || isSaving}
+          className={`flex items-center gap-2 px-4 py-2 font-medium transition-colors ${
+            isDirty && !isSaving
+              ? 'bg-blue-600 text-white hover:bg-blue-700'
+              : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+          }`}
+          style={{
+            backgroundColor: isDirty && !isSaving ? 'var(--color-primary)' : undefined,
+          }}
+        >
+          <Save size={16} />
+          {isSaving ? 'Saving...' : 'Save Configuration'}
+        </button>
+        <button
+          onClick={handleReload}
+          className="flex items-center gap-2 px-4 py-2 border font-medium hover:bg-gray-100 transition-colors"
+          style={{
+            borderColor: 'var(--color-border)',
+            color: 'var(--color-text)',
+          }}
+        >
+          <RotateCcw size={16} />
+          Reload from File
+        </button>
+      </div>
+
+      {/* Unsaved changes indicator */}
+      {isDirty && (
+        <div className="p-3 bg-yellow-100 border border-yellow-200 text-yellow-800 text-sm">
+          You have unsaved changes. Click "Save Configuration" to persist them.
+        </div>
+      )}
+
       {/* Error display */}
       {error && (
         <div className="p-3 bg-red-100 border border-red-200 text-red-700 text-sm">
@@ -79,7 +121,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="text"
-              value={localConfig.ip}
+              value={config.ip}
               onChange={(e) => handleConfigChange('ip', e.target.value)}
               className={inputClass}
               style={{
@@ -95,7 +137,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="number"
-              value={localConfig.port}
+              value={config.port}
               onChange={(e) => handleConfigChange('port', parseInt(e.target.value))}
               className={inputClass}
               style={{
@@ -118,14 +160,14 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             <label className={`flex items-center gap-2 ${labelClass}`}>
               <input
                 type="checkbox"
-                checked={localConfig.audio_engine}
+                checked={config.audio_engine}
                 onChange={(e) => handleConfigChange('audio_engine', e.target.checked)}
               />
               <span style={{ color: 'var(--color-text)' }}>Enable Audio Engine</span>
             </label>
           </div>
-          
-          {localConfig.audio_engine && (
+
+          {config.audio_engine && (
             <div className={`grid ${gridClass}`}>
               <div>
                 <label className={`block ${labelClass} font-medium mb-1`} style={{ color: 'var(--color-muted)' }}>
@@ -133,7 +175,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.sample_rate}
+                  value={config.sample_rate}
                   onChange={(e) => handleConfigChange('sample_rate', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -149,7 +191,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.block_size}
+                  value={config.block_size}
                   onChange={(e) => handleConfigChange('block_size', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -165,7 +207,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.buffer_size}
+                  value={config.buffer_size}
                   onChange={(e) => handleConfigChange('buffer_size', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -181,7 +223,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.max_audio_buffers}
+                  value={config.max_audio_buffers}
                   onChange={(e) => handleConfigChange('max_audio_buffers', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -197,7 +239,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.max_voices}
+                  value={config.max_voices}
                   onChange={(e) => handleConfigChange('max_voices', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -213,7 +255,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="number"
-                  value={localConfig.audio_priority}
+                  value={config.audio_priority}
                   onChange={(e) => handleConfigChange('audio_priority', parseInt(e.target.value))}
                   className={inputClass}
                   style={{
@@ -228,7 +270,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                   Output Device
                 </label>
                 <Dropdown
-                  value={localConfig.output_device || ''}
+                  value={config.output_device || ''}
                   options={[
                     { value: '', label: 'Default' },
                     ...audioDevices.map(device => ({ value: device, label: device }))
@@ -248,7 +290,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 </label>
                 <input
                   type="text"
-                  value={localConfig.audio_files_location}
+                  value={config.audio_files_location}
                   onChange={(e) => handleConfigChange('audio_files_location', e.target.value)}
                   className={inputClass}
                   style={{
@@ -275,7 +317,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="text"
-              value={localConfig.osc_host}
+              value={config.osc_host}
               onChange={(e) => handleConfigChange('osc_host', e.target.value)}
               className={inputClass}
               style={{
@@ -291,7 +333,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="number"
-              value={localConfig.osc_port}
+              value={config.osc_port}
               onChange={(e) => handleConfigChange('osc_port', parseInt(e.target.value))}
               className={inputClass}
               style={{
@@ -316,7 +358,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="text"
-              value={localConfig.relay || ''}
+              value={config.relay || ''}
               onChange={(e) => handleConfigChange('relay', e.target.value || undefined)}
               className={inputClass}
               style={{
@@ -333,7 +375,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="text"
-              value={localConfig.relay_token || ''}
+              value={config.relay_token || ''}
               onChange={(e) => handleConfigChange('relay_token', e.target.value || undefined)}
               className={inputClass}
               style={{
@@ -350,7 +392,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="text"
-              value={localConfig.instance_name}
+              value={config.instance_name}
               onChange={(e) => handleConfigChange('instance_name', e.target.value)}
               className={inputClass}
               style={{
@@ -366,7 +408,7 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
             </label>
             <input
               type="number"
-              value={localConfig.timestamp_tolerance_ms}
+              value={config.timestamp_tolerance_ms}
               onChange={(e) => handleConfigChange('timestamp_tolerance_ms', parseInt(e.target.value))}
               className={inputClass}
               style={{
@@ -375,16 +417,6 @@ export const ServerConfigForm: React.FC<ServerConfigFormProps> = ({
                 color: 'var(--color-text)'
               }}
             />
-          </div>
-          <div>
-            <label className={`flex items-center gap-2 ${labelClass}`}>
-              <input
-                type="checkbox"
-                checked={localConfig.list_devices}
-                onChange={(e) => handleConfigChange('list_devices', e.target.checked)}
-              />
-              <span style={{ color: 'var(--color-text)' }}>List Available Devices</span>
-            </label>
           </div>
         </div>
       </div>
