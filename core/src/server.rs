@@ -1,14 +1,13 @@
-use crate::{lang::interpreter::InterpreterDirectory, scene::{script::Script, Frame}};
+use crate::{lang::interpreter::InterpreterDirectory, Scene};
 use client::ClientMessage;
-use crossbeam_channel::Sender;
+use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use std::{
     borrow::Cow,
     io::ErrorKind,
     sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+        atomic::{AtomicBool, Ordering}, Arc
+    }, thread,
 };
 use tokio::time::Duration;
 use tokio::{
@@ -20,18 +19,16 @@ use tokio::{
 
 use crate::{
     clock::{Clock, ClockServer, SyncTime},
-    compiler::CompilationError,
     device_map::DeviceMap,
-    protocol::message::TimedMessage,
-    relay_client::RelayClient,
-    scene::Scene,
-    schedule::{message::SchedulerMessage, notification::SchedulerNotification},
-    shared_types::{DeviceInfo, GridSelection},
+    schedule::{SchedulerMessage, SovaNotification},
     transcoder::Transcoder,
     {log_eprintln, log_println},
 };
 
 pub mod client;
+
+mod message;
+pub use message::ServerMessage;
 
 /// Byte delimiter used to separate JSON messages in the TCP stream.
 pub const ENDING_BYTE: u8 = 0x07;
@@ -48,16 +45,14 @@ pub struct ServerState {
     pub clock_server: Arc<ClockServer>,
     /// Manages connections to output devices (e.g., MIDI, OSC).
     pub devices: Arc<DeviceMap>,
-    /// Sender for transmitting timed messages (often OSC) to the `World` task.
-    pub world_iface: Sender<TimedMessage>,
     /// Sender for sending control messages to the `Scheduler` task.
     pub sched_iface: Sender<SchedulerMessage>,
     /// Watch channel sender used to broadcast server-wide notifications
     /// (e.g., scene updates, client list changes) to all connected clients.
-    pub update_sender: watch::Sender<SchedulerNotification>,
+    pub update_sender: watch::Sender<SovaNotification>,
     /// Watch channel receiver used by each client task to receive broadcasts
     /// sent via the `update_sender`.
-    pub update_receiver: watch::Receiver<SchedulerNotification>,
+    pub update_receiver: watch::Receiver<SovaNotification>,
     /// List of names of currently connected clients.
     /// Protected by a Mutex for safe concurrent access.
     pub clients: Arc<Mutex<Vec<String>>>,
@@ -70,8 +65,6 @@ pub struct ServerState {
     pub interpreters: Arc<InterpreterDirectory>,
     /// Shared flag indicating current transport status, updated by the Scheduler.
     pub shared_atomic_is_playing: Arc<AtomicBool>,
-    /// Optional relay client for remote collaboration
-    pub relay_client: Option<Arc<Mutex<RelayClient>>>,
 }
 
 impl ServerState {
@@ -82,7 +75,6 @@ impl ServerState {
     /// * `scene_image` - The initial shared scene image.
     /// * `clock_server` - The shared clock server instance.
     /// * `devices` - The shared device map.
-    /// * `world_iface` - Sender channel to the `World` task.
     /// * `sched_iface` - Sender channel to the `Scheduler` task.
     /// * `update_sender` - Sender part of the broadcast channel.
     /// * `update_receiver` - Receiver template for the broadcast channel.
@@ -92,10 +84,9 @@ impl ServerState {
         scene_image: Arc<Mutex<Scene>>,
         clock_server: Arc<ClockServer>,
         devices: Arc<DeviceMap>,
-        world_iface: Sender<TimedMessage>,
         sched_iface: Sender<SchedulerMessage>,
-        update_sender: watch::Sender<SchedulerNotification>,
-        update_receiver: watch::Receiver<SchedulerNotification>,
+        update_sender: watch::Sender<SovaNotification>,
+        update_receiver: watch::Receiver<SovaNotification>,
         transcoder: Arc<Transcoder>,
         interpreter_directory: Arc<InterpreterDirectory>,
         shared_atomic_is_playing: Arc<AtomicBool>,
@@ -103,7 +94,6 @@ impl ServerState {
         ServerState {
             clock_server,
             devices,
-            world_iface,
             sched_iface,
             update_sender,
             update_receiver,
@@ -112,15 +102,9 @@ impl ServerState {
             transcoder,
             interpreters: interpreter_directory,
             shared_atomic_is_playing,
-            relay_client: None,
         }
     }
 
-    /// Add relay client to server state
-    pub fn with_relay(mut self, relay_client: Option<Arc<Mutex<RelayClient>>>) -> Self {
-        self.relay_client = relay_client;
-        self
-    }
 }
 
 /// Represents the main Sova TCP server application.
@@ -132,105 +116,7 @@ pub struct SovaCoreServer {
     pub ip: String,
     /// The TCP port number the server will listen on (e.g., 8080).
     pub port: u16,
-}
-
-/// Represents messages sent FROM the server TO a client.
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum ServerMessage {
-    /// Initial greeting message sent upon successful connection.
-    /// Includes necessary state for the client to initialize.
-    Hello {
-        /// The client's assigned username.
-        username: String,
-        /// The current scene state.
-        scene: Scene,
-        /// List of available/connected devices.
-        devices: Vec<DeviceInfo>,
-        /// List of names of other currently connected clients.
-        peers: Vec<String>,
-        /// Current Link state (tempo, beat, phase, peers, is_enabled).
-        link_state: (f64, f64, f64, u32, bool),
-        /// Current transport playing state.
-        is_playing: bool,
-        /// List of available compiler names.
-        available_compilers: Vec<String>,
-        /// Map of compiler name to its .sublime-syntax content.
-        syntax_definitions: std::collections::HashMap<String, String>,
-    },
-    /// Broadcast containing the updated list of connected client names.
-    PeersUpdated(Vec<String>),
-    /// Broadcasts an update to a specific peer's grid selection.
-    PeerGridSelectionUpdate(String, GridSelection),
-    /// Broadcasts that a peer started editing a specific frame.
-    PeerStartedEditing(String, usize, usize),
-    /// Broadcasts that a peer stopped editing a specific frame.
-    PeerStoppedEditing(String, usize, usize),
-    /// Sends the requested script content to the client.
-    ScriptContent {
-        line_idx: usize,
-        frame_idx: usize,
-        content: String,
-    },
-    /// Confirms a script was successfully compiled and uploaded.
-    ScriptCompiled { line_idx: usize, frame_idx: usize },
-    /// Sends compilation error details back to the client.
-    CompilationErrorOccurred(CompilationError),
-    /// Indicates the transport playback has started.
-    TransportStarted,
-    /// Indicates the transport playback has stopped.
-    TransportStopped,
-    /// A log message originating from the server or scheduler.
-    LogString(String),
-    /// A chat message broadcast from another client or the server itself.
-    Chat(String),
-    /// Generic success response, indicating a requested action was accepted.
-    Success,
-    /// Indicates an internal server error occurred while processing a request.
-    InternalError(String),
-    /// Indicate connection refused (e.g., username taken).
-    ConnectionRefused(String),
-    /// A complete snapshot of the current server state (used for save/load?).
-    Snapshot(Snapshot),
-    /// Sends the full list of available/connected devices (can be requested).
-    DeviceList(Vec<DeviceInfo>),
-    /// tempo, beat, micros, quantum
-    ClockState(f64, f64, SyncTime, f64),
-    /// Broadcast containing the complete current state of the scene.
-    SceneValue(Scene),
-    /// The current length of the scene.
-    SceneLength(usize),
-    /// The current frame positions within each line (line_idx, frame_idx, repetition_idx)
-    FramePosition(Vec<(usize, usize, usize)>),
-    /// Update of global variables (single-letter variables A-Z)
-    GlobalVariablesUpdate(std::collections::HashMap<String, crate::lang::variable::VariableValue>),
-}
-
-impl ServerMessage {
-    /// Get the compression strategy for this message type based on semantics
-    pub fn compression_strategy(&self) -> crate::server::client::CompressionStrategy {
-        use crate::server::client::CompressionStrategy;
-        match self {
-            // Real-time/frequent messages that should never be compressed
-            ServerMessage::PeerGridSelectionUpdate(_, _)
-            | ServerMessage::PeerStartedEditing(_, _, _)
-            | ServerMessage::PeerStoppedEditing(_, _, _)
-            | ServerMessage::ClockState(_, _, _, _)
-            | ServerMessage::SceneLength(_)
-            | ServerMessage::FramePosition(_)
-            | ServerMessage::TransportStarted
-            | ServerMessage::TransportStopped
-            | ServerMessage::GlobalVariablesUpdate(_) => CompressionStrategy::Never,
-
-            // Large content messages that should always be compressed if beneficial
-            ServerMessage::Hello { .. }
-            | ServerMessage::SceneValue(_)
-            | ServerMessage::Snapshot(_)
-            | ServerMessage::DeviceList(_) => CompressionStrategy::Always,
-
-            // Everything else uses adaptive compression
-            _ => CompressionStrategy::Adaptive,
-        }
-    }
+    pub state: ServerState,
 }
 
 /// Represents a complete snapshot of the server's current state.
@@ -257,7 +143,7 @@ pub struct Snapshot {
 /// **Note:** This function only returns messages intended *directly* for the requesting
 /// client (e.g., `Success`, `InternalError`, `ClockState` for `GetClock`).
 /// Broadcast updates resulting from the message (e.g., `SceneValue`, `PeersUpdated`)
-/// are handled separately via the `SchedulerNotification` mechanism.
+/// are handled separately via the `SovaNotification` mechanism.
 ///
 /// # Arguments
 /// * `msg` - The `ClientMessage` received from the client.
@@ -275,101 +161,12 @@ async fn on_message(
     // Log the incoming request
     log_println!("[➡️ ] Client '{}' sent: {:?}", client_name, msg);
 
-    // Forward to relay if connected and message should be relayed
-    if let Some(relay_client) = &state.relay_client {
-        if RelayClient::should_relay(&msg) {
-            let client = relay_client.lock().await;
-            if client.is_connected() {
-                if let Err(e) = client.send_update(&msg).await {
-                    log_eprintln!(
-                        "[RELAY] Failed to forward message {:?} to relay: {}",
-                        msg,
-                        e
-                    );
-                    log_eprintln!(
-                        "[RELAY] Instance ID: {:?}, Connected: {}",
-                        client.instance_id(),
-                        client.is_connected()
-                    );
-                }
-            } else {
-                log_println!(
-                    "[RELAY] Skipping relay forward - not connected (message: {:?})",
-                    msg
-                );
-            }
-        }
-    }
-
     match msg {
-        ClientMessage::EnableFrames(line_id, frames, timing) => {
-            if state
-                .sched_iface
-                .send(SchedulerMessage::EnableFrames(line_id, frames, timing))
-                .is_err()
-            {
-                log_eprintln!("[!] Failed to send EnableFrames to scheduler.");
-            }
-            ServerMessage::Success
-        }
-        ClientMessage::DisableFrames(line_id, frames, timing) => {
-            // Forward to scheduler with the vector of frames
-            if state
-                .sched_iface
-                .send(SchedulerMessage::DisableFrames(line_id, frames, timing))
-                .is_err()
-            {
-                log_eprintln!("[!] Failed to send DisableFrames to scheduler.");
-            }
-            ServerMessage::Success
-        }
-        ClientMessage::SetScript(line_id, frame_id, script_content, timing) => {
-            let scene_image = state.scene_image.lock().await;
-            let script = scene_image.get_frame(line_id, frame_id).map(|f| &f.script);
-            let Some(script) = script else {
-                return ServerMessage::InternalError(format!(
-                    "Frame does not exist : Line {} | Frame {}",
-                    line_id, frame_id
-                ));
-            };
-            let mut new_script = Script::clone(script);
-            log_println!("Uploading script {script_content}");
-            new_script.set_content(script_content);
-            if state
-                .sched_iface
-                .send(SchedulerMessage::UploadScript(
-                    line_id, frame_id, new_script, timing,
-                ))
-                .is_err()
-            {
-                log_eprintln!("[!] Failed to send UploadScript to scheduler.");
-                ServerMessage::InternalError("Scheduler communication error.".to_string())
-            } else {
-                // Send ScriptCompiled confirmation back to client
-                ServerMessage::ScriptCompiled {
-                    line_idx: line_id,
-                    frame_idx: frame_id,
-                }
-            }
-        }
-        ClientMessage::GetScript(line_idx, frame_idx) => {
-            // Lock the scene image to read the script content
-            let scene = state.scene_image.lock().await;
-            let Some(frame) = scene.get_frame(line_idx, frame_idx) else {
-                log_eprintln!("[!] Scene is empty, unable to get script.");
-                return ServerMessage::InternalError(format!("Scene is empty"))
-            };
-            ServerMessage::ScriptContent {
-                line_idx,
-                frame_idx,
-                content: frame.script.content().to_owned(),
-            }
-        }
         ClientMessage::Chat(chat_msg) => {
             // Broadcast user chat message
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::ChatReceived(
+                .send(SovaNotification::ChatReceived(
                     client_name.clone(),
                     chat_msg,
                 ));
@@ -408,7 +205,7 @@ async fn on_message(
             // Broadcast the updated client list
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::ClientListChanged(updated_clients));
+                .send(SovaNotification::ClientListChanged(updated_clients));
 
             ServerMessage::Success
         }
@@ -463,37 +260,6 @@ async fn on_message(
                 )
             }
         }
-        ClientMessage::UpdateLineFrames(line_id, frames, timing) => {
-            // Forward to scheduler
-            if state
-                .sched_iface
-                .send(SchedulerMessage::UpdateLineFrames(line_id, frames, timing))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send UpdateLineFrames to scheduler.");
-                ServerMessage::InternalError("Failed to send line update to scheduler.".to_string())
-            }
-        }
-        ClientMessage::InsertFrame(line_id, position, duration, timing) => {
-            // Forward to scheduler with the received duration
-            if state
-                .sched_iface
-                .send(SchedulerMessage::InsertFrame(
-                    line_id, position, duration, // Use the received duration
-                    timing,
-                ))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send InsertFrame to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send insert frame update to scheduler.".to_string(),
-                )
-            }
-        }
         ClientMessage::RemoveFrame(line_id, position, timing) => {
             // Forward to scheduler
             if state
@@ -506,42 +272,6 @@ async fn on_message(
                 log_eprintln!("[!] Failed to send RemoveLine to scheduler.");
                 ServerMessage::InternalError(
                     "Failed to send remove line update to scheduler.".to_string(),
-                )
-            }
-        }
-        ClientMessage::SetLineStartFrame(line_id, start_frame, timing) => {
-            // Forward to scheduler
-            if state
-                .sched_iface
-                .send(SchedulerMessage::SetLineStartFrame(
-                    line_id,
-                    start_frame,
-                    timing,
-                ))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetLineStartFrame to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send line start frame update to scheduler.".to_string(),
-                )
-            }
-        }
-        ClientMessage::SetLineEndFrame(line_id, end_frame, timing) => {
-            // Forward to scheduler
-            if state
-                .sched_iface
-                .send(SchedulerMessage::SetLineEndFrame(
-                    line_id, end_frame, timing,
-                ))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetLineEndFrame to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send line end frame update to scheduler.".to_string(),
                 )
             }
         }
@@ -558,22 +288,11 @@ async fn on_message(
             };
             ServerMessage::Snapshot(snapshot)
         }
-        ClientMessage::UpdateGridSelection(selection) => {
-            // Don't send a direct response, broadcast via notification
-            let _ = state
-                .update_sender
-                .send(SchedulerNotification::PeerGridSelectionChanged(
-                    client_name.clone(),
-                    selection,
-                ));
-            // Return Success just to acknowledge receipt, though no client-side action needed for this specifically
-            ServerMessage::Success
-        }
         ClientMessage::StartedEditingFrame(line_idx, frame_idx) => {
             // Broadcast notification that this client started editing
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::PeerStartedEditingFrame(
+                .send(SovaNotification::PeerStartedEditingFrame(
                     client_name.clone(),
                     line_idx,
                     frame_idx,
@@ -584,46 +303,12 @@ async fn on_message(
             // Broadcast notification that this client stopped editing
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::PeerStoppedEditingFrame(
+                .send(SovaNotification::PeerStoppedEditingFrame(
                     client_name.clone(),
                     line_idx,
                     frame_idx,
                 ));
             ServerMessage::Success // Acknowledge receipt
-        }
-        ClientMessage::SetLineLength(line_idx, length_opt, timing) => {
-            if state
-                .sched_iface
-                .send(SchedulerMessage::SetLineLength(
-                    line_idx, length_opt, timing,
-                ))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetLineLength to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send line length update to scheduler.".to_string(),
-                )
-            }
-        }
-        ClientMessage::SetLineSpeedFactor(line_idx, speed_factor, timing) => {
-            if state
-                .sched_iface
-                .send(SchedulerMessage::SetLineSpeedFactor(
-                    line_idx,
-                    speed_factor,
-                    timing,
-                ))
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetLineSpeedFactor to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send line speed factor update to scheduler.".to_string(),
-                )
-            }
         }
         ClientMessage::TransportStart(timing) => {
             if state
@@ -662,7 +347,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     // Send the updated list directly back to the requester
@@ -682,7 +367,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     // Send the updated list directly back to the requester
@@ -702,7 +387,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     // Send the updated list directly back to the requester
@@ -720,7 +405,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     ServerMessage::DeviceList(updated_list) // Send updated list confirming assignment
@@ -737,7 +422,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     ServerMessage::DeviceList(updated_list) // Send updated list confirming unassignment
@@ -748,14 +433,13 @@ async fn on_message(
                 )),
             }
         }
-        // --- Add handlers for OSC device messages ---
         ClientMessage::CreateOscDevice(name, ip, port) => {
             match state.devices.create_osc_output_device(&name, &ip, port) {
                 Ok(_) => {
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     ServerMessage::DeviceList(updated_list)
@@ -772,7 +456,7 @@ async fn on_message(
                     let updated_list = state.devices.device_list();
                     let _ = state
                         .update_sender
-                        .send(SchedulerNotification::DeviceListChanged(
+                        .send(SovaNotification::DeviceListChanged(
                             updated_list.clone(),
                         ));
                     ServerMessage::DeviceList(updated_list)
@@ -783,315 +467,100 @@ async fn on_message(
                 )),
             }
         }
-        // ----------------------------------------
-        // Handle deprecated messages explicitly
-        ClientMessage::ConnectMidiDeviceById(device_id) => {
-            log_eprintln!(
-                "[!] Received deprecated ConnectMidiDeviceById({}) from '{}'",
-                device_id,
-                client_name
-            );
-            ServerMessage::InternalError(
-                "ConnectMidiDeviceById is deprecated. Use ConnectMidiDeviceByName.".to_string(),
-            )
-        }
-        ClientMessage::DisconnectMidiDeviceById(device_id) => {
-            log_eprintln!(
-                "[!] Received deprecated DisconnectMidiDeviceById({}) from '{}'",
-                device_id,
-                client_name
-            );
-            ServerMessage::InternalError(
-                "DisconnectMidiDeviceById is deprecated. Use DisconnectMidiDeviceByName."
-                    .to_string(),
-            )
-        }
-        ClientMessage::DuplicateFrameRange {
-            src_line_idx,
-            src_frame_start_idx,
-            src_frame_end_idx,
-            target_insert_idx,
-            timing,
-        } => {
+        ClientMessage::GetLine(line_id) => {
             let scene = state.scene_image.lock().await;
-            if let Some(src_line) = scene.lines.get(src_line_idx) {
-                // Validate frame range
-                if src_frame_start_idx <= src_frame_end_idx
-                    && src_frame_end_idx < src_line.frames.len()
-                {
-                    let frames_data = (src_frame_start_idx..=src_frame_end_idx).map(|i| {
-                        src_line.frame(i).clone()
-                    }).collect();
-                    // Send to scheduler
-                    if state
-                        .sched_iface
-                        .send(SchedulerMessage::InternalDuplicateFrameRange {
-                            target_line_idx: src_line_idx, // Assuming duplication happens on the same line for now
-                            target_insert_idx,
-                            frames_data,
-                            timing,
-                        })
-                        .is_ok()
-                    {
-                        ServerMessage::Success
-                    } else {
-                        log_eprintln!(
-                            "[!] Failed to send InternalDuplicateFrameRange to scheduler."
-                        );
-                        ServerMessage::InternalError(
-                            "Failed to send duplicate frame range command to scheduler."
-                                .to_string(),
-                        )
-                    }
-                } else {
-                    log_eprintln!(
-                        "[!] DuplicateFrameRange failed: Invalid source frame range ({}-{}) for line {}.",
-                        src_frame_start_idx,
-                        src_frame_end_idx,
-                        src_line_idx
-                    );
-                    ServerMessage::InternalError(
-                        "Invalid source frame range for duplication.".to_string(),
-                    )
-                }
+            if let Some(line) = scene.line(line_id) {
+                ServerMessage::LineValues(vec![(line_id, line.clone())])
             } else {
-                log_eprintln!(
-                    "[!] DuplicateFrameRange failed: Invalid source line index {}.",
-                    src_line_idx
-                );
-                ServerMessage::InternalError(
-                    "Invalid source line index for duplication.".to_string(),
-                )
-            }
-        }
-        ClientMessage::RemoveFramesMultiLine {
-            lines_and_indices,
-            timing,
-        } => {
-            if state
-                .sched_iface
-                .send(SchedulerMessage::InternalRemoveFramesMultiLine {
-                    lines_and_indices,
-                    timing,
-                })
-                .is_ok()
-            {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send InternalRemoveFramesMultiLine to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send remove frames command to scheduler.".to_string(),
-                )
-            }
-        }
-        ClientMessage::RequestDuplicationData {
-            src_top,
-            src_left,
-            src_bottom,
-            src_right,
-            target_cursor_row,
-            target_cursor_col,
-            insert_before,
-            timing,
-        } => {
-            let scene = state.scene_image.lock().await;
-            let mut duplicated_data: Vec<Vec<Frame>> = Vec::new();
-            let mut valid_data = true;
-
-            // Determine the target insert index based on insert_before flag
-            let target_frame_idx = if insert_before {
-                target_cursor_row // Insert at the cursor row (top of selection)
-            } else {
-                target_cursor_row // Insert after the cursor row (bottom + 1 of selection)
-            };
-            let target_line_idx = target_cursor_col; // Use the target column from the request
-
-            // Iterate through columns in the source selection
-            for col_idx in src_left..=src_right {
-                if let Some(src_line) = scene.lines.get(col_idx) {
-                    let mut column_data = Vec::new();
-                    // Iterate through rows in the source selection
-                    for row_idx in src_top..=src_bottom {
-                        if row_idx < src_line.frames.len() {
-                            column_data.push(src_line.frame(row_idx).clone());
-                        } else {
-                            // If any part of the selection is out of bounds, it's invalid
-                            log_eprintln!(
-                                "[!] RequestDuplicationData failed: Invalid source index ({}, {})",
-                                col_idx,
-                                row_idx
-                            );
-                            valid_data = false;
-                            break; // Stop processing this column
-                        }
-                    }
-                    if !valid_data {
-                        break;
-                    } // Stop processing columns if invalid data found
-                    duplicated_data.push(column_data);
-                } else {
-                    log_eprintln!(
-                        "[!] RequestDuplicationData failed: Invalid source line index {}",
-                        col_idx
-                    );
-                    valid_data = false;
-                    break; // Stop processing columns
-                }
-            }
-
-            // Check for both valid selection and successful compilation
-            if valid_data && !duplicated_data.is_empty() {
-                // Send the structured data to the scheduler
-                if state
-                    .sched_iface
-                    .send(SchedulerMessage::InternalInsertDuplicatedBlocks {
-                        duplicated_data,
-                        target_line_idx,
-                        target_frame_idx,
-                        timing,
-                    })
-                    .is_ok()
-                {
-                    ServerMessage::Success
-                } else {
-                    log_eprintln!(
-                        "[!] Failed to send InternalInsertDuplicatedBlocks to scheduler."
-                    );
-                    ServerMessage::InternalError(
-                        "Failed to send duplication command to scheduler.".to_string(),
-                    )
-                }
-            } else {
-                // Provide more specific error
-                let error_msg = "Invalid source selection for duplication.".to_string();
-                ServerMessage::InternalError(error_msg)
-            }
-        }
-        ClientMessage::PasteDataBlock {
-            data,
-            target_row,
-            target_col,
-            timing,
-        } => {
-            let scene = state.scene_image.lock().await;
-            let mut messages_to_scheduler = Vec::new();
-            let mut compilation_errors: Vec<String> = Vec::new();
-            let mut frames_updated = 0;
-
-            for (col_offset, column_data) in data.iter().enumerate() {
-                let current_target_line_idx = target_col + col_offset;
-
-                // Check if target line exists
-                if let Some(target_line) = scene.lines.get(current_target_line_idx) {
-                    for (row_offset, pasted_frame) in column_data.iter().enumerate() {
-                        let current_target_frame_idx = target_row + row_offset;
-                        // Check if target frame exists within the line
-                        if current_target_frame_idx < target_line.frames.len() {
-                            // 1. Update Frame Length
-                            messages_to_scheduler.push(SchedulerMessage::SetFrame(
-                                current_target_line_idx,
-                                current_target_frame_idx,
-                                pasted_frame.clone(),
-                                timing
-                            ));
-                            frames_updated += 1;
-                        } else {
-                            // Target frame index out of bounds for this line - skip
-                            log_println!(
-                                "[!] Paste skipped: Target frame ({}, {}) out of bounds.",
-                                current_target_line_idx,
-                                current_target_frame_idx
-                            );
-                        }
-                    }
-                } else {
-                    // Target line index out of bounds - skip entire column
-                    log_println!(
-                        "[!] Paste skipped: Target line {} out of bounds.",
-                        current_target_line_idx
-                    );
-                }
-            }
-
-            // Send collected messages to scheduler
-            for msg in messages_to_scheduler {
-                if state.sched_iface.send(msg).is_err() {
-                    log_eprintln!("[!] Failed to send paste-related message to scheduler.");
-                    // Don't stop, try sending others, but return error at the end
-                    compilation_errors
-                        .push("Scheduler communication error during paste.".to_string());
-                }
-            }
-
-            // Report outcome
-            if !compilation_errors.is_empty() {
                 ServerMessage::InternalError(format!(
-                    "Paste partially failed. {} frames updated. Errors: {}",
-                    frames_updated,
-                    compilation_errors.join("; ")
+                    "No line at index {}",
+                    line_id
                 ))
-            } else if frames_updated > 0 {
-                ServerMessage::Success
-            } else {
-                ServerMessage::InternalError(
-                    "Paste failed: No target frames found or no data provided.".to_string(),
-                )
             }
-        }
-        // --- Add handler for SetFrameRepetitions ---
-        ClientMessage::SetFrameRepetitions(line_idx, frame_idx, repetitions, timing) => {
+        },
+        ClientMessage::SetLines(lines, timing) => {
             if state
                 .sched_iface
-                .send(SchedulerMessage::SetFrameRepetitions(
-                    line_idx,
-                    frame_idx,
-                    repetitions,
-                    timing,
-                ))
-                .is_ok()
+                .send(SchedulerMessage::SetLines(lines, timing))
+                .is_err()
             {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetFrameRepetitions to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send frame repetition update to scheduler.".to_string(),
-                )
+                log_eprintln!("[!] Failed to send SetLines to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
             }
-        }
-        // --- Add handler for SetFrameName ---
-        ClientMessage::SetFrameName(line_idx, frame_idx, name, timing) => {
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
+        ClientMessage::ConfigureLines(lines, timing) => {
             if state
                 .sched_iface
-                .send(SchedulerMessage::SetFrameName(
-                    line_idx, frame_idx, name, timing,
-                ))
-                .is_ok()
+                .send(SchedulerMessage::ConfigureLines(lines, timing))
+                .is_err()
             {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetFrameName to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send frame name update to scheduler.".to_string(),
-                )
+                log_eprintln!("[!] Failed to send ConfigureLines to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
             }
-        }
-        // --- Add handler for SetScriptLanguage ---
-        ClientMessage::SetScriptLanguage(line_idx, frame_idx, lang, timing) => {
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
+        ClientMessage::AddLine(line_id, line, timing) => {
             if state
                 .sched_iface
-                .send(SchedulerMessage::SetScriptLanguage(
-                    line_idx, frame_idx, lang, timing,
-                ))
-                .is_ok()
+                .send(SchedulerMessage::AddLine(line_id, line, timing))
+                .is_err()
             {
-                ServerMessage::Success
-            } else {
-                log_eprintln!("[!] Failed to send SetScriptLanguage to scheduler.");
-                ServerMessage::InternalError(
-                    "Failed to send script language update to scheduler.".to_string(),
-                )
+                log_eprintln!("[!] Failed to send AddLine to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
             }
-        } // ---------------------------------
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
+        ClientMessage::RemoveLine(line_id, timing) => {
+            if state
+                .sched_iface
+                .send(SchedulerMessage::RemoveLine(line_id, timing))
+                .is_err()
+            {
+                log_eprintln!("[!] Failed to send RemoveLine to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
+            }
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
+        ClientMessage::GetFrame(line_id, frame_id) => {
+            let scene = state.scene_image.lock().await;
+            if let Some(frame) = scene.get_frame(line_id, frame_id) {
+                ServerMessage::FrameValues(vec![(line_id, frame_id, frame.clone())])
+            } else {
+                ServerMessage::InternalError(format!(
+                    "Unable to get frame {} at line {}",
+                    frame_id, line_id
+                ))
+            }
+        },
+        ClientMessage::SetFrames(frames, timing) => {
+            if state
+                .sched_iface
+                .send(SchedulerMessage::SetFrames(frames, timing))
+                .is_err()
+            {
+                log_eprintln!("[!] Failed to send SetFrames to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
+            }
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
+        ClientMessage::AddFrame(line_id, frame_id, frame, timing) => {
+            if state
+                .sched_iface
+                .send(SchedulerMessage::AddFrame(line_id, frame_id, frame, timing))
+                .is_err()
+            {
+                log_eprintln!("[!] Failed to send AddFrame to scheduler.");
+                return ServerMessage::InternalError("Scheduler communication error.".to_string());
+            }
+            // Revert: No longer send immediate status based on atomic
+            ServerMessage::Success
+        },
     }
 }
 
@@ -1167,8 +636,8 @@ fn compress_message_intelligently(
 
 impl SovaCoreServer {
     /// Creates a new `SovaCoreServer` instance with the specified address and port.
-    pub fn new(ip: String, port: u16) -> Self {
-        SovaCoreServer { ip, port }
+    pub fn new(ip: String, port: u16, state: ServerState) -> Self {
+        SovaCoreServer { ip, port, state }
     }
 
     /// Starts the TCP server, listens for connections, and handles graceful shutdown.
@@ -1179,17 +648,17 @@ impl SovaCoreServer {
     ///
     /// # Arguments
     /// * `state` - The shared `ServerState` to be cloned for each client task.
-    pub async fn start(&self, state: ServerState) -> io::Result<()> {
+    pub async fn start(&self, scheduler_notifications: Receiver<SovaNotification>) -> io::Result<()> {
         let addr = format!("{}:{}", self.ip, self.port);
         let listener = TcpListener::bind(&addr).await?;
         log_println!("[+] Server listening on {}", addr);
-
+        self.start_image_maintainer(scheduler_notifications);
         loop {
             select! {
                 // Accept new TCP connections
                 Ok((socket, client_addr)) = listener.accept() => {
                      log_println!("[🔌] New connection from {}", client_addr);
-                     let client_state = state.clone(); // Clone state for the new task
+                     let client_state = self.state.clone(); // Clone state for the new task
                      // Spawn a task to handle this client independently
                      tokio::spawn(async move {
                          match process_client(socket, client_state).await {
@@ -1216,6 +685,52 @@ impl SovaCoreServer {
 
         Ok(())
     }
+
+    pub fn start_image_maintainer(&self, scheduler_notifications: Receiver<SovaNotification>) {
+        let scene_image = self.state.scene_image.clone();
+        let update_sender = self.state.update_sender.clone();
+        thread::spawn(move || {
+            loop {
+                match scheduler_notifications.recv() {
+                    Ok(p) => {
+                        let mut guard = scene_image.blocking_lock();
+                        match &p {
+                            SovaNotification::UpdatedScene(scene) => {
+                                *guard = scene.clone();
+                            }
+                            SovaNotification::UpdatedLines(lines) => {
+                                for (i, line) in lines {
+                                    guard.set_line(*i, line.clone());
+                                }
+                            }
+                            SovaNotification::AddedLine(i, line) => {
+                                guard.insert_line(*i, line.clone());
+                            }
+                            SovaNotification::RemovedLine(index) => {
+                                guard.remove_line(*index);
+                            }
+                            SovaNotification::UpdatedFrames(frames) => {
+                                for (line_id, frame_id, frame) in frames.iter() {
+                                    guard.line_mut(*line_id).set_frame(*frame_id, frame.clone());
+                                }
+                            }
+                            SovaNotification::AddedFrame(line_id, frame_id, frame) => {
+                                guard.line_mut(*line_id).insert_frame(*frame_id, frame.clone());
+                            }
+                            SovaNotification::RemovedFrame(line_id, frame_id) => {
+                                guard.line_mut(*line_id).remove_frame(*frame_id);
+                            }
+                            _ => (),
+                        };
+                        drop(guard);
+                        let _ = update_sender.send(p);
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
 }
 
 /// Handles the lifecycle of a single client connection.
@@ -1299,7 +814,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
             // Broadcast the updated client list
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::ClientListChanged(
+                .send(SovaNotification::ClientListChanged(
                     updated_peers_for_broadcast,
                 ));
 
@@ -1432,22 +947,42 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     break;
                 }
                 let notification = update_receiver.borrow().clone();
-                let _is_scene_update = matches!(notification, SchedulerNotification::UpdatedScene(_)); // Simpler way to check
+                let _is_scene_update = matches!(notification, SovaNotification::UpdatedScene(_)); // Simpler way to check
                 let broadcast_msg_opt: Option<ServerMessage> = match notification {
-                    SchedulerNotification::TransportStarted => {
-                        Some(ServerMessage::TransportStarted)
-                    },
-                    SchedulerNotification::FramePositionChanged(_) => {
-                        None
-                    },
-                    SchedulerNotification::TransportStopped => {
-                        Some(ServerMessage::TransportStopped)
-                    },
-                    SchedulerNotification::UpdatedScene(p) => {
-                        // Remove log
+                    SovaNotification::UpdatedScene(p) => {
                         Some(ServerMessage::SceneValue(p))
-                    },
-                    SchedulerNotification::Log(timed_message) => {
+                    }
+                    SovaNotification::UpdatedLines(lines) => {
+                        Some(ServerMessage::LineValues(lines))
+                    }
+                    SovaNotification::UpdatedLineConfigurations(lines) => {
+                        Some(ServerMessage::LineConfigurations(lines))
+                    }
+                    SovaNotification::AddedLine(line_id, line) => {
+                        todo!()
+                    }
+                    SovaNotification::RemovedLine(line_id) => {
+                        todo!()
+                    }
+                    SovaNotification::UpdatedFrames(frames) => {
+                        Some(ServerMessage::FrameValues(frames))
+                    }
+                    SovaNotification::AddedFrame(line_id, frame_id, frame) => {
+                        todo!()
+                    }
+                    SovaNotification::RemovedFrame(line_id, frame_id) => {
+                        todo!()
+                    }
+                    SovaNotification::TransportStarted => {
+                        Some(ServerMessage::TransportStarted)
+                    }
+                    SovaNotification::FramePositionChanged(_) => {
+                        None
+                    }
+                    SovaNotification::TransportStopped => {
+                        Some(ServerMessage::TransportStopped)
+                    }
+                    SovaNotification::Log(timed_message) => {
                         // Extract the inner LogMessage from the TimedMessage
                         if let crate::protocol::payload::ProtocolPayload::LOG(log_message) = &timed_message.message.payload {
                             Some(ServerMessage::LogString(log_message.to_string()))
@@ -1455,65 +990,45 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                             None
                         }
                     }
-                    SchedulerNotification::TempoChanged(_) => {
+                    SovaNotification::TempoChanged(_) => {
                         let clock = Clock::from(&state.clock_server);
                         Some(ServerMessage::ClockState(clock.tempo(), clock.beat(), clock.micros(), clock.quantum()))
                     }
-                    SchedulerNotification::ClientListChanged(clients) => {
+                    SovaNotification::ClientListChanged(clients) => {
                         Some(ServerMessage::PeersUpdated(clients))
                     }
-                    SchedulerNotification::ChatReceived(sender_name, chat_msg) => {
+                    SovaNotification::ChatReceived(sender_name, chat_msg) => {
                         if sender_name != *client_name {
-                           Some(ServerMessage::Chat(format!("({}) {}", sender_name, chat_msg)))
+                           Some(ServerMessage::Chat(sender_name, chat_msg))
                         } else {
                             None
                         }
                     }
-                    SchedulerNotification::PeerGridSelectionChanged(sender_name, selection) => {
+                    SovaNotification::PeerStartedEditingFrame(sender_name, line_idx, frame_idx) => {
                         // Don't send the update back to the originator
                         if sender_name != *client_name {
-                            Some(ServerMessage::PeerGridSelectionUpdate(sender_name, selection))
+                            Some(ServerMessage::PeerStartedEditing(sender_name, line_idx, frame_idx))
                         } else {
                             None
                         }
                     }
-                    SchedulerNotification::PeerStartedEditingFrame(sender_name, line_idx, frame_idx) => {
-                         // Don't send the update back to the originator
-                         if sender_name != *client_name {
-                             Some(ServerMessage::PeerStartedEditing(sender_name, line_idx, frame_idx))
-                         } else {
-                             None
-                         }
-                    }
-                    SchedulerNotification::PeerStoppedEditingFrame(sender_name, line_idx, frame_idx) => {
-                         // Don't send the update back to the originator
-                         if sender_name != *client_name {
-                             Some(ServerMessage::PeerStoppedEditing(sender_name, line_idx, frame_idx))
-                         } else {
-                             None
-                         }
+                    SovaNotification::PeerStoppedEditingFrame(sender_name, line_idx, frame_idx) => {
+                        // Don't send the update back to the originator
+                        if sender_name != *client_name {
+                            Some(ServerMessage::PeerStoppedEditing(sender_name, line_idx, frame_idx))
+                        } else {
+                            None
+                        }
                     }
                     // Add handler for DeviceListChanged
-                    SchedulerNotification::DeviceListChanged(devices) => {
+                    SovaNotification::DeviceListChanged(devices) => {
                         log_println!("[ broadcast ] Sending updated device list ({} devices) to {}", devices.len(), client_name);
                         Some(ServerMessage::DeviceList(devices))
                     }
-                    SchedulerNotification::GlobalVariablesChanged(vars) => {
+                    SovaNotification::GlobalVariablesChanged(vars) => {
                         Some(ServerMessage::GlobalVariablesUpdate(vars))
                     }
-                    // Map scene-modifying notifications to SceneValue to trigger client refresh
-                    SchedulerNotification::UpdatedLine(_, _) |
-                    SchedulerNotification::EnableFrames(_, _) |
-                    SchedulerNotification::DisableFrames(_, _) |
-                    SchedulerNotification::UploadedScript(_, _, _) |
-                    SchedulerNotification::UpdatedLineFrames(_, _) |
-                    SchedulerNotification::AddedLine(_) |
-                    SchedulerNotification::RemovedLine(_) => {
-                        // Fetch the latest scene state and send it
-                        let scene = state.scene_image.lock().await.clone();
-                        Some(ServerMessage::SceneValue(scene))
-                    }
-                    SchedulerNotification::Nothing => { None } // Explicitly ignore Nothing
+                    SovaNotification::Nothing => None
                 };
 
                 if let Some(broadcast_msg) = broadcast_msg_opt {
@@ -1521,7 +1036,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                     if send_res.is_err() {
                          break;
                     }
-                 }
+                }
             }
         }
     }
@@ -1539,7 +1054,7 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
             drop(clients_guard); // Drop lock before sending notification
             let _ = state
                 .update_sender
-                .send(SchedulerNotification::ClientListChanged(updated_clients));
+                .send(SovaNotification::ClientListChanged(updated_clients));
         } else {
             // This case might happen if the client disconnected right after handshake
             // before the main loop really started, or if there's a race condition.
@@ -1592,7 +1107,14 @@ async fn read_message_internal<R: AsyncReadExt + Unpin>(
             };
 
             // Deserialize MessagePack
-            deserialize_message(&final_bytes, client_id_for_logging)
+            let msg = ClientMessage::deserialize(&final_bytes);
+            if msg.is_err() {
+                log_eprintln!(
+                    "[!] Failed to deserialize MessagePack from {}",
+                    client_id_for_logging
+                );
+            }
+            msg
         }
         Err(e) if e.kind() == ErrorKind::UnexpectedEof => {
             log_println!(
@@ -1625,22 +1147,4 @@ fn decompress_message(message_buf: &[u8], client_id: &str) -> io::Result<Vec<u8>
             format!("Zstd decompression error: {}", e),
         )
     })
-}
-
-/// Deserializes a MessagePack buffer into a ClientMessage
-fn deserialize_message(final_bytes: &[u8], client_id: &str) -> io::Result<Option<ClientMessage>> {
-    match rmp_serde::from_slice::<ClientMessage>(final_bytes) {
-        Ok(msg) => Ok(Some(msg)),
-        Err(e) => {
-            log_eprintln!(
-                "[!] Failed to deserialize MessagePack from {}: {}",
-                client_id,
-                e
-            );
-            Err(io::Error::new(
-                io::ErrorKind::InvalidData,
-                format!("MessagePack deserialization error: {}", e),
-            ))
-        }
-    }
 }

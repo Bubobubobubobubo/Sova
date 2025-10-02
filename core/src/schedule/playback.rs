@@ -1,7 +1,6 @@
 use crate::{
     clock::{Clock, SyncTime}, lang::interpreter::InterpreterDirectory, log_println, scene::{script::ScriptExecution, Scene}, schedule::{
-        notification::SchedulerNotification,
-        scheduler_state::PlaybackState, Scheduler,
+        notification::SovaNotification, Scheduler,
     }
 };
 use crossbeam_channel::Sender;
@@ -12,6 +11,13 @@ use std::sync::{
 
 const INACTIVE_LINK_UPDATE_MICROS : u64 = 100_000;
 const ACTIVE_LINK_UPDATE_MICROS : u64 = 1000;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum PlaybackState {
+    Stopped,
+    Starting(f64),
+    Playing,
+}
 
 pub struct PlaybackManager {
     playback_state: PlaybackState,
@@ -34,7 +40,7 @@ impl PlaybackManager {
         interpreters: &InterpreterDirectory,
         scene: &mut Scene,
         executions: &mut Vec<ScriptExecution>,
-        update_notifier: &Sender<SchedulerNotification>,
+        update_notifier: &Sender<SovaNotification>,
     ) -> Option<SyncTime> {
         let current_beat = clock.beat();
         let link_is_playing = clock.session_state.is_playing();
@@ -109,7 +115,7 @@ impl PlaybackManager {
                     if !executions.is_empty() {
                         executions.clear();
                     }
-                    let _ = update_notifier.send(SchedulerNotification::TransportStopped);
+                    let _ = update_notifier.send(SovaNotification::TransportStopped);
                     Some(INACTIVE_LINK_UPDATE_MICROS)
                 }
             }
@@ -123,7 +129,7 @@ impl PlaybackManager {
     pub fn process_transport_start(
         &mut self,
         clock: &mut Clock,
-        update_notifier: &Sender<SchedulerNotification>,
+        update_notifier: &Sender<SovaNotification>,
     ) {
         let current_micros = clock.micros();
         let current_beat = clock.beat_at_date(current_micros);
@@ -144,14 +150,14 @@ impl PlaybackManager {
 
         clock.session_state.set_is_playing(true, start_micros);
         clock.commit_app_state();
-        let _ = update_notifier.send(SchedulerNotification::TransportStarted);
+        let _ = update_notifier.send(SovaNotification::TransportStarted);
     }
 
     pub fn process_transport_stop(
         &mut self,
         clock: &mut Clock,
         executions: &mut Vec<ScriptExecution>,
-        update_notifier: &Sender<SchedulerNotification>,
+        update_notifier: &Sender<SovaNotification>,
     ) {
         let now_micros = clock.micros();
         log_println!("[SCHEDULER] Requesting transport stop via Link now");
@@ -160,7 +166,7 @@ impl PlaybackManager {
         clock.commit_app_state();
 
         executions.clear();
-        let _ = update_notifier.send(SchedulerNotification::TransportStopped);
+        let _ = update_notifier.send(SovaNotification::TransportStopped);
         self.shared_atomic_is_playing
             .store(false, Ordering::Relaxed);
     }
@@ -186,11 +192,11 @@ impl PlaybackManager {
             let (frame, iter, rep, _scheduled_date, _) =
                 line.calculate_frame_index(clock, start_date);
             if frame == line.get_effective_start_frame()
-                && line.is_frame_enabled(frame)
+                && line.frame(frame).unwrap().enabled
                 && iter == 0
                 && rep == 0
             {
-                let script = Arc::clone(&line.frame(frame).script);
+                let script = Arc::clone(&line.frame(frame).unwrap().script);
                 Scheduler::execute_script(executions, &script, interpreters, start_date);
                 log_println!(
                     "[SCHEDULER] Queued script for Line {} Frame {} at start",

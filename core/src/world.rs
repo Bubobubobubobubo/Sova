@@ -16,7 +16,7 @@ use crate::{
         payload::{AudioEnginePayload, ProtocolPayload},
         log::LogMessage,
     },
-    schedule::notification::SchedulerNotification,
+    schedule::SovaNotification,
     log_println,
 };
 use bubo_engine::{
@@ -60,7 +60,7 @@ pub struct World {
     midi_early_threshold: SyncTime,
     // Lookahead for non-MIDI messages (OSC, AudioEngine) - send early for internal scheduling
     non_midi_lookahead: SyncTime,
-    notification_sender: Option<watch::Sender<SchedulerNotification>>,
+    notification_sender: Option<watch::Sender<SovaNotification>>,
 }
 
 impl World {
@@ -69,7 +69,7 @@ impl World {
         audio_engine_tx: Option<Sender<ScheduledEngineMessage>>,
         registry: ModuleRegistry,
         engine_log_rx: Option<Receiver<EngineLogMessage>>,
-        notification_sender: Option<watch::Sender<SchedulerNotification>>,
+        notification_sender: Option<watch::Sender<SovaNotification>>,
     ) -> (JoinHandle<()>, Sender<TimedMessage>) {
         let (tx, rx) = crossbeam_channel::unbounded();
         let handle = ThreadBuilder::default()
@@ -173,6 +173,7 @@ impl World {
         };
         
         // Forward log message to server notifications for client broadcast
+        // TODO: Changer pour faire un truc beau
         if let Some(ref sender) = self.notification_sender {
             // Wrap the LogMessage in a TimedMessage for the notification system
             let timed_message = TimedMessage {
@@ -182,7 +183,7 @@ impl World {
                 },
                 time: self.get_clock_micros(),
             };
-            let notification = SchedulerNotification::Log(timed_message);
+            let notification = SovaNotification::Log(timed_message);
             let _ = sender.send(notification);
         }
         

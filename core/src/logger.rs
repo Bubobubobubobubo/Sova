@@ -8,7 +8,7 @@ use crate::protocol::log::{LogMessage, Severity};
 use crate::protocol::message::{TimedMessage, ProtocolMessage};
 use crate::protocol::payload::ProtocolPayload;
 use crate::protocol::device::ProtocolDevice;
-use crate::schedule::notification::SchedulerNotification;
+use crate::schedule::SovaNotification;
 
 
 /// Global logger instance
@@ -133,13 +133,13 @@ pub enum LoggerMode {
     /// Embedded mode: logs through channel communication (legacy)
     Embedded(Sender<LogMessage>),
     /// Network mode: logs to clients via notification system (no terminal)
-    Network(watch::Sender<SchedulerNotification>),
+    Network(watch::Sender<SovaNotification>),
     /// Dual mode: logs to terminal AND sends to clients (preferred for servers)
-    Dual(watch::Sender<SchedulerNotification>),
+    Dual(watch::Sender<SovaNotification>),
     /// File mode: logs to file only (for persistent logging)
     File,
     /// Full mode: logs to file, terminal, and clients (complete logging solution)
-    Full(watch::Sender<SchedulerNotification>),
+    Full(watch::Sender<SovaNotification>),
 }
 
 /// Core logging system that supports both standalone and embedded modes
@@ -166,7 +166,7 @@ impl Logger {
     }
 
     /// Create a new logger in network mode with a notification sender
-    pub fn new_network(sender: watch::Sender<SchedulerNotification>) -> Self {
+    pub fn new_network(sender: watch::Sender<SovaNotification>) -> Self {
         Logger {
             mode: Arc::new(Mutex::new(LoggerMode::Network(sender))),
             file_writer: Arc::new(Mutex::new(None)),
@@ -190,7 +190,7 @@ impl Logger {
     }
 
     /// Create a new logger in full mode (logs to file, terminal, and clients)
-    pub fn new_full(sender: watch::Sender<SchedulerNotification>) -> Self {
+    pub fn new_full(sender: watch::Sender<SovaNotification>) -> Self {
         let file_writer = match LogFileWriter::new() {
             Ok(writer) => Some(writer),
             Err(e) => {
@@ -213,14 +213,14 @@ impl Logger {
     }
 
     /// Switch to network mode with the provided notification sender
-    pub fn set_network_mode(&self, sender: watch::Sender<SchedulerNotification>) {
+    pub fn set_network_mode(&self, sender: watch::Sender<SovaNotification>) {
         if let Ok(mut mode) = self.mode.lock() {
             *mode = LoggerMode::Network(sender);
         }
     }
 
     /// Switch to dual mode (terminal + network) with the provided notification sender
-    pub fn set_dual_mode(&self, sender: watch::Sender<SchedulerNotification>) {
+    pub fn set_dual_mode(&self, sender: watch::Sender<SovaNotification>) {
         if let Ok(mut mode) = self.mode.lock() {
             *mode = LoggerMode::Dual(sender);
         }
@@ -254,7 +254,7 @@ impl Logger {
     }
 
     /// Switch to full mode (file + terminal + network)
-    pub fn set_full_mode(&self, sender: watch::Sender<SchedulerNotification>) {
+    pub fn set_full_mode(&self, sender: watch::Sender<SovaNotification>) {
         if let Ok(mut mode) = self.mode.lock() {
             *mode = LoggerMode::Full(sender);
         }
@@ -326,7 +326,7 @@ impl Logger {
                         },
                         time: 0, // Immediate execution
                     };
-                    let notification = SchedulerNotification::Log(timed_message);
+                    let notification = SovaNotification::Log(timed_message);
                     if let Err(_) = sender.send(notification) {
                         // Fallback to terminal if notification channel is closed
                         eprintln!("Logger notification error: {}", log_msg);
@@ -353,7 +353,7 @@ impl Logger {
                         },
                         time: 0, // Immediate execution
                     };
-                    let notification = SchedulerNotification::Log(timed_message);
+                    let notification = SovaNotification::Log(timed_message);
                     // Explicitly ignore errors - terminal logging is the fallback
                     let _ = sender.send(notification);
                 }
@@ -385,7 +385,7 @@ impl Logger {
                         },
                         time: 0, // Immediate execution
                     };
-                    let notification = SchedulerNotification::Log(timed_message);
+                    let notification = SovaNotification::Log(timed_message);
                     let _ = sender.send(notification);
                 }
             }
@@ -429,7 +429,7 @@ pub fn init_embedded(sender: Sender<LogMessage>) {
 }
 
 /// Initialize the global logger in network mode
-pub fn init_network(sender: watch::Sender<SchedulerNotification>) {
+pub fn init_network(sender: watch::Sender<SovaNotification>) {
     let _ = GLOBAL_LOGGER.set(Logger::new_network(sender));
 }
 
@@ -449,12 +449,12 @@ pub fn set_embedded_mode(sender: Sender<LogMessage>) {
 }
 
 /// Switch the global logger to network mode
-pub fn set_network_mode(sender: watch::Sender<SchedulerNotification>) {
+pub fn set_network_mode(sender: watch::Sender<SovaNotification>) {
     get_logger().set_network_mode(sender);
 }
 
 /// Switch the global logger to dual mode (terminal + network)
-pub fn set_dual_mode(sender: watch::Sender<SchedulerNotification>) {
+pub fn set_dual_mode(sender: watch::Sender<SovaNotification>) {
     get_logger().set_dual_mode(sender);
 }
 
@@ -469,7 +469,7 @@ pub fn init_file() {
 }
 
 /// Initialize the global logger in full mode
-pub fn init_full(sender: watch::Sender<SchedulerNotification>) {
+pub fn init_full(sender: watch::Sender<SovaNotification>) {
     let _ = GLOBAL_LOGGER.set(Logger::new_full(sender));
 }
 
@@ -479,7 +479,7 @@ pub fn set_file_mode() {
 }
 
 /// Switch the global logger to full mode (file + terminal + network)
-pub fn set_full_mode(sender: watch::Sender<SchedulerNotification>) {
+pub fn set_full_mode(sender: watch::Sender<SovaNotification>) {
     get_logger().set_full_mode(sender);
 }
 

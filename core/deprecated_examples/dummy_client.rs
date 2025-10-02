@@ -1,7 +1,7 @@
 use std::{sync::Arc, thread, time::Duration};
 
 use sovalib::schedule::{
-    Scheduler, message::SchedulerMessage, notification::SchedulerNotification,
+    Scheduler, message::SchedulerMessage, notification::SovaNotification,
 };
 use sovalib::{
     clock::{ClockServer, TimeSpan},
@@ -36,7 +36,7 @@ async fn main() {
     let (sched_handle, sched_iface, sched_update) =
         Scheduler::create(clock_server.clone(), devices.clone(), world_iface.clone());
 
-    let (updater, update_notifier) = watch::channel(SchedulerNotification::default());
+    let (updater, update_notifier) = watch::channel(SovaNotification::default());
     thread::spawn(move || {
         loop {
             match sched_update.recv() {
