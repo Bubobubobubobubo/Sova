@@ -21,15 +21,16 @@ pub struct EvaluationContext<'a> {
 
 impl<'a> EvaluationContext<'a> {
     pub fn line(&self) -> &Line {
-        &self.lines[self.current_scene % self.lines.len()]
+        &self.lines[self.script.line_index % self.lines.len()]
     }
 
     pub fn frame_len(&self) -> f64 {
-        self.line().frame_len(self.script.index)
+        let line = self.line();
+        line.frame(self.script.index % line.n_frames()).map(|f| f.duration).unwrap_or(0.0)
     }
 
     pub fn line_mut(&mut self) -> &mut Line {
-        &mut self.lines[self.current_scene % self.lines.len()]
+        &mut self.lines[self.script.line_index % self.lines.len()]
     }
 
     pub fn set_var(&mut self, var: &Variable, value: VariableValue) {

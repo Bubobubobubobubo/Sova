@@ -15,7 +15,7 @@ use crate::{
 /// A `Line` defines a linear progression of events, where each event (frame) has a duration
 /// specified in musical beats. Lines can have their playback speed adjusted, contain variables,
 /// and support looping, repetition of individual frames, and enabling/disabling specific frames.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Line {
     /// Frames of the line
     pub frames: Vec<Frame>,
@@ -135,6 +135,20 @@ impl Line {
         }
     }
 
+    pub fn configure(&mut self, other: &Line) {
+        self.speed_factor = other.speed_factor;
+        self.start_frame = other.start_frame;
+        self.end_frame = other.end_frame;
+        self.custom_length = other.custom_length;
+    }
+
+    /// Returns light version without frames
+    pub fn configuration(&self) -> Line {
+        let mut res = Line::default();
+        res.configure(self);
+        res
+    }
+
     /// Calculates the expected absolute end time of the line's current playback cycle.
     ///
     /// This is based on the `start_date` and the total duration of *all* frames in beats
@@ -154,7 +168,7 @@ impl Line {
         let end = self.start_frame.unwrap_or(self.n_frames() - 1);
         let mut len = 0.0;
         for i in start..=end {
-            len += self.frame(i).effective_duration();
+            len += self.frame(i).unwrap().effective_duration();
         }
         len
     }
@@ -178,16 +192,32 @@ impl Line {
     }
 
     /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
-    #[inline]
-    pub fn frame(&self, index: usize) -> &Frame {
-        &self.frames[index % self.n_frames()]
+    pub fn frame(&self, index: usize) -> Option<&Frame> {
+        if index >= self.n_frames() {
+            log_eprintln!(
+                "Warning: Attempted to get frame with invalid index {} in line {}. Ignoring.",
+                index, self.index
+            );
+            return None;
+        }
+        Some(&self.frames[index % self.n_frames()])
     }
 
     /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
-    #[inline]
     pub fn frame_mut(&mut self, index: usize) -> &mut Frame {
-        let index = index % self.n_frames();
+        if index >= self.n_frames() {
+            self.frames.resize(index + 1, Frame::default());
+            self.make_consistent();
+        }
         &mut self.frames[index]
+    }
+
+    pub fn set_frame(&mut self, index: usize, frame: Frame) {
+        if index >= self.n_frames() {
+            self.frames.resize(index + 1, Frame::default());
+        }
+        self.frames[index] = frame;
+        self.make_consistent();
     }
 
     /// Calculates the total duration of the line in beats by summing the durations of *all* frames.
@@ -232,21 +262,9 @@ impl Line {
         &self.frames
     }
 
-    /// Replaces the entire set of frame durations with `new_frames`.
-    ///
-    /// This also adjusts the lengths of `enabled_frames`, `scripts`, `frame_names`, and `frame_repetitions`
-    /// to match the new number of frames, potentially adding defaults or truncating.
-    /// Finally, it calls `make_consistent` to ensure internal state integrity.
-    pub fn set_frames(&mut self, new_frames: Vec<f64>) {
-        let n_frames = self.n_frames();
-        for (i, duration) in new_frames.into_iter().enumerate() {
-            if i < n_frames {
-                self.frame_mut(i).duration = duration;
-            } else {
-                self.frames.push(duration.into());
-            }
-        }
-        self.make_consistent();
+    #[inline]
+    pub fn frames_mut(&mut self) -> &mut [Frame] {
+        &mut self.frames
     }
 
     /// Inserts a new frame with the given duration (`value`) at the specified `position`.
@@ -332,90 +350,8 @@ impl Line {
 
     /// Returns a reference to the frame's script at a given index.
     /// If the line contains no frame, then the function returns None.
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
     pub fn script(&self, index: usize) -> Option<&Script> {
-        if self.frames.is_empty() {
-            return None;
-        }
-        return Some(&self.frame(index).script)
-    }
-
-    /// Returns the frame absolute duration, without repetitions of enabledness
-    pub fn frame_len(&self, index: usize) -> f64 {
-        if self.frames.is_empty() {
-            return f64::INFINITY;
-        }
-        self.frame(index).duration
-    }
-
-    /// Returns the effective duration of the frame
-    pub fn effective_frame_len(&self, index: usize) -> f64 {
-        if self.frames.is_empty() {
-            return f64::INFINITY;
-        }
-        self.frame(index).effective_duration()
-    }
-
-    /// Enables the frame at the specified `frame` index for playback.
-    ///
-    /// Handles wrapping: if `frame` index is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn enable_frame(&mut self, frame: usize) {
-        if self.frames.is_empty() {
-            return;
-        }
-        self.frame_mut(frame).enabled = true;
-    }
-
-    /// Disables the frame at the specified `frame` index for playback.
-    ///
-    /// Disabled frames are skipped during iteration.
-    /// Handles wrapping: if `frame` index is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn disable_frame(&mut self, frame: usize) {
-        if self.frames.is_empty() {
-            return;
-        }
-        self.frame_mut(frame).enabled = false;
-    }
-
-    /// Enables multiple frames specified by their indices in the `frames` slice.
-    ///
-    /// Handles wrapping for each index in the slice.
-    /// Does nothing if the line has no frames. Skips indices that are out of bounds after wrapping
-    /// (though wrapping ensures they map to a valid index if `n_frames > 0`).
-    pub fn enable_frames(&mut self, frames: &[usize]) {
-        if self.frames.is_empty() {
-            return;
-        }
-        for &frame_index in frames {
-            self.enable_frame(frame_index);
-        }
-    }
-
-    /// Disables multiple frames specified by their indices in the `frames` slice.
-    ///
-    /// Handles wrapping for each index in the slice.
-    /// Does nothing if the line has no frames. Skips indices that are out of bounds after wrapping
-    /// (though wrapping ensures they map to a valid index if `n_frames > 0`).
-    pub fn disable_frames(&mut self, frames: &[usize]) {
-        if self.frames.is_empty() {
-            return;
-        }
-        for &frame_index in frames {
-            self.disable_frame(frame_index);
-        }
-    }
-
-    /// Checks if the frame at the specified `index` is currently enabled.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    /// Returns `false` if the line has no frames.
-    pub fn is_frame_enabled(&self, index: usize) -> bool {
-        if self.frames.is_empty() {
-            return false;
-        }
-        self.frame(index).enabled
+        self.frame(index).map(|f| &*f.script)
     }
 
     /// Gets the effective start frame index for playback.
@@ -465,17 +401,6 @@ impl Line {
         precise_sum(self.get_effective_frames().iter().map(|f| f.duration))
     }
 
-    /// Sets the optional name for the frame at the specified `frame_index`.
-    ///
-    /// If `frame_index` is out of bounds, an error is printed to stderr and no change is made.
-    pub fn set_frame_name(&mut self, frame_index: usize, name: Option<String>) {
-        if !self.frames.is_empty() {
-            self.frame_mut(frame_index).name = name;
-        } else {
-            log_eprintln!("[!] Line::set_frame_name: No frame in line");
-        }
-    }
-
     pub fn calculate_frame_index(
         &self,
         clock: &Clock,
@@ -516,9 +441,10 @@ impl Line {
                 self.speed_factor
             };
             use crate::util::decimal_operations::precise_beat_division;
+            let frame_len = self.frames[absolute_frame_index].duration;
             let single_rep_len_beats =
-                precise_beat_division(self.frame_len(absolute_frame_index), speed_factor);
-            let total_repetitions = self.frame(absolute_frame_index).repetitions;
+                precise_beat_division(frame_len, speed_factor);
+            let total_repetitions = self.frames[absolute_frame_index].repetitions;
 
             let total_frame_len_beats = single_rep_len_beats * total_repetitions as f64;
 
@@ -574,5 +500,26 @@ impl Line {
             SyncTime::MAX,
             remaining_micros_in_loop,
         )
+    }
+}
+
+impl Default for Line {
+    fn default() -> Self {
+        Line {
+            frames: vec![Frame::default()],
+            speed_factor: 1.0,
+            vars: Default::default(),
+            index: Default::default(),
+            start_frame: Default::default(),
+            end_frame: Default::default(),
+            custom_length: Default::default(),
+            current_frame: Default::default(),
+            first_iteration_index: Default::default(),
+            current_iteration: Default::default(),
+            current_repetition: Default::default(),
+            frames_executed: Default::default(),
+            frames_passed: Default::default(),
+            start_date: Default::default(),
+        }
     }
 }

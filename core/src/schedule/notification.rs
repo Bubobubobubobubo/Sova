@@ -1,14 +1,34 @@
+use std::collections::HashMap;
+
+use serde::{Deserialize, Serialize};
+
+use crate::lang::variable::VariableValue;
 use crate::protocol::message::TimedMessage;
-use crate::scene::{Scene, Line, script::Script};
-use crate::shared_types::{DeviceInfo, GridSelection};
+use crate::scene::{Scene, Line, Frame};
+use crate::protocol::device::{DeviceInfo};
 
 /// Enum representing notifications broadcast by the Scheduler.
-#[derive(Debug, Clone, Default)]
-pub enum SchedulerNotification {
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub enum SovaNotification {
     #[default]
     Nothing,
+    /// New scene value
     UpdatedScene(Scene),
-    UpdatedLine(usize, Line),
+    /// New lines values
+    UpdatedLines(Vec<(usize, Line)>),
+    /// New lines configurations (without frames)
+    UpdatedLineConfigurations(Vec<(usize, Line)>),
+    /// Added a line
+    AddedLine(usize, Line),
+    /// Removed a line
+    RemovedLine(usize),
+    /// New frames values
+    UpdatedFrames(Vec<(usize, usize, Frame)>),
+    /// Added a frame
+    AddedFrame(usize, usize, Frame),
+    /// Removed a frame
+    RemovedFrame(usize, usize),
+
     TempoChanged(f64),
     Log(TimedMessage),
     TransportStarted,
@@ -19,20 +39,6 @@ pub enum SchedulerNotification {
     ClientListChanged(Vec<String>),
     /// A chat message was received from a client.
     ChatReceived(String, String), // (sender_name, message)
-    /// Enable specific frames in a line
-    EnableFrames(usize, Vec<usize>),
-    /// Disable specific frames in a line
-    DisableFrames(usize, Vec<usize>),
-    /// Uploaded script to a line/frame
-    UploadedScript(usize, usize, Script),
-    /// Set line frames
-    UpdatedLineFrames(usize, Vec<f64>),
-    /// Added a line
-    AddedLine(Line),
-    /// Removed a line
-    RemovedLine(usize),
-    /// A peer updated their grid selection.
-    PeerGridSelectionChanged(String, GridSelection),
     /// A peer started editing a specific frame.
     PeerStartedEditingFrame(String, usize, usize),
     /// A peer stopped editing a specific frame.
@@ -40,5 +46,5 @@ pub enum SchedulerNotification {
     /// The list of available/connected devices changed.
     DeviceListChanged(Vec<DeviceInfo>),
     /// Global variables have been updated
-    GlobalVariablesChanged(std::collections::HashMap<String, crate::lang::variable::VariableValue>),
+    GlobalVariablesChanged(HashMap<String, VariableValue>),
 }

@@ -53,23 +53,11 @@ impl Scene {
     }
 
     pub fn get_frame(&self, line_id: usize, frame_id: usize) -> Option<&Frame> {
-        let Some(line) = self.line(line_id) else {
-            return None;
-        };
-        if line.is_empty() {
-            return None;
-        }
-        Some(line.frame(frame_id))
+        self.line(line_id).and_then(|line| line.frame(frame_id))
     }
 
-    pub fn get_frame_mut(&mut self, line_id: usize, frame_id: usize) -> Option<&mut Frame> {
-        let Some(line) = self.line_mut(line_id) else {
-            return None;
-        };
-        if line.is_empty() {
-            return None;
-        }
-        Some(line.frame_mut(frame_id))
+    pub fn get_frame_mut(&mut self, line_id: usize, frame_id: usize) -> &mut Frame {
+        self.line_mut(line_id).frame_mut(frame_id)
     }
 
     /// Returns the number of lines currently in the scene.
@@ -108,80 +96,78 @@ impl Scene {
         self.lines.push(line);
     }
 
+    /// Inserts a new line to the end of the scene.
+    ///
+    /// Sets the `index` of the provided `line` to the next available index (current number of lines),
+    /// ensures the line is internally consistent via `make_consistent`, and then appends it to the `lines` vector.
+    pub fn insert_line(&mut self, at: usize, line: Line) {
+        self.ensure_min_size(at);
+        self.lines.insert(at, line);
+        self.make_consistent();
+    }
+
     /// Replaces the line at the specified `index` with the provided `line`.
     ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator based on the current number of lines.
+    /// Handles wrapping: if `index` is out of bounds, it creates intermediary lines with default value.
     /// Sets the `index` field of the new `line` correctly, calls `make_consistent` on it, and places it at the target index.
     /// Prints a warning and does nothing if the scene is empty.
-    pub fn set_line(&mut self, index: usize, mut line: Line) {
-        if self.lines.is_empty() {
-            log_eprintln!(
-                "Warning: Attempted to set line with index {} in an empty Scene. Ignoring.",
-                index
-            );
-            return;
+    pub fn set_line(&mut self, index: usize, line: Line) {
+        if self.n_lines() <= index {
+            self.lines.resize(index + 1, Line::default());
         }
-        let index = index % self.lines.len();
-        line.index = index;
-        line.make_consistent();
         self.lines[index] = line;
+        self.make_consistent();
     }
 
     /// Removes the line at the specified `index` from the scene.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
+    /// 
     /// After removing the line, it updates the `index` field of all subsequent lines to maintain correct sequential indices.
     /// Prints a warning and does nothing if the scene is empty.
     pub fn remove_line(&mut self, index: usize) {
-        if self.lines.is_empty() {
+        if index >= self.n_lines() {
             log_eprintln!(
-                "Warning: Attempted to remove line with index {} from an empty Scene. Ignoring.",
+                "Warning: Attempted to remove line with invalid index {}. Ignoring.",
                 index
             );
             return;
         }
-        let index = index % self.lines.len();
         self.lines.remove(index);
         for (i, line) in self.lines[index..].iter_mut().enumerate() {
             line.index = index + i;
         }
     }
 
-    /// Returns an immutable reference to the line at the specified `index`.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    ///
-    /// # Panics
-    /// Panics if the scene is empty.
+    /// Returns an immutable reference to the line at the specified `index`,
+    /// or None if it doesn't exist.
     pub fn line(&self, index: usize) -> Option<&Line> {
-        if self.lines.is_empty() {
+        if index >= self.n_lines() {
+            log_eprintln!(
+                "Warning: Attempted to get line with invalid index {}. Ignoring.",
+                index
+            );
             return None;
         }
-        let index = index % self.lines.len();
         Some(&self.lines[index])
     }
 
     /// Returns a mutable reference to the line at the specified `index`.
     ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    ///
-    /// # Panics
-    /// Panics if the scene is empty.
-    pub fn line_mut(&mut self, index: usize) -> Option<&mut Line> {
-        if self.lines.is_empty() {
-            return None;
+    /// Handles wrapping: if `index` is out of bounds, it creates intermediary lines.
+    pub fn line_mut(&mut self, index: usize) -> &mut Line {
+        if index >= self.n_lines() {
+            self.lines.resize(index + 1, Line::default());
+            self.make_consistent();
         }
-        let index = index % self.lines.len();
-        Some(&mut self.lines[index])
+        &mut self.lines[index]
     }
 
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
 
-    pub fn add_line_if_empty(&mut self) {
-        if self.is_empty() {
-            self.add_line(Default::default());
+    pub fn ensure_min_size(&mut self, size: usize) {
+        if self.n_lines() < size {
+            self.lines.resize(size, Line::default());
         }
     }
 
@@ -191,4 +177,5 @@ impl Scene {
     pub fn get_frames_positions(&self) -> Vec<usize> {
         self.lines_iter().map(|s| s.current_frame).collect()
     }
+
 }

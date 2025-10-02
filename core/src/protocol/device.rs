@@ -15,6 +15,27 @@ use std::{
     sync::{Arc, Mutex},
 };
 
+// Placeholder for richer device info
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct DeviceInfo {
+    pub id: usize,
+    pub name: String,
+    pub kind: DeviceKind,
+    pub is_connected: bool,
+    // Add field for OSC address (IP:Port)
+    pub address: Option<String>,
+    // Consider adding is_input/is_output flags or refining DeviceKind
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub enum DeviceKind {
+    Midi,
+    Osc,
+    Log, // Added Log for completeness
+    Other,
+}
+
+
 /// Represents the different types of devices the system can interact with.
 ///
 /// Each variant encapsulates the specific logic for communicating with a type

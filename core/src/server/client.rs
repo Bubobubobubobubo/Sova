@@ -1,13 +1,10 @@
 //! Defines the TCP client for interacting with the Sova server.
 
 use super::ServerMessage;
-use crate::scene::{Frame, Scene};
-use crate::schedule::action_timing::ActionTiming;
-use crate::schedule::message::SchedulerMessage;
-use crate::{
-    shared_types::GridSelection,
-    log_eprintln,
-};
+use crate::scene::{Frame, Line, Scene};
+use crate::schedule::ActionTiming;
+use crate::schedule::SchedulerMessage;
+use crate::log_eprintln;
 use serde::{Deserialize, Serialize};
 use std::net::SocketAddrV4;
 use tokio::io::AsyncReadExt;
@@ -36,56 +33,50 @@ pub enum ClientMessage {
     SetTempo(f64, ActionTiming),
     /// Request to set the client name.
     SetName(String),
-    /// Toggle multiple frames
-    EnableFrames(usize, Vec<usize>, ActionTiming),
-    /// Untoggle multiple frames
-    DisableFrames(usize, Vec<usize>, ActionTiming),
-    /// Set the script associated to line/frame
-    SetScript(usize, usize, String, ActionTiming),
-    /// Get the script associated to line/frame
-    GetScript(usize, usize),
+
     /// Request the current scene data.
     GetScene,
     /// Replace the entire scene on the server.
     SetScene(Scene, ActionTiming),
+
+    /// Request a specific line
+    GetLine(usize),
+    /// Replace specified lines
+    SetLines(Vec<(usize, Line)>, ActionTiming),
+    /// Configure properties (omitting frames) for a specific line
+    ConfigureLines(Vec<(usize, Line)>, ActionTiming),
+    /// Insert a line at given index
+    AddLine(usize, Line, ActionTiming),
+    /// Remove the line at given index
+    RemoveLine(usize, ActionTiming),
+
+    /// Request a specific frame
+    GetFrame(usize, usize),
+    /// Replace specified frames
+    SetFrames(Vec<(usize, usize, Frame)>, ActionTiming),
+    /// Insert a frame a specified index
+    AddFrame(usize, usize, Frame, ActionTiming),
+    /// Remove a frame at specified index
+    RemoveFrame(usize, usize, ActionTiming),
+
     /// Request the current state of the master clock.
     GetClock,
     /// Get peer list
     GetPeers,
     /// Send a chat message to other clients.
     Chat(String),
-    /// Send the updated frames vector for a line
-    UpdateLineFrames(usize, Vec<f64>, ActionTiming),
-    /// Insert a frame with a default value (e.g., 1.0) at the specified position.
-    InsertFrame(usize, usize, f64, ActionTiming), // line_idx, position, duration
-    /// Remove the frame at the specified position.
-    RemoveFrame(usize, usize, ActionTiming), // line_idx, position
-    /// Set the start frame (inclusive) for line playback loop. None resets to default (0).
-    SetLineStartFrame(usize, Option<usize>, ActionTiming),
-    /// Set the end frame (inclusive) for line playback loop. None resets to default (last frame).
-    SetLineEndFrame(usize, Option<usize>, ActionTiming),
     /// Request a complete snapshot of the current server state (Scene, Clock, etc.).
     GetSnapshot,
-    /// Informs the server about the client's current grid selection/cursor.
-    UpdateGridSelection(GridSelection),
     /// Informs the server the client started editing a specific frame.
     StartedEditingFrame(usize, usize), // (line_idx, frame_idx)
     /// Informs the server the client stopped editing a specific frame.
     StoppedEditingFrame(usize, usize), // (line_idx, frame_idx)
-    /// Set a custom loop length for a specific line.
-    SetLineLength(usize, Option<f64>, ActionTiming),
-    /// Set the playback speed factor for a specific line.
-    SetLineSpeedFactor(usize, f64, ActionTiming),
     /// Request the transport to start playback.
     TransportStart(ActionTiming),
     /// Request the transport to stop playback.
     TransportStop(ActionTiming),
     /// Request the full list of devices from the server.
     RequestDeviceList,
-    /// Use ConnectMidiDeviceByName. Request connection to a specific MIDI device by its internal ID.
-    ConnectMidiDeviceById(usize), // Internal Device ID
-    /// Use DisconnectMidiDeviceByName. Request disconnection from a specific MIDI device by its internal ID.
-    DisconnectMidiDeviceById(usize), // Internal Device ID
     /// Request connection to a specific MIDI device by its name.
     ConnectMidiDeviceByName(String), // Device Name
     /// Request disconnection from a specific MIDI device by its name.
@@ -96,53 +87,11 @@ pub enum ClientMessage {
     AssignDeviceToSlot(usize, String), // Slot ID, Device Name
     /// Request unassignment of whatever device is in a specific slot ID (1-N).
     UnassignDeviceFromSlot(usize), // Slot ID
-
     // --- New OSC Messages ---
     /// Request creation of a new OSC output device.
     CreateOscDevice(String, String, u16), // name, ip_address, port
     /// Request removal of an OSC output device by its name.
     RemoveOscDevice(String), // name
-    /// Request to duplicate a range of frames on a line and insert them.
-    DuplicateFrameRange {
-        src_line_idx: usize,
-        src_frame_start_idx: usize,
-        src_frame_end_idx: usize, // Inclusive
-        target_insert_idx: usize,
-        timing: ActionTiming,
-    },
-    /// Remove frames across potentially multiple lines. Inner Vec contains indices for the given line_idx.
-    RemoveFramesMultiLine {
-        lines_and_indices: Vec<(usize, Vec<usize>)>,
-        timing: ActionTiming,
-    },
-    /// Request server to fetch data for duplication based on selection bounds.
-    RequestDuplicationData {
-        src_top: usize,
-        src_left: usize,
-        src_bottom: usize,
-        src_right: usize,
-        target_cursor_row: usize,
-        target_cursor_col: usize,
-        insert_before: bool, // true = 'a' (before cursor), false = 'd' (after cursor)
-        timing: ActionTiming,
-    },
-    /// Paste a block of data (previously copied by the client) onto the grid.
-    PasteDataBlock {
-        /// The clipboard data (outer vec = cols, inner vec = rows).
-        data: Vec<Vec<Frame>>,
-        /// Target row index for the top-left corner of the paste.
-        target_row: usize,
-        /// Target column index for the top-left corner of the paste.
-        target_col: usize,
-        /// Timing for the paste action.
-        timing: ActionTiming,
-    },
-    /// Set the name for a specific frame.
-    SetFrameName(usize, usize, Option<String>, ActionTiming), // line_idx, frame_idx, name, timing
-    /// Set the language identifier for a specific frame's script.
-    SetScriptLanguage(usize, usize, String, ActionTiming), // line_idx, frame_idx, lang, timing
-    /// Set the number of repetitions for a specific frame.
-    SetFrameRepetitions(usize, usize, usize, ActionTiming), // line_idx, frame_idx, repetitions, timing
 }
 
 impl ClientMessage {
@@ -150,23 +99,35 @@ impl ClientMessage {
     pub fn compression_strategy(&self) -> CompressionStrategy {
         match self {
             // Real-time/frequent messages that should never be compressed
-            ClientMessage::UpdateGridSelection(_)
             | ClientMessage::StartedEditingFrame(_, _)
             | ClientMessage::StoppedEditingFrame(_, _)
             | ClientMessage::GetClock
             | ClientMessage::GetPeers
-            | ClientMessage::GetScript(_, _)
             | ClientMessage::GetScene
             | ClientMessage::GetSnapshot
             | ClientMessage::RequestDeviceList => CompressionStrategy::Never,
 
             // Large content messages that should always be compressed if beneficial
-            ClientMessage::SetScript(_, _, _, _) | ClientMessage::SetScene(_, _) => {
+            ClientMessage::SetScene(_, _) 
+            | ClientMessage::SetLines(_, _) => {
                 CompressionStrategy::Always
             }
 
             // Everything else uses adaptive compression
             _ => CompressionStrategy::Adaptive,
+        }
+    }
+
+    /// Deserializes a MessagePack buffer into a ClientMessage
+    pub fn deserialize(final_bytes: &[u8]) -> io::Result<Option<Self>> {
+        match rmp_serde::from_slice::<ClientMessage>(final_bytes) {
+            Ok(msg) => Ok(Some(msg)),
+            Err(e) => {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidData,
+                    format!("MessagePack deserialization error: {}", e),
+                ))
+            }
         }
     }
 }

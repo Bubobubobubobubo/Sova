@@ -27,13 +27,12 @@ use crate::{
     lang::event::ConcreteEvent,
     log_println, log_eprintln,
     protocol::{
-        device::ProtocolDevice,
+        device::{ProtocolDevice, DeviceInfo, DeviceKind},
         log::{LOG_NAME, LogMessage, Severity},
         message::{ProtocolMessage, TimedMessage},
         midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut},
         osc::{Argument as OscArgument, OSCMessage},
     },
-    shared_types::{DeviceInfo, DeviceKind},
 };
 
 use midir::{Ignore, MidiInput, MidiOutput};

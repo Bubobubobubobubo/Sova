@@ -48,10 +48,15 @@ impl EnvironmentFunc {
                 val.cast_as_decimal(ctx.clock, ctx.frame_len())
             },
             EnvironmentFunc::FrameLen(x, y) => {
+                if ctx.lines.is_empty() {
+                    return (0.0).into()
+                }
                 let line_i = ctx.evaluate(x).as_integer(ctx.clock, ctx.frame_len()) as usize;
                 let frame_i = ctx.evaluate(y).as_integer(ctx.clock, ctx.frame_len()) as usize;
-                ctx.lines[line_i % ctx.lines.len()]
-                    .frame_len(frame_i)
+                let line = &ctx.lines[line_i % ctx.lines.len()];
+                line.frame(frame_i % line.n_frames())
+                    .map(|f| f.duration)
+                    .unwrap_or(0.0)
                     .into()
             }
         }
