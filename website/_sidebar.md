@@ -1,3 +1,4 @@
+- [About](/)
 - [Team](/team/)
 - **Documentation**
   - [Getting Started](/docs/getting_started.md)
@@ -19,8 +20,8 @@
     - [Languages](/docs/core/languages.md)
       - [Bali](/docs/core/languages/bali.md)
       - [Boinx](/docs/core/languages/boinx.md)
-  - [Server](/docs/core/core.md)
-  - [GUI](/docs/gui/README.md)
+  - [Server](/docs/server/server.md)
+  - [GUI](/docs/gui/gui.md)
 - **Residencies**
   - [3-6 février 2025](/residencies/premiere_residence.md)
   - [24-28 mars 2025](/residencies/seconde_residence.md)
