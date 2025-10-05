@@ -42,9 +42,8 @@ Tanguy Dubois is a PhD student at [LS2N laboratory](https://ls2n.fr). His thesis
 
 <div>
 
-Raphaël Maurice Forment is an improvising musician, programmer, and PhD in musicology (Jean Monnet University of Saint-Etienne, 2025, ECLLA laboratory).
-He recently defended his thesis on the study of _live coding_ techniques and aesthetics, supervised by Laurent Pottier (UJM, ECLLA) and Alain Bonardi
-(Paris 8, CICM MUSIDANSE). Raphaël designs various _open source_ tools for musical creation and contributes to the development of other tools used
+Raphaël Maurice Forment is a musician, programmer, and PhD in musicology.
+He recently defended his thesis on the study of _live coding_ techniques and aesthetics. Raphaël designs various _open source_ tools for musical creation and contributes to the development of other tools used
 by the international _live coding_ community. He is active within the [Cookie Collective](https://cookie.paris) and the [TOPLAP](https://toplap.org) collective.
 
 - Personal website: [raphaelforment.fr](https://raphaelforment.fr)

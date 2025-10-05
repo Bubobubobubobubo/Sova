@@ -6,20 +6,25 @@
 .download-button {
   flex: 1;
   min-width: 150px;
-  padding: 1rem;
-  background: var(--bg-secondary, #2d2d2d);
-  color: var(--text-primary, white);
+  padding: 1.5rem 1rem;
+  background: #0F131A;
+  color: #BFBDB6;
   text-align: center;
   text-decoration: none !important;
-  border: none;
+  border: 1px solid #565B66 !important;
+  border-bottom: 1px solid #565B66 !important;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+  margin-bottom: 1rem;
 }
 
 .download-button:hover {
+  border-color: #59C2FF;
+  color: #59C2FF;
   transform: scale(1.05);
   text-decoration: none !important;
 }
@@ -30,7 +35,11 @@
 }
 </style>
 
-<div style="display: flex; gap: 1rem; margin: 2rem 0; flex-wrap: wrap;">
+## Release versions
+
+Sova is a modular live coding environment. The easiest way to get started is to download the pre-built binary for your platform. Simply download the software and run it! If you are a developer or want to contribute to the project, you can also build Sova from source.
+
+<div style="display: flex; gap: 1rem; margin: 2rem 0 3rem 0; flex-wrap: wrap; padding-bottom: 1rem;">
   <a href="#" class="download-button">
     <span class="material-icons">terminal</span>
     <div style="font-weight: bold;">Download for Linux</div>
@@ -45,24 +54,24 @@
   </a>
 </div>
 
-Sova is a modular live coding environment. You can install components independently or get the full experience with the GUI. This guide will walk you through setting up Sova on your system.
+## Building from Source
 
-## Prerequisites
+Before installing Sova, make sure to install the following dependencies on your system:
 
-### System Requirements
+- **Rust** (1.80 or later): [Install Rust](https://rustup.rs/).
+- **Node.js** (20 or later): [Install Node.js](https://nodejs.org/).
+- **pnpm**: Install with `npm install -g pnpm`.
 
-Before installing Sova, make sure you have:
+Some additional dependencies are required depending on your operating system:
 
-- **Rust** (1.80 or later): [Install Rust](https://rustup.rs/)
-- **Node.js** (20 or later): [Install Node.js](https://nodejs.org/)
-- **pnpm**: Install with `npm install -g pnpm`
+<!-- tabs:start -->
 
-### Platform-Specific Dependencies
+#### **macOS**
 
-#### macOS
 No additional dependencies required. Audio support via CoreAudio is built-in.
 
-#### Linux
+#### **Linux**
+
 Install audio and MIDI dependencies:
 ```bash
 # Debian/Ubuntu
@@ -75,21 +84,26 @@ sudo dnf install alsa-lib-devel jack-audio-connection-kit-devel
 sudo pacman -S alsa-lib jack2
 ```
 
-#### Windows
+#### **Windows**
+
 Audio support via WASAPI is built-in. No additional dependencies required.
 
-## Quick Start: GUI Installation
+<!-- tabs:end -->
 
-The GUI is the easiest way to get started with Sova. It bundles the server and provides an intuitive interface for live coding.
-
-### Clone the Repository
+You can now safely clone the Sova repository and proceed with the build:
 
 ```bash
 git clone https://github.com/Bubobubobubobubo/sova.git
 cd Sova
 ```
 
-### Build and Run the GUI
+### Building Components
+
+<!-- tabs:start -->
+
+#### **GUI (Recommended)**
+
+Build and run the GUI application:
 
 ```bash
 cd gui
@@ -97,11 +111,7 @@ pnpm install
 pnpm tauri dev
 ```
 
-The GUI will launch and automatically handle server management for you.
-
-### Building a Standalone App
-
-For a distributable application:
+The GUI will launch immediately. If you want to test the production build, run:
 
 ```bash
 pnpm tauri build
@@ -109,11 +119,7 @@ pnpm tauri build
 
 The app will be in `gui/src-tauri/target/release/bundle/`.
 
-## Component Installation
-
-### Core + Server
-
-The core is Sova's heart: it compiles live coding languages, manages MIDI/OSC, and orchestrates sessions.
+#### **Core + Server**
 
 ```bash
 cd core
@@ -126,11 +132,11 @@ Run the server:
 ./target/release/sova_server
 ```
 
-The server listens on default port 8000 and handles client connections.
+The server listens on default port 8000 and handles client connections. Please take a look at the [server documentation](/docs/server/server.md) for more details about flags and options.
 
-### Audio Engine
+#### **Audio Engine**
 
-The engine provides audio synthesis and sampling, controlled via OSC messages.
+The audio engine can be used independently from the rest of the Sova environment. It is a lightweight and portable audio synthesis engine.
 
 ```bash
 cd engine
@@ -143,56 +149,7 @@ Run the engine:
 ./target/release/sova_engine
 ```
 
-The engine will automatically detect available audio devices.
+The engine will automatically detect available audio devices. Please take a look at the [engine documentation](/docs/engine/engine.md) for more details about flags and options.
 
-## Getting Ready to Play
+<!-- tabs:end -->
 
-### 1. Start the GUI
-
-Launch the GUI application. It will automatically spawn a local server instance.
-
-### 2. Configure Audio/MIDI
-
-- The engine auto-detects audio devices
-- MIDI devices are listed in the GUI settings
-- OSC devices can be configured for external synths (e.g., SuperDirt)
-
-### 3. Create Your First Script
-
-1. Open the code editor in the GUI
-2. Write your first pattern using Bali or Boinx syntax
-3. Execute with `Ctrl+Enter` or the play button
-4. Watch your code come to life in the scene grid
-
-### 4. (Optional) Enable Collaboration
-
-To jam with friends:
-
-1. One person runs the relay server (or use a hosted relay)
-2. All participants connect to the relay in GUI settings
-3. Changes sync in real-time across all instances
-
-### 5. Sync with Ableton Link
-
-Enable Link synchronization in the GUI to sync tempo with other Link-enabled applications.
-
-## Verify Installation
-
-Test each component:
-
-```bash
-# Test server
-./core/target/release/sova_server --help
-
-# Test engine
-./engine/target/release/sova_engine --help
-
-# Test relay
-./relay/target/release/sova-relay --help
-```
-
-## Next Steps
-
-- Explore the [Getting Started](./getting_started.md) guide
-- Learn about [Bali and Boinx](./core/languages.md) live coding languages
-- Dive into [Engine synthesis](./engine/synths.md) capabilities

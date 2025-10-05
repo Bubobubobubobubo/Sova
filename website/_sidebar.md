@@ -1,5 +1,6 @@
 - [About](/)
 - [Team](/team/team.md)
+- [Community](/community.md)
 - **Documentation**
   - [Getting Started](/docs/getting_started.md)
   - [Installation](/docs/installation.md)
