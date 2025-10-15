@@ -72,12 +72,11 @@ export type ClientMessage =
   | { SchedulerControl: SchedulerMessage }
   | { SetTempo: [number, ActionTiming] }
   | { SetName: string }
-  | { EnableFrames: [number, number[], ActionTiming] }
-  | { DisableFrames: [number, number[], ActionTiming] }
-  | { SetScript: [number, number, string, ActionTiming] }
-  | { GetScript: [number, number] }
   | "GetScene"
   | { SetScene: [Scene, ActionTiming] }
+  | "GetLine"
+  | { SetLines: [[number, Line][], ActionTiming] }
+  | { ConfigureLines: [[number, Line][], ActionTiming] }
   | "GetClock"
   | "GetPeers"
   | { Chat: string }
@@ -90,8 +89,6 @@ export type ClientMessage =
   | { UpdateGridSelection: GridSelection }
   | { StartedEditingFrame: [number, number] }
   | { StoppedEditingFrame: [number, number] }
-  | { SetLineLength: [number, number | null, ActionTiming] }
-  | { SetLineSpeedFactor: [number, number, ActionTiming] }
   | { TransportStart: ActionTiming }
   | { TransportStop: ActionTiming }
   | "RequestDeviceList"
@@ -103,37 +100,7 @@ export type ClientMessage =
   | { AssignDeviceToSlot: [number, string] }
   | { UnassignDeviceFromSlot: number }
   | { CreateOscDevice: [string, string, number] }
-  | { RemoveOscDevice: string }
-  | { DuplicateFrameRange: {
-      src_line_idx: number;
-      src_frame_start_idx: number;
-      src_frame_end_idx: number;
-      target_insert_idx: number;
-      timing: ActionTiming;
-    } }
-  | { RemoveFramesMultiLine: {
-      lines_and_indices: [number, number[]][];
-      timing: ActionTiming;
-    } }
-  | { RequestDuplicationData: {
-      src_top: number;
-      src_left: number;
-      src_bottom: number;
-      src_right: number;
-      target_cursor_row: number;
-      target_cursor_col: number;
-      insert_before: boolean;
-      timing: ActionTiming;
-    } }
-  | { PasteDataBlock: {
-      data: PastedFrameData[][];
-      target_row: number;
-      target_col: number;
-      timing: ActionTiming;
-    } }
-  | { SetFrameName: [number, number, string | null, ActionTiming] }
-  | { SetScriptLanguage: [number, number, string, ActionTiming] }
-  | { SetFrameRepetitions: [number, number, number, ActionTiming] };
+  | { RemoveOscDevice: string };
 
 export type ServerMessage = 
   | { Hello: {
