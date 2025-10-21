@@ -1,8 +1,11 @@
-use color_eyre::eyre::OptionExt;
-use futures::{FutureExt, StreamExt};
-use ratatui::crossterm::event::Event as CrosstermEvent;
-use std::time::Duration;
-use tokio::sync::mpsc;
+use color_eyre::eyre::WrapErr;
+use crossbeam_channel::{unbounded, Receiver, Sender};
+use ratatui::crossterm::event::{self, Event as CrosstermEvent};
+use sova_core::schedule::SchedulerMessage;
+use std::{
+    thread,
+    time::{Duration, Instant},
+};
 
 /// The frequency at which tick events are emitted.
 const TICK_FPS: f64 = 30.0;
@@ -10,20 +13,10 @@ const TICK_FPS: f64 = 30.0;
 /// Representation of all possible events.
 #[derive(Clone, Debug)]
 pub enum Event {
-    /// An event that is emitted on a regular schedule.
-    ///
-    /// Use this event to run any code which has to run outside of being a direct response to a user
-    /// event. e.g. polling exernal systems, updating animations, or rendering the UI based on a
-    /// fixed frame rate.
     Tick,
-    /// Crossterm events.
-    ///
-    /// These events are emitted by the terminal.
     Crossterm(CrosstermEvent),
-    /// Application events.
-    ///
-    /// Use this event to emit custom events that are specific to your application.
     App(AppEvent),
+    SchedulerControl(SchedulerMessage)
 }
 
 /// Application events.
@@ -42,18 +35,16 @@ pub enum AppEvent {
 /// Terminal event handler.
 #[derive(Debug)]
 pub struct EventHandler {
-    /// Event sender channel.
-    sender: mpsc::UnboundedSender<Event>,
-    /// Event receiver channel.
-    receiver: mpsc::UnboundedReceiver<Event>,
+    sender: Sender<Event>,
+    receiver: Receiver<Event>,
 }
 
 impl EventHandler {
     /// Constructs a new instance of [`EventHandler`] and spawns a new thread to handle events.
     pub fn new() -> Self {
-        let (sender, receiver) = mpsc::unbounded_channel();
-        let actor = EventTask::new(sender.clone());
-        tokio::spawn(async { actor.run().await });
+        let (sender, receiver) = unbounded();
+        let actor = EventThread::new(sender.clone());
+        thread::spawn(|| actor.run());
         Self { sender, receiver }
     }
 
@@ -66,11 +57,8 @@ impl EventHandler {
     /// This function returns an error if the sender channel is disconnected. This can happen if an
     /// error occurs in the event thread. In practice, this should not happen unless there is a
     /// problem with the underlying terminal.
-    pub async fn next(&mut self) -> color_eyre::Result<Event> {
-        self.receiver
-            .recv()
-            .await
-            .ok_or_eyre("Failed to receive event")
+    pub fn next(&self) -> color_eyre::Result<Event> {
+        Ok(self.receiver.recv()?)
     }
 
     /// Queue an app event to be sent to the event receiver.
@@ -85,46 +73,39 @@ impl EventHandler {
 }
 
 /// A thread that handles reading crossterm events and emitting tick events on a regular schedule.
-struct EventTask {
+struct EventThread {
     /// Event sender channel.
-    sender: mpsc::UnboundedSender<Event>,
+    sender: Sender<Event>,
 }
 
-impl EventTask {
+impl EventThread {
     /// Constructs a new instance of [`EventThread`].
-    fn new(sender: mpsc::UnboundedSender<Event>) -> Self {
+    fn new(sender: Sender<Event>) -> Self {
         Self { sender }
     }
 
     /// Runs the event thread.
     ///
     /// This function emits tick events at a fixed rate and polls for crossterm events in between.
-    async fn run(self) -> color_eyre::Result<()> {
-        let tick_rate = Duration::from_secs_f64(1.0 / TICK_FPS);
-        let mut reader = crossterm::event::EventStream::new();
-        let mut tick = tokio::time::interval(tick_rate);
+    fn run(self) -> color_eyre::Result<()> {
+        let tick_interval = Duration::from_secs_f64(1.0 / TICK_FPS);
+        let mut last_tick = Instant::now();
         loop {
-            let tick_delay = tick.tick();
-            let crossterm_event = reader.next().fuse();
-            tokio::select! {
-              _ = self.sender.closed() => {
-                break;
-              }
-              _ = tick_delay => {
+            // emit tick events at a fixed rate
+            let timeout = tick_interval.saturating_sub(last_tick.elapsed());
+            if timeout == Duration::ZERO {
+                last_tick = Instant::now();
                 self.send(Event::Tick);
-              }
-              Some(Ok(evt)) = crossterm_event => {
-                self.send(Event::Crossterm(evt));
-              }
-            };
+            }
+            // poll for crossterm events, ensuring that we don't block the tick interval
+            if event::poll(timeout).wrap_err("failed to poll for crossterm events")? {
+                let event = event::read().wrap_err("failed to read crossterm event")?;
+                self.send(Event::Crossterm(event));
+            }
         }
-        Ok(())
     }
 
-    /// Sends an event to the receiver.
     fn send(&self, event: Event) {
-        // Ignores the result because shutting down the app drops the receiver, which causes the send
-        // operation to fail. This is expected behavior and should not panic.
         let _ = self.sender.send(event);
     }
 }

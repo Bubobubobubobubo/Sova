@@ -150,12 +150,6 @@ export const setFrameRepetitions = (lineIndex: number, frameIndex: number, repet
   };
 };
 
-export const setScriptLanguage = (lineIndex: number, frameIndex: number, language: string, timing: ActionTiming = "Immediate") => {
-  return {
-    SetScriptLanguage: [lineIndex, frameIndex, language, timing] as [number, number, string, ActionTiming]
-  };
-};
-
 // Scene helpers
 export const getMaxFrames = (scene: Scene | null): number => {
   if (!scene) return 0;
