@@ -14,7 +14,7 @@ import type { Frame } from './types/frame';
 
 export interface Script {
   content: string;
-  lang?: string;
+  lang: string;
   args?: [string, string]
 }
 
@@ -34,7 +34,7 @@ export interface Scene {
 export interface DeviceInfo {
   id: number;
   name: string;
-  kind: "Midi" | "Osc" | "Log" | "Other";
+  kind: "Midi" | "Osc" | "Log" | "AudioEngine" | "Other";
   is_connected: boolean;
   address?: string;
 }
@@ -49,7 +49,7 @@ export interface CompilationError {
 export type CompilationState = 
   | "NotCompiled"
   | "Compiling"
-  | { Compiled: string }
+  | { Compiled: any }
   | { Error: CompilationError };
 
 export interface Snapshot {

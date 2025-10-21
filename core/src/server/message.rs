@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     clock::SyncTime,
-    compiler::CompilationError,
     scene::Scene,
 };
 

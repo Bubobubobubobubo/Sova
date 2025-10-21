@@ -47,7 +47,7 @@ export const isGridSelectionSingle = (selection: GridUIState['selection']): bool
 // Playback State
 export interface PlaybackState {
   isPlaying: boolean;
-  currentFramePositions: [number, number, number][];
+  currentFramePositions: [number, number][];
   clockState: [number, number, number, number];
 }
 
@@ -134,12 +134,12 @@ export const handlePeerMessage = (message: ServerMessage) => {
         peersStore.setKey('peerList', message.PeersUpdated);
         return true;
 
-      case 'PeerGridSelectionUpdate' in message:
-        const [peerName, selection] = message.PeerGridSelectionUpdate;
-        const peerSelections = new Map(peersStore.get().peerSelections);
-        peerSelections.set(peerName, selection);
-        peersStore.setKey('peerSelections', peerSelections);
-        return true;
+      // case 'PeerGridSelectionUpdate' in message:
+      //   const [peerName, selection] = message.PeerGridSelectionUpdate;
+      //   const peerSelections = new Map(peersStore.get().peerSelections);
+      //   peerSelections.set(peerName, selection);
+      //   peersStore.setKey('peerSelections', peerSelections);
+      //   return true;
 
       case 'PeerStartedEditing' in message:
         const [startPeer, startLine, startFrame] = message.PeerStartedEditing;
@@ -178,23 +178,23 @@ export const compilationStore = map<CompilationState>({
 });
 
 export const handleCompilationMessage = (message: ServerMessage) => {
-  if (typeof message === 'object' && message !== null) {
-    switch (true) {
-      case 'ScriptCompiled' in message:
-        const { line_idx, frame_idx } = message.ScriptCompiled;
-        const frameKey = `${line_idx}:${frame_idx}`;
-        const compiled = new Set(compilationStore.get().compiledFrames);
-        compiled.add(frameKey);
-        compilationStore.setKey('compiledFrames', compiled);
+  if (typeof message === 'object' && message !== null && 'CompilationUpdate' in message) {
+    const [ line_idx, frame_idx, _, state ] = message.CompilationUpdate;
+    const frameKey = `${line_idx}:${frame_idx}`;
 
-        const errors = compilationStore.get().errors.filter(
-          err => !(err.line_idx === line_idx && err.frame_idx === frame_idx)
-        );
-        compilationStore.setKey('errors', errors);
-        return true;
+    if(state === 'Compiling') {
+      //
+    } else if(typeof state === 'object' && 'Compiled' in state) {
+      const compiled = new Set(compilationStore.get().compiledFrames);
+      compiled.add(frameKey);
+      compilationStore.setKey('compiledFrames', compiled);
 
-      case 'CompilationErrorOccurred' in message:
-        const errorInfo = message.CompilationErrorOccurred;
+      const errors = compilationStore.get().errors.filter(
+        err => !(err.line_idx === line_idx && err.frame_idx === frame_idx)
+      );
+      compilationStore.setKey('errors', errors);
+    } else if(typeof state === 'object' && 'Error' in state) {
+      const errorInfo = state.Error;
         const newErrors = [...compilationStore.get().errors];
         newErrors.push({
           line_idx: 0,
@@ -202,10 +202,8 @@ export const handleCompilationMessage = (message: ServerMessage) => {
           error: errorInfo.info
         });
         compilationStore.setKey('errors', newErrors);
-        return true;
     }
   }
-
   return false;
 };
 
