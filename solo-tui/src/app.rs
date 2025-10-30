@@ -10,7 +10,6 @@ use sova_core::schedule::{SchedulerMessage, SovaNotification};
 #[derive(Debug)]
 pub struct App {
     pub running: bool,
-    pub counter: u8,
     pub events: EventHandler,
     pub sched_iface: Sender<SchedulerMessage>,
 }
@@ -20,7 +19,6 @@ impl App {
     pub fn new(sched_iface: Sender<SchedulerMessage>, sched_update: Receiver<SovaNotification>) -> Self {
         App {
             running: false,
-            counter: 0,
             events: EventHandler::new(),
             sched_iface,
         }
@@ -46,16 +44,23 @@ impl App {
                     self.handle_key_event(key_event)?
                 }
                 _ => {}
-            },
+            }
             Event::App(app_event) => match app_event {
-                AppEvent::Increment => self.increment_counter(),
-                AppEvent::Decrement => self.decrement_counter(),
+                AppEvent::NextPage => todo!(),
+                AppEvent::PreviousPage => todo!(),
                 AppEvent::Quit => self.quit(),
-            },
+            }
             Event::SchedulerControl(msg) => {
                 let _ = self.sched_iface.send(msg);
             }
+            Event::SchedulerNotification(notif) => {
+                self.handle_notification(notif)?
+            }
         }
+        Ok(())
+    }
+
+    pub fn handle_notification(&mut self, notif: SovaNotification) -> color_eyre::Result<()> {
         Ok(())
     }
 
@@ -66,8 +71,8 @@ impl App {
             KeyCode::Char('c' | 'C') if key_event.modifiers == KeyModifiers::CONTROL => {
                 self.events.send(AppEvent::Quit)
             }
-            KeyCode::Right => self.events.send(AppEvent::Increment),
-            KeyCode::Left => self.events.send(AppEvent::Decrement),
+            // KeyCode::Right => self.events.send(AppEvent::Increment),
+            // KeyCode::Left => self.events.send(AppEvent::Decrement),
             // Other handlers you could add here.
             _ => {}
         }
@@ -83,13 +88,5 @@ impl App {
     /// Set running to false to quit the application.
     pub fn quit(&mut self) {
         self.running = false;
-    }
-
-    pub fn increment_counter(&mut self) {
-        self.counter = self.counter.saturating_add(1);
-    }
-
-    pub fn decrement_counter(&mut self) {
-        self.counter = self.counter.saturating_sub(1);
     }
 }
