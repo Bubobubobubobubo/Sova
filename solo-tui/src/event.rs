@@ -1,7 +1,7 @@
 use color_eyre::eyre::WrapErr;
 use crossbeam_channel::{unbounded, Receiver, Sender};
 use ratatui::crossterm::event::{self, Event as CrosstermEvent};
-use sova_core::schedule::SchedulerMessage;
+use sova_core::schedule::{SchedulerMessage, SovaNotification};
 use std::{
     thread,
     time::{Duration, Instant},
@@ -16,7 +16,8 @@ pub enum Event {
     Tick,
     Crossterm(CrosstermEvent),
     App(AppEvent),
-    SchedulerControl(SchedulerMessage)
+    SchedulerControl(SchedulerMessage),
+    SchedulerNotification(SovaNotification)
 }
 
 /// Application events.
@@ -24,11 +25,8 @@ pub enum Event {
 /// You can extend this enum with your own custom events.
 #[derive(Clone, Debug)]
 pub enum AppEvent {
-    /// Increment the counter.
-    Increment,
-    /// Decrement the counter.
-    Decrement,
-    /// Quit the application.
+    NextPage,
+    PreviousPage,
     Quit,
 }
 
