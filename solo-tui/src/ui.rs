@@ -31,6 +31,7 @@ impl Widget for &mut App {
             Page::Devices => "devices",
             Page::Edit => "edit",
             Page::Configure => "configure",
+            Page::Time => "time",
             Page::Logs => {
                 self.log_widget.render(content_area, buf);
                 "logs"

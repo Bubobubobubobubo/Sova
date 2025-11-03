@@ -1,5 +1,5 @@
 // Map
-//   C
+// T C
 // D S E
 //   L V
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
@@ -9,6 +9,7 @@ pub enum Page {
     Devices,
     Edit,
     Configure,
+    Time,
     Logs,
     Vars,
 }
@@ -19,7 +20,8 @@ impl Page {
             Page::Scene => Page::Devices,
             Page::Devices => Page::Devices,
             Page::Edit => Page::Scene,
-            Page::Configure => Page::Configure,
+            Page::Configure => Page::Time,
+            Page::Time => Page::Time,
             Page::Logs => Page::Logs,
             Page::Vars => Page::Logs,
         }
@@ -31,6 +33,7 @@ impl Page {
             Page::Devices => Page::Scene,
             Page::Edit => Page::Edit,
             Page::Configure => Page::Configure,
+            Page::Time => Page::Configure,
             Page::Logs => Page::Vars,
             Page::Vars => Page::Vars,
         }
@@ -39,9 +42,10 @@ impl Page {
     pub fn up(&mut self) {
         *self = match self {
             Page::Scene => Page::Configure,
-            Page::Devices => Page::Devices,
+            Page::Devices => Page::Time,
             Page::Edit => Page::Edit,
             Page::Configure => Page::Configure,
+            Page::Time => Page::Time,
             Page::Logs => Page::Scene,
             Page::Vars => Page::Edit,
         }
@@ -53,6 +57,7 @@ impl Page {
             Page::Devices => Page::Devices,
             Page::Edit => Page::Vars,
             Page::Configure => Page::Scene,
+            Page::Time => Page::Devices,
             Page::Logs => Page::Logs,
             Page::Vars => Page::Vars,
         }
