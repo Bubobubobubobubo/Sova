@@ -34,7 +34,7 @@ impl StatefulWidget for Footer {
 
         let lines = vec![
             Line::from(vec![
-                Span::styled(" ", Style::default()),
+                Span::styled("T", map_style(state, Page::Time)),
                 Span::from(" "),
                 Span::styled("C", map_style(state, Page::Configure)),
                 Span::from(" "),
