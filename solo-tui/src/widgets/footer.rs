@@ -13,7 +13,7 @@ pub struct Footer;
 
 fn map_style(state: &AppState, page: Page) -> Style {
     if state.page == page {
-        Style::default().bold().fg(Color::Magenta)
+        Style::default().bold().fg(Color::LightMagenta)
     } else {
         Style::default()
     }

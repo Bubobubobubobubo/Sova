@@ -116,6 +116,14 @@ impl SceneWidget {
                     })
                 ));
             }
+            KeyCode::Char('x' | 'X') if state.selected_frame().is_some() => {
+                let (line_index, frame_index) = state.selected;
+                let mut cloned = state.selected_frame().unwrap().clone();
+                cloned.enabled = !cloned.enabled;
+                state.events.send(SchedulerMessage::SetFrames(vec![(
+                    line_index, frame_index, cloned
+                )], ActionTiming::Immediate).into());
+            }
             _ => (),
         }
         Ok(())
@@ -123,7 +131,7 @@ impl SceneWidget {
 
     pub fn get_help() -> &'static str {
         "\
-        I: insert frame after  R: remove frame\n\
+        I: insert frame after  R: remove frame     X: toggle frame\n\
         L: insert line after   C-R: remove line\n\
         Arrows: move           D: change duration \
         "
@@ -147,7 +155,7 @@ impl SceneWidget {
                 width: LINE_RECT_WIDTH,
                 height: LINE_RECT_HEIGHT,
                 color: if selected_line {
-                    Color::Magenta
+                    Color::LightMagenta
                 } else {
                     Color::White
                 },
@@ -160,7 +168,7 @@ impl SceneWidget {
             let text = format!("Line {}", line_index);
             let text_offset = 1.0 + (LINE_RECT_WIDTH / 2.0) - (text.len() as f64 / 2.0);
             let text = if selected_line {
-                text.magenta().bold()
+                text.light_magenta().bold()
             } else {
                 Span::from(text)
             };
@@ -171,7 +179,7 @@ impl SceneWidget {
             for (frame_index, frame) in line.frames.iter().enumerate() {
                 let selected_frame = state.selected == (line_index, frame_index);
                 let color = if selected_frame {
-                    Color::Magenta
+                    Color::LightMagenta
                 } else {
                     Color::White
                 };
@@ -193,14 +201,17 @@ impl SceneWidget {
                 let frame_name = format!("Frame {}", frame_index);
                 let frame_infos = format!("{:.2} x {}", frame.duration, frame.repetitions);
 
-                let (mut frame_name, mut frame_infos) = if selected_frame {
-                    (frame_name.magenta().bold(), frame_infos.magenta().bold())
+                let (mut frame_name, frame_infos) = if selected_frame {
+                    (frame_name.light_magenta().bold(), frame_infos.light_magenta().bold())
                 } else {
                     (Span::from(frame_name), Span::from(frame_infos))
                 };
 
                 if frame_index == line_pos.0 {
                     frame_name = frame_name.bg(Color::White).fg(Color::Black);
+                }
+                if !frame.enabled {
+                    frame_name = frame_name.italic().gray();
                 }
 
                 let x = 2.0 + x_offset;
