@@ -40,7 +40,7 @@ impl StatefulWidget for Header {
 
         Gauge::default()
             .block(block)
-            .gauge_style(Color::Magenta)
+            .gauge_style(Color::LightMagenta)
             .ratio(progress)
             .label(label)
             .render(area, buf);

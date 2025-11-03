@@ -1,3 +1,4 @@
+pub mod edit_widget;
 pub mod footer;
 pub mod header;
 pub mod log_widget;
