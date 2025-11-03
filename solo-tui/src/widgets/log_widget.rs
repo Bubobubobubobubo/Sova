@@ -8,7 +8,7 @@ use ratatui::{
 };
 use sova_core::LogMessage;
 
-const MAX_LOGS: usize = 32;
+const MAX_LOGS: usize = 20;
 
 #[derive(Default)]
 pub struct LogWidget {

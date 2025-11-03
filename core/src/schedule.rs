@@ -277,7 +277,7 @@ impl Scheduler {
 
             for line in self.scene.lines.iter_mut() {
                 positions_changed |= line.step(&self.clock, date, &self.languages.interpreters);
-                next_frame_delay = std::cmp::min(next_frame_delay, line.remaining_before_next_update(date));
+                next_frame_delay = std::cmp::min(next_frame_delay, line.before_next_frame(&self.clock, date));
             }
 
             if positions_changed {

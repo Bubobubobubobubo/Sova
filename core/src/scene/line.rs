@@ -1,4 +1,4 @@
-use crate::{clock::NEVER, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory}, scene::{script::Script, Frame}, util::decimal_operations::precise_division};
+use crate::{clock::NEVER, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory}, log_println, scene::{Frame, script::Script}, util::decimal_operations::precise_division};
 
 use serde::{Deserialize, Serialize};
 
@@ -397,7 +397,7 @@ impl Line {
             };
         }
         let frame = frame.unwrap();
-        let relative_date = self.last_trigger.saturating_sub(date);
+        let relative_date = date.saturating_sub(self.last_trigger);
         let frame_len = clock.beats_to_micros(
             precise_division(frame.duration, self.speed_factor)
         );

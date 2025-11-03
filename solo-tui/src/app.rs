@@ -154,10 +154,7 @@ impl App {
             }
             SovaNotification::TransportStarted => self.state.playing = true,
             SovaNotification::TransportStopped => self.state.playing = false,
-            SovaNotification::FramePositionChanged(positions) => {
-                self.log(LogMessage::info(format!("POSITION {:?}", positions)));
-                self.state.positions = positions
-            }
+            SovaNotification::FramePositionChanged(positions) => self.state.positions = positions,
             SovaNotification::GlobalVariablesChanged(values) => self.state.global_vars = values,
             SovaNotification::Log(msg) => self.log(msg),
             SovaNotification::DeviceListChanged(devices) => self.state.devices = devices,
