@@ -4,16 +4,20 @@ use tui_textarea::TextArea;
 
 use crate::app::AppState;
 
+#[derive(Default)]
 pub struct EditWidget {
     text_area: TextArea<'static>
 }
 
 impl EditWidget {
 
-    pub fn new() -> Self {
-        let mut text_area : TextArea = Default::default();
-        text_area.set_line_number_style(Style::default().dark_gray());
-        EditWidget { text_area }
+    pub fn open(&mut self, state: &AppState) {
+        let Some(frame) = state.selected_frame() else {
+            return;
+        };
+        let content = frame.script().content();
+        self.text_area = content.lines().into();
+        self.text_area.set_line_number_style(Style::default().dark_gray());
     }
 
     pub fn get_help() -> &'static str {
