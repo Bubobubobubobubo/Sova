@@ -10,4 +10,8 @@ pub enum ActionTiming {
     EndOfLine(usize),
     /// Apply the action when the clock beat reaches or exceeds this value.
     AtBeat(u64), // Using u64 for beats to simplify comparison/storage
+    /// Apply the action at next beat
+    NextBeat,
+    /// Apply the action next time the phase resets
+    NextPhaseReset
 }

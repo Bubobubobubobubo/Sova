@@ -64,7 +64,7 @@ impl App {
                 events: EventHandler::new(sched_update, log_rx),
             },
             scene_widget: SceneWidget::default(),
-            edit_widget: EditWidget::new(),
+            edit_widget: EditWidget::default(),
             log_widget: LogWidget::default(),
             popup: Popup::default()
         }
