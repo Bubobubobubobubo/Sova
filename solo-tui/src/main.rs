@@ -26,6 +26,7 @@ pub mod page;
 pub mod ui;
 pub mod widgets;
 pub mod popup;
+pub mod notification;
 
 const DEFAULT_TEMPO: f64 = 120.0;
 const DEFAULT_QUANTUM: f64 = 4.0;

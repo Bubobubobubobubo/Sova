@@ -1,8 +1,9 @@
-use crossterm::event::KeyEvent;
-use ratatui::{buffer::Buffer, layout::Rect, style::{Style, Stylize}, widgets::{StatefulWidget, Widget}};
+use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+use ratatui::{buffer::Buffer, layout::{Constraint, Layout, Rect}, style::{Style, Stylize}, widgets::{StatefulWidget, Widget}};
+use sova_core::schedule::{ActionTiming, SchedulerMessage};
 use tui_textarea::TextArea;
 
-use crate::app::AppState;
+use crate::{app::AppState, event::AppEvent};
 
 #[derive(Default)]
 pub struct EditWidget {
@@ -28,6 +29,25 @@ impl EditWidget {
 
     pub fn process_event(&mut self, state: &mut AppState, event: KeyEvent) { 
         match event.code {
+            KeyCode::Char('s' | 'S') if event.modifiers == KeyModifiers::CONTROL => {
+                let Some(frame) = state.selected_frame() else {
+                    return;
+                };
+                let content = self.text_area.lines().join("\n");
+                let (line_id, frame_id) = state.selected;
+                state.events.send(
+                    SchedulerMessage::SetScript(
+                        line_id, 
+                        frame_id, 
+                        frame.script().lang().to_owned(), 
+                        content,
+                        ActionTiming::Immediate
+                    ).into()
+                );
+                state.events.send(
+                    AppEvent::Positive("Sent script".to_owned())
+                );
+            } 
             _ => { 
                 self.text_area.input(event);
             }
@@ -40,6 +60,9 @@ impl StatefulWidget for &EditWidget {
     type State = AppState;
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
-        self.text_area.render(area, buf);
+        use Constraint::*;
+        let layout = Layout::vertical([Min(0), Length(2)]);
+        let [main_area, tools_area] = layout.areas(area);
+        self.text_area.render(main_area, buf);
     }
 }

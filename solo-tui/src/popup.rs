@@ -146,11 +146,14 @@ impl Popup {
         self.showing = false;
     }
 
-    fn popup_area(area: Rect, percent_x: u16, percent_y: u16) -> Rect {
-        let vertical = Layout::vertical([Constraint::Percentage(percent_y)]).flex(Flex::Center);
-        let horizontal = Layout::horizontal([Constraint::Percentage(percent_x)]).flex(Flex::Center);
-        let [area] = vertical.areas(area);
+    fn popup_area(area: Rect, percent_x: u16, len: usize) -> Rect {
+        let len = 125 * (len as u16) / 100;
+        let width = percent_x * area.width / 100;
+        let lines = 2 + 3 + len / width + u16::from(len % width > 0);
+        let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center);
+        let vertical = Layout::vertical([Constraint::Length(lines)]).flex(Flex::Center);
         let [area] = horizontal.areas(area);
+        let [area] = vertical.areas(area);
         area
     }
 
@@ -159,52 +162,53 @@ impl Popup {
 impl Widget for &Popup {
 
     fn render(self, area: Rect, buf: &mut Buffer) {
-        if self.showing {
-            let button_block = Block::bordered().border_type(BorderType::Rounded);
-            let selected_style = Style::default().bg(Color::White).fg(Color::Black);
-            let area = Popup::popup_area(area, 50, 25);
-            Clear.render(area, buf);
-            let block = Block::bordered()
-                .border_type(BorderType::Rounded)
-                .title(self.title.as_str())
-                .on_black();
-            let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]);
-            let [text_area, input_area] = layout.areas(block.inner(area));
-            block.render(area, buf);
-            Paragraph::new(self.content.as_str())
-                .wrap(Wrap { trim: true })
-                .render(text_area, buf);
-            match &self.value {
-                PopupValue::None => {
-                    let horizontal = Layout::horizontal([Constraint::Length(10)]).flex(Flex::Center);
-                    let [input_area] = horizontal.areas(input_area);
-                    Paragraph::new("Ok")
-                        .on_white()
-                        .black()
-                        .centered()
-                        .block(button_block)
-                        .render(input_area, buf)
-                }
-                PopupValue::Bool(b) => {
-                    let horizontal = Layout::horizontal([Constraint::Length(10), Constraint::Length(10), Constraint::Length(10)]).flex(Flex::Center);
-                    let [yes_area, _, no_area] = horizontal.areas(input_area);
-                    Paragraph::new("Yes")
-                        .style(if *b { selected_style } else { Style::default() })
-                        .centered()
-                        .block(button_block.clone())
-                        .render(yes_area, buf);
-                    Paragraph::new("No")
-                        .style(if !*b { selected_style } else { Style::default() })
-                        .centered()
-                        .block(button_block)
-                        .render(no_area, buf)
-                },
-                PopupValue::Text(_) 
-                    | PopupValue::Float(_)
-                    | PopupValue::Int(_) => {
-                    self.text_area.render(input_area, buf);
-                },
+        if !self.showing {
+            return;
+        }
+        let button_block = Block::bordered().border_type(BorderType::Rounded);
+        let selected_style = Style::default().bg(Color::White).fg(Color::Black);
+        let area = Popup::popup_area(area, 30, self.content.len());
+        Clear.render(area, buf);
+        let block = Block::bordered()
+            .border_type(BorderType::Rounded)
+            .title(self.title.as_str())
+            .on_black();
+        let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]);
+        let [text_area, input_area] = layout.areas(block.inner(area));
+        block.render(area, buf);
+        Paragraph::new(self.content.as_str())
+            .wrap(Wrap { trim: true })
+            .render(text_area, buf);
+        match &self.value {
+            PopupValue::None => {
+                let horizontal = Layout::horizontal([Constraint::Length(10)]).flex(Flex::Center);
+                let [input_area] = horizontal.areas(input_area);
+                Paragraph::new("Ok")
+                    .on_white()
+                    .black()
+                    .centered()
+                    .block(button_block)
+                    .render(input_area, buf)
             }
+            PopupValue::Bool(b) => {
+                let horizontal = Layout::horizontal([Constraint::Length(10), Constraint::Length(10), Constraint::Length(10)]).flex(Flex::Center);
+                let [yes_area, _, no_area] = horizontal.areas(input_area);
+                Paragraph::new("Yes")
+                    .style(if *b { selected_style } else { Style::default() })
+                    .centered()
+                    .block(button_block.clone())
+                    .render(yes_area, buf);
+                Paragraph::new("No")
+                    .style(if !*b { selected_style } else { Style::default() })
+                    .centered()
+                    .block(button_block)
+                    .render(no_area, buf)
+            },
+            PopupValue::Text(_) 
+                | PopupValue::Float(_)
+                | PopupValue::Int(_) => {
+                self.text_area.render(input_area, buf);
+            },
         }
     }
 }

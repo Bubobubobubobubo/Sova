@@ -44,6 +44,10 @@ pub enum AppEvent {
     Up,
     Down,
     Popup(String, String, PopupValue, Box<dyn FnOnce(&mut AppState, PopupValue) + Send>),
+    ChangeScript,
+    Info(String),
+    Positive(String),
+    Negative(String),
     Quit,
 }
 

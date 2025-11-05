@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    event::{AppEvent, Event, EventHandler}, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
+    event::{AppEvent, Event, EventHandler}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
 };
 use crossbeam_channel::{Receiver, Sender};
 use ratatui::{
@@ -38,7 +38,8 @@ pub struct App {
     pub scene_widget: SceneWidget,
     pub edit_widget: EditWidget,
     pub log_widget: LogWidget,
-    pub popup: Popup
+    pub popup: Popup,
+    pub notification: Notification
 }
 
 impl App {
@@ -66,7 +67,8 @@ impl App {
             scene_widget: SceneWidget::default(),
             edit_widget: EditWidget::default(),
             log_widget: LogWidget::default(),
-            popup: Popup::default()
+            popup: Popup::default(),
+            notification: Notification::new()
         }
     }
 
@@ -109,6 +111,10 @@ impl App {
             AppEvent::Down => self.state.page.down(),
             AppEvent::Popup(title, content, value, callback) => 
                 self.popup.open(title, content, value, callback),
+            AppEvent::ChangeScript => self.edit_widget.open(&self.state),
+            AppEvent::Info(text) => self.notification.info(text),
+            AppEvent::Positive(text) => self.notification.positive(text),
+            AppEvent::Negative(text) => self.notification.negative(text),
             AppEvent::Quit => self.quit(),
         }
         Ok(())

@@ -22,6 +22,7 @@ const LINE_RECT_HEIGHT: f64 = 3.0;
 const FRAME_RECT_HEIGHT: f64 = 4.0;
 
 fn set_selected(state: &mut AppState, line_index: usize, frame_index: usize) {
+    let before = state.selected;
     if state.scene_image.is_empty() {
         state.selected = (0, 0);
         return;
@@ -34,6 +35,9 @@ fn set_selected(state: &mut AppState, line_index: usize, frame_index: usize) {
     }
     let frame_index = min(frame_index, line.n_frames() - 1);
     state.selected = (line_index, frame_index);
+    if before != state.selected {
+        state.events.send(AppEvent::ChangeScript);
+    }
 }
 
 #[derive(Default)]
