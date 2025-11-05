@@ -149,7 +149,7 @@ impl Popup {
     fn popup_area(area: Rect, percent_x: u16, len: usize) -> Rect {
         let len = 125 * (len as u16) / 100;
         let width = percent_x * area.width / 100;
-        let lines = 2 + 3 + len / width + u16::from(len % width > 0);
+        let lines = 3 + 3 + len / width + u16::from(len % width > 0);
         let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center);
         let vertical = Layout::vertical([Constraint::Length(lines)]).flex(Flex::Center);
         let [area] = horizontal.areas(area);

@@ -3,11 +3,49 @@ use ratatui::{buffer::Buffer, layout::{Constraint, Layout, Rect}, style::{Style,
 use sova_core::schedule::{ActionTiming, SchedulerMessage};
 use tui_textarea::TextArea;
 
-use crate::{app::AppState, event::AppEvent};
+use crate::{app::AppState, event::AppEvent, popup::PopupValue};
 
 #[derive(Default)]
 pub struct EditWidget {
     text_area: TextArea<'static>
+}
+
+fn upload_content(state: &mut AppState, content: String) {
+    let Some(frame) = state.selected_frame() else {
+        return;
+    };
+    let (line_id, frame_id) = state.selected;
+    state.events.send(
+        SchedulerMessage::SetScript(
+            line_id, 
+            frame_id, 
+            frame.script().lang().to_owned(), 
+            content,
+            ActionTiming::Immediate
+        ).into()
+    );
+    state.events.send(
+        AppEvent::Positive("Sent script".to_owned())
+    );
+}
+
+fn upload_lang(state: &mut AppState, lang: String) {
+    let Some(frame) = state.selected_frame() else {
+        return;
+    };
+    let (line_id, frame_id) = state.selected;
+    state.events.send(
+        SchedulerMessage::SetScript(
+            line_id, 
+            frame_id, 
+            lang,
+            frame.script().content().to_owned(),
+            ActionTiming::Immediate
+        ).into()
+    );
+    state.events.send(
+        AppEvent::Positive("Changed language".to_owned())
+    );
 }
 
 impl EditWidget {
@@ -30,28 +68,31 @@ impl EditWidget {
     pub fn process_event(&mut self, state: &mut AppState, event: KeyEvent) { 
         match event.code {
             KeyCode::Char('s' | 'S') if event.modifiers == KeyModifiers::CONTROL => {
-                let Some(frame) = state.selected_frame() else {
-                    return;
-                };
-                let content = self.text_area.lines().join("\n");
-                let (line_id, frame_id) = state.selected;
-                state.events.send(
-                    SchedulerMessage::SetScript(
-                        line_id, 
-                        frame_id, 
-                        frame.script().lang().to_owned(), 
-                        content,
-                        ActionTiming::Immediate
-                    ).into()
-                );
-                state.events.send(
-                    AppEvent::Positive("Sent script".to_owned())
-                );
+                upload_content(state, self.get_content());
             } 
+            KeyCode::Char('a' | 'A') if event.modifiers == KeyModifiers::CONTROL => {
+                self.text_area.select_all();
+            }
+            KeyCode::Char('l' | 'L') if event.modifiers == KeyModifiers::CONTROL => {
+                state.events.send(AppEvent::Popup(
+                    "Script language".to_owned(), 
+                    "Which language to use for this script ?".to_owned(), 
+                    PopupValue::Text(state
+                        .selected_frame()
+                        .map(|f| f.script().lang().to_owned())
+                        .unwrap_or(String::new())),
+                    Box::new(|state, x| {
+                        upload_lang(state, x.text());
+                    })));
+            }
             _ => { 
                 self.text_area.input(event);
             }
         }
+    }
+
+    pub fn get_content(&self) -> String {
+        self.text_area.lines().join("\n")
     }
 
 }
