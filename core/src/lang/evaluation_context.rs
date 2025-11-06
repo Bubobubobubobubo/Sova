@@ -1,3 +1,5 @@
+use serde::Serialize;
+
 use crate::device_map::DeviceMap;
 use crate::clock::Clock;
 use std::collections::VecDeque;
@@ -5,6 +7,7 @@ use std::sync::Arc;
 
 use super::variable::{Variable, VariableStore, VariableValue};
 
+#[derive(Serialize)]
 pub struct EvaluationContext<'a> {
     pub global_vars: &'a mut VariableStore,
     pub line_vars: &'a mut VariableStore,
@@ -16,6 +19,7 @@ pub struct EvaluationContext<'a> {
     pub frame_len: f64,
     pub structure: &'a Vec<Vec<f64>>,
     pub clock: &'a Clock,
+    #[serde(skip)]
     pub device_map: Arc<DeviceMap>,
 }
 

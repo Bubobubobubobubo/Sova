@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use rusty_link::{AblLink, SessionState};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Serialize, ser::SerializeStruct};
 
 /// Type alias for time measured in microseconds.
 pub type SyncTime = u64;
@@ -372,6 +372,19 @@ impl Clock {
         self
     }
 
+}
+
+impl Serialize for Clock {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::Serializer 
+    {
+        let mut state = serializer.serialize_struct("Clock", 4)?;
+        state.serialize_field("micros", &self.micros())?;
+        state.serialize_field("beat", &self.beat())?;
+        state.serialize_field("tempo", &self.tempo())?;
+        state.serialize_field("quantum", &self.quantum())?;
+        state.end()
+    }
 }
 
 /// Creates a `Clock` instance from a shared `ClockServer`.
