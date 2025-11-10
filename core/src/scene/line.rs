@@ -1,4 +1,11 @@
-use crate::{clock::NEVER, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory}, scene::{Frame, script::Script}, util::decimal_operations::precise_division};
+use crate::{
+    clock::NEVER,
+    lang::{
+        evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory,
+    },
+    scene::{Frame, script::Script},
+    util::decimal_operations::precise_division,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -27,7 +34,7 @@ pub struct Line {
     #[serde(default = "default_speed_factor")]
     pub speed_factor: f64,
     /// A store for variables specific to this line's execution context.
-    #[serde(default, skip_serializing_if="VariableStore::is_empty")]
+    #[serde(default, skip_serializing_if = "VariableStore::is_empty")]
     pub vars: VariableStore,
     /// If set, playback starts at this frame index (inclusive). Overrides the default start at index 0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -58,7 +65,7 @@ pub struct Line {
     #[serde(skip)]
     pub last_trigger: SyncTime,
     #[serde(skip)]
-    pub end_flag: bool
+    pub end_flag: bool,
 }
 
 impl Line {
@@ -183,7 +190,7 @@ impl Line {
     }
 
     pub fn get_current_frame_mut(&mut self) -> Option<&mut Frame> {
-        if self.current_frame >= self.n_frames() { 
+        if self.current_frame >= self.n_frames() {
             return None;
         }
         Some(self.frame_mut(self.current_frame))
@@ -256,6 +263,9 @@ impl Line {
             log_eprintln!("[!] Frame::insert_frame: Invalid position {}", position);
             return;
         }
+        if !self.is_empty() && self.current_frame >= position {
+            self.current_frame += 1;
+        }
         // Insert into frames
         self.frames.insert(position, value);
         // Ensure consistency (updates indices, bounds, etc.)
@@ -278,6 +288,9 @@ impl Line {
             return;
         }
         self.frames.remove(position);
+        if self.current_frame > position {
+            self.current_frame = self.current_frame.saturating_sub(1);
+        }
         // Ensure consistency (updates indices, bounds, etc.)
         self.make_consistent();
     }
@@ -345,9 +358,11 @@ impl Line {
         self.frames.iter_mut().for_each(Frame::kill_executions);
     }
 
-    pub fn update_executions<'a>(&'a mut self, date: SyncTime, mut partial: PartialContext<'a>) 
-        -> (Vec<ConcreteEvent>, Option<SyncTime>)
-    {
+    pub fn update_executions<'a>(
+        &'a mut self,
+        date: SyncTime,
+        mut partial: PartialContext<'a>,
+    ) -> (Vec<ConcreteEvent>, Option<SyncTime>) {
         partial.line_vars = Some(&mut self.vars);
         let mut events = Vec::new();
         let mut next_wait = Some(NEVER);
@@ -376,35 +391,23 @@ impl Line {
     pub fn before_next_trigger(&self, clock: &Clock, date: SyncTime) -> SyncTime {
         let frame = self.get_current_frame();
         if frame.is_none() || self.last_trigger == NEVER {
-            return if self.is_empty() {
-                NEVER
-            } else {
-                0
-            };
+            return if self.is_empty() { NEVER } else { 0 };
         }
         let frame = frame.unwrap();
         let relative_date = date.saturating_sub(self.last_trigger);
-        let frame_len = clock.beats_to_micros(
-            precise_division(frame.duration, self.speed_factor)
-        );
+        let frame_len = clock.beats_to_micros(precise_division(frame.duration, self.speed_factor));
         frame_len.saturating_sub(relative_date)
     }
 
     pub fn before_next_frame(&self, clock: &Clock, date: SyncTime) -> SyncTime {
         let frame = self.get_current_frame();
         if frame.is_none() || self.last_trigger == NEVER {
-            return if self.is_empty() {
-                NEVER
-            } else {
-                0
-            };
+            return if self.is_empty() { NEVER } else { 0 };
         }
         let frame = frame.unwrap();
         let frame_dur = clock.beats_to_micros(frame.duration);
         let relative_date = date.saturating_sub(self.last_trigger);
-        let frame_len = clock.beats_to_micros(
-            precise_division(frame.duration, self.speed_factor)
-        );
+        let frame_len = clock.beats_to_micros(precise_division(frame.duration, self.speed_factor));
         let rem_repet = frame.repetitions - (self.current_repetition + 1);
         let frame_len = frame_len + (rem_repet as SyncTime) * frame_dur;
         frame_len.saturating_sub(relative_date)
@@ -432,7 +435,12 @@ impl Line {
         date + remaining
     }
 
-    pub fn step(&mut self, clock: &Clock, mut date: SyncTime, interpreters: &InterpreterDirectory) -> bool {
+    pub fn step(
+        &mut self,
+        clock: &Clock,
+        mut date: SyncTime,
+        interpreters: &InterpreterDirectory,
+    ) -> bool {
         self.end_flag = false;
         if self.before_next_trigger(clock, date) > 0 {
             return false;
@@ -440,9 +448,8 @@ impl Line {
         if let Some(frame) = self.get_current_frame() {
             if self.last_trigger != NEVER {
                 // Precise date correction if the exact time has been stepped over
-                let frame_len = clock.beats_to_micros(
-                    precise_division(frame.duration, self.speed_factor)
-                );
+                let frame_len =
+                    clock.beats_to_micros(precise_division(frame.duration, self.speed_factor));
                 date = self.last_trigger + frame_len;
 
                 if self.current_repetition < (frame.repetitions - 1) {
@@ -507,7 +514,6 @@ impl Line {
     pub fn position(&self) -> (usize, usize) {
         (self.current_frame, self.current_repetition)
     }
-
 }
 
 impl Default for Line {
