@@ -166,7 +166,7 @@ impl Widget for &Popup {
             return;
         }
         let button_block = Block::bordered().border_type(BorderType::Rounded);
-        let selected_style = Style::default().bg(Color::White).fg(Color::Black);
+        let selected_style = Style::default().bg(Color::White).fg(Color::Black).bold();
         let area = Popup::popup_area(area, 30, self.content.len());
         Clear.render(area, buf);
         let block = Block::bordered()
@@ -191,7 +191,7 @@ impl Widget for &Popup {
                     .render(input_area, buf)
             }
             PopupValue::Bool(b) => {
-                let horizontal = Layout::horizontal([Constraint::Length(10), Constraint::Length(10), Constraint::Length(10)]).flex(Flex::Center);
+                let horizontal = Layout::horizontal([Constraint::Length(10), Constraint::Length(6), Constraint::Length(10)]).flex(Flex::Center);
                 let [yes_area, _, no_area] = horizontal.areas(input_area);
                 Paragraph::new("Yes")
                     .style(if *b { selected_style } else { Style::default() })
