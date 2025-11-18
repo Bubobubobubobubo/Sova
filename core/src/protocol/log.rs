@@ -2,7 +2,9 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::hash::{Hash, Hasher};
 
+use crate::clock::SyncTime;
 use crate::lang::event::ConcreteEvent;
+use crate::protocol::payload::ProtocolPayload;
 
 /// Represents the severity level of a log message.
 ///
@@ -66,7 +68,11 @@ impl Hash for LogMessage {
 impl Display for LogMessage {
     /// Formats the `LogMessage` for display, showing the severity icon and the message text.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{} {}", self.level, self.msg)
+        let log_event = self.event
+            .as_ref()
+            .map(|event| format!("{:?}", event))
+            .unwrap_or_default();
+        write!(f, "{} {} {}", self.level, self.msg, log_event)
     }
 }
 
@@ -138,4 +144,11 @@ impl LogMessage {
             msg: String::new(),
         }
     }
+
+    pub fn generate_messages(event: ConcreteEvent, date: SyncTime) 
+        -> Vec<(ProtocolPayload, SyncTime)> 
+    {
+        vec![(Self::from_event(Severity::Info, event).into(), date)]
+    }
+
 }

@@ -1,85 +1,73 @@
 use crate::{
-    clock::{Clock, ClockServer, SyncTime},
+    clock::{Clock, ClockServer, SyncTime, NEVER},
     device_map::DeviceMap,
     lang::{
-        event::ConcreteEvent,
-        interpreter::InterpreterDirectory,
-        variable::VariableStore,
+        evaluation_context::PartialContext, variable::VariableStore, LanguageCenter
     },
-    log_eprintln, log_println,
-    protocol::message::TimedMessage,
-    scene::{
-        Scene,
-        script::{Script, ScriptExecution},
-    },
+    log_println,
+    protocol::TimedMessage,
+    scene::Scene,
     schedule::{
-        action_timing::ActionTiming,
-        execution::ExecutionManager,
-        message::SchedulerMessage,
-        notification::SchedulerNotification,
         playback::PlaybackManager,
         scheduler_actions::ActionProcessor,
-        scheduler_state::{DeferredAction, SCHEDULED_DRIFT},
-    },
-    transcoder::Transcoder,
+    }
 };
 
 use crossbeam_channel::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::{
-    sync::{atomic::AtomicBool, Arc}, thread::JoinHandle, time::Duration, usize
+    cmp::min, sync::Arc, thread::JoinHandle, time::Duration, usize
 };
 use thread_priority::ThreadBuilder;
 
-pub mod action_timing;
-pub mod execution;
-pub mod message;
-pub mod notification;
 pub mod playback;
-pub mod scheduler_actions;
-pub mod scheduler_state;
+
+mod scheduler_actions;
+mod action_timing;
+mod message;
+mod notification;
+
+pub use action_timing::ActionTiming;
+pub use message::SchedulerMessage;
+pub use notification::SovaNotification;
+
+pub const SCHEDULED_DRIFT: SyncTime = 1_000;
 
 pub struct Scheduler {
     pub scene: Scene,
     pub global_vars: VariableStore,
-    pub executions: Vec<ScriptExecution>,
 
     world_iface: Sender<TimedMessage>,
     devices: Arc<DeviceMap>,
-    interpreters: Arc<InterpreterDirectory>,
-    transcoder: Arc<Transcoder>,
+    languages: Arc<LanguageCenter>,
     clock: Clock,
+    feedback: Sender<SchedulerMessage>,
     message_source: Receiver<SchedulerMessage>,
-    update_notifier: Sender<SchedulerNotification>,
+    update_notifier: Sender<SovaNotification>,
 
     next_wait: Option<SyncTime>,
-    processed_scene_modification: bool,
-    deferred_actions: Vec<DeferredAction>,
+    deferred_actions: Vec<SchedulerMessage>,
     playback_manager: PlaybackManager,
     shutdown_requested: bool,
 
-    current_positions: Vec<(usize, usize)>,
-    audio_engine_events: Vec<(ConcreteEvent, SyncTime)>,
+    scene_structure: Vec<Vec<f64>>,
 }
 
 impl Scheduler {
     pub fn create(
         clock_server: Arc<ClockServer>,
         devices: Arc<DeviceMap>,
-        interpreters: Arc<InterpreterDirectory>,
-        transcoder: Arc<Transcoder>,
+        languages: Arc<LanguageCenter>,
         world_iface: Sender<TimedMessage>,
-        shared_atomic_is_playing: Arc<AtomicBool>,
     ) -> (
         JoinHandle<()>,
         Sender<SchedulerMessage>,
-        Receiver<SchedulerNotification>,
+        Receiver<SovaNotification>,
     ) {
         let (tx, rx) = crossbeam_channel::unbounded();
         let (p_tx, p_rx) = crossbeam_channel::unbounded();
 
-        let shared_atomic_clone = shared_atomic_is_playing.clone(); // Clone for the thread
-
         let clock = Clock::from(clock_server).with_drift(SCHEDULED_DRIFT);
+        let feedback = tx.clone();
 
         let handle = ThreadBuilder::default()
             .name("Sova-scheduler")
@@ -87,12 +75,11 @@ impl Scheduler {
                 let mut sched = Scheduler::new(
                     clock,
                     devices,
-                    interpreters,
-                    transcoder,
+                    languages,
                     world_iface,
+                    feedback,
                     rx,
                     p_tx,
-                    shared_atomic_clone, // Pass the clone to new
                 );
                 sched.do_your_thing();
             })
@@ -103,153 +90,101 @@ impl Scheduler {
     pub fn new(
         clock: Clock,
         devices: Arc<DeviceMap>,
-        interpreters: Arc<InterpreterDirectory>,
-        transcoder: Arc<Transcoder>,
+        languages: Arc<LanguageCenter>,
         world_iface: Sender<TimedMessage>,
+        feedback: Sender<SchedulerMessage>,
         receiver: Receiver<SchedulerMessage>,
-        update_notifier: Sender<SchedulerNotification>,
-        shared_atomic_is_playing: Arc<AtomicBool>,
+        update_notifier: Sender<SovaNotification>,
     ) -> Scheduler {
         Scheduler {
             world_iface,
             scene: Default::default(),
             global_vars: VariableStore::new(),
-            executions: Vec::new(),
             devices,
-            interpreters,
-            transcoder,
+            languages,
             clock,
+            feedback,
             message_source: receiver,
             update_notifier,
             next_wait: None,
-            processed_scene_modification: false,
             deferred_actions: Vec::new(),
-            playback_manager: PlaybackManager::new(shared_atomic_is_playing),
+            playback_manager: PlaybackManager::default(),
             shutdown_requested: false,
-            current_positions: Vec::new(),
-            audio_engine_events: Vec::with_capacity(256),
+            scene_structure: Vec::new()
         }
     }
 
     pub fn change_scene(&mut self, mut scene: Scene) {
-        let date = self.clock.micros();
         scene.make_consistent();
-
-        self.transcoder.compile_scene(&mut scene);
-
-        for line in scene.lines_iter_mut() {
-            let (frame, iter, _rep, _, _) = line.calculate_frame_index(&self.clock, date);
-            line.current_frame = frame;
-            line.current_iteration = iter;
-            line.first_iteration_index = iter;
-            line.current_repetition = 0;
-        }
-        self.executions.clear();
-
-        for line in scene.lines.iter() {
-            let (frame, _, _, scheduled_date, _) = line.calculate_frame_index(&self.clock, date);
-            if frame < usize::MAX && line.is_frame_enabled(frame) {
-                let script = &line.frame(frame).script;
-                Self::execute_script(
-                    &mut self.executions,
-                    script,
-                    &self.interpreters,
-                    scheduled_date,
-                );
-            }
-        }
-
+        scene.reset();
         self.scene = scene;
+
+        self.scene_structure = self.scene.structure();
+        self.languages.transcoder.process_scene(&self.scene, self.feedback.clone());
+
         // Notify clients about the completely new scene state
         let _ = self
             .update_notifier
-            .send(SchedulerNotification::UpdatedScene(self.scene.clone()));
+            .send(SovaNotification::UpdatedScene(self.scene.clone()));
     }
 
     fn apply_action(&mut self, action: SchedulerMessage) {
         match action {
             SchedulerMessage::TransportStart(_) => {
-                self.playback_manager
-                    .process_transport_start(&mut self.clock, &self.update_notifier);
+                self.process_transport_start();
             }
             SchedulerMessage::TransportStop(_) => {
-                self.playback_manager.process_transport_stop(
-                    &mut self.clock,
-                    &mut self.executions,
-                    &self.update_notifier,
-                );
+                self.process_transport_stop();
             }
             SchedulerMessage::SetTempo(tempo, _) => {
                 self.clock.set_tempo(tempo);
                 let _ = self
                     .update_notifier
-                    .send(SchedulerNotification::TempoChanged(tempo));
-            }
-            SchedulerMessage::UploadScene(scene) => {
-                self.change_scene(scene);
+                    .send(SovaNotification::TempoChanged(tempo));
             }
             SchedulerMessage::SetScene(scene, _) => {
                 self.change_scene(scene.clone());
                 let _ = self
                     .update_notifier
-                    .send(SchedulerNotification::UpdatedScene(scene.clone()));
+                    .send(SovaNotification::UpdatedScene(scene.clone()));
+            }
+            SchedulerMessage::DeviceMessage(id, msg, _) => {
+                let device = self.devices.get_out_device_at_slot(id);
+                if let Some(device) = device {
+                    let _ = self.world_iface.send(
+                        msg.with_device(device).timed(self.clock.micros())
+                    );
+                }
             }
             SchedulerMessage::Shutdown => {
                 log_println!("[-] Scheduler received shutdown signal");
                 self.shutdown_requested = true;
-                return;
             }
             _ => {
                 ActionProcessor::process_scene_modifications(
                     action,
                     &mut self.scene,
                     &self.update_notifier,
-                    &self.transcoder,
+                    &self.languages.transcoder,
+                    &self.feedback
                 );
+                self.scene_structure = self.scene.structure();
             }
         }
-        self.processed_scene_modification = true;
     }
 
     pub fn process_message(&mut self, msg: SchedulerMessage) {
-        let timing = match &msg {
-            SchedulerMessage::EnableFrames(_, _, t)
-            | SchedulerMessage::DisableFrames(_, _, t)
-            | SchedulerMessage::UploadScript(_, _, _, t)
-            | SchedulerMessage::UpdateLineFrames(_, _, t)
-            | SchedulerMessage::SetFrame(_, _, _, t)
-            | SchedulerMessage::InsertFrame(_, _, _, t)
-            | SchedulerMessage::RemoveFrame(_, _, t)
-            | SchedulerMessage::RemoveLine(_, t)
-            | SchedulerMessage::SetLine(_, _, t)
-            | SchedulerMessage::SetLineStartFrame(_, _, t)
-            | SchedulerMessage::SetLineEndFrame(_, _, t)
-            | SchedulerMessage::SetTempo(_, t)
-            | SchedulerMessage::SetLineLength(_, _, t)
-            | SchedulerMessage::SetLineSpeedFactor(_, _, t)
-            | SchedulerMessage::SetScene(_, t) => *t,
-            SchedulerMessage::UploadScene(_)
-            | SchedulerMessage::AddLine
-            | SchedulerMessage::Shutdown => ActionTiming::Immediate,
-            SchedulerMessage::TransportStart(t) | SchedulerMessage::TransportStop(t) => *t,
-            SchedulerMessage::InternalDuplicateFrame { timing, .. } => *timing,
-            SchedulerMessage::InternalDuplicateFrameRange { timing, .. } => *timing,
-            SchedulerMessage::InternalRemoveFramesMultiLine { timing, .. } => *timing,
-            SchedulerMessage::InternalInsertDuplicatedBlocks { timing, .. } => *timing,
-            SchedulerMessage::SetFrameName(_, _, _, t) => *t,
-            SchedulerMessage::SetScriptLanguage(_, _, _, t) => *t,
-            SchedulerMessage::SetFrameRepetitions(_, _, _, t) => *t,
-        };
+        let timing = msg.timing();
 
         if timing == ActionTiming::Immediate {
             self.apply_action(msg);
         } else {
-            self.deferred_actions.push(DeferredAction::new(msg, timing));
             log_println!(
                 "Deferred action: {:?}, target: {:?}",
-                self.deferred_actions.last().unwrap().action,
-                self.deferred_actions.last().unwrap().timing
+                msg,
+                msg.timing()
             ); // Debug log
+            self.deferred_actions.push(msg);
         }
     }
 
@@ -276,39 +211,44 @@ impl Scheduler {
         }
     }
 
-    pub fn process_deferred(&mut self, beat: f64) {
-        let mut _applied_deferred;
-        let mut indices_to_apply = Vec::new();
+    pub fn process_deferred(&mut self, date: SyncTime) -> SyncTime {
+        let beat = self.clock.beat_at_date(date);
+        let to_apply : Vec<SchedulerMessage> = self.deferred_actions.extract_if(.., |action| {
+            action.timing().should_apply(
+                beat,
+                &self.scene
+            )
+        }).collect();
+        for action in to_apply {
+            log_println!("Applying deferred action: {:?}", action); // Debug log
+            self.apply_action(action);
+        }
+        self.deferred_actions
+            .iter()
+            .map(|a| a.timing().remaining(date, &self.clock, &self.scene))
+            .min()
+            .unwrap_or(NEVER)
+    }
 
-        for (index, deferred) in self.deferred_actions.iter().enumerate() {
-            if deferred.should_apply(beat, self.playback_manager.last_beat, self.scene.lines()) {
-                indices_to_apply.push(index);
+    pub fn process_executions(&mut self, date: SyncTime) -> SyncTime {
+        let mut partial = PartialContext::default();
+        partial.global_vars = Some(&mut self.global_vars);
+        partial.clock = Some(&self.clock);
+        partial.device_map = Some(&self.devices);
+        partial.structure = Some(&self.scene_structure);
+        let (events, wait) = self.scene.update_executions(date, partial);
+        for event in events {
+            for msg in self.devices.map_event(event, date, &self.clock) {
+                let _ = self.world_iface.send(msg);
             }
         }
-
-        if !indices_to_apply.is_empty() {
-            for index in indices_to_apply.iter() {
-                let action = self.deferred_actions[*index].action.clone();
-                log_println!("Applying deferred action: {:?}", action); // Debug log
-                self.apply_action(action);
-            }
-            _applied_deferred = true;
-
-            // Step 3: Remove applied actions (using retain with index check)
-            let mut current_index = 0;
-            self.deferred_actions.retain(|_| {
-                let keep = !indices_to_apply.contains(&current_index);
-                current_index += 1;
-                keep
-            });
-        }
+        wait.unwrap_or(NEVER)
     }
 
     pub fn do_your_thing(&mut self) {
         let start_date = self.clock.micros();
         log_println!("[+] Starting scheduler at {start_date}");
         loop {
-            self.processed_scene_modification = false;
             self.clock.capture_app_state();
 
             // Check for shutdown request and
@@ -317,102 +257,50 @@ impl Scheduler {
                 break;
             }
 
-            let current_beat = self.clock.beat(); // self.clock.beat_at_date(current_micros);
+            let date = self.clock.micros();
 
             // Process deferred actions
-            self.process_deferred(current_beat);
-
-            self.playback_manager.last_beat = current_beat;
+            self.next_wait = Some(self.process_deferred(date));
 
             if let Some(wait_time) = self.playback_manager.update_state(
                 &self.clock,
-                &self.interpreters,
                 &mut self.scene,
-                &mut self.executions,
                 &self.update_notifier,
             ) {
-                self.next_wait = Some(wait_time);
+                self.next_wait = Some(min(wait_time, self.next_wait.unwrap_or(NEVER)));
             }
 
             if !self.playback_manager.is_playing() {
                 continue;
             }
-
-            let date = self.clock.micros();
+            
             let mut next_frame_delay = SyncTime::MAX;
-            self.current_positions.clear();
-            self.current_positions.reserve(self.scene.n_lines());
             let mut positions_changed = false;
 
-            for line in self.scene.lines_iter_mut() {
-                let (frame, iter, rep, scheduled_date, track_frame_delay) =
-                    line.calculate_frame_index(&self.clock, date);
-                next_frame_delay = std::cmp::min(next_frame_delay, track_frame_delay);
-
-                self.current_positions.push((frame, rep));
-
-                let has_changed = (frame != line.current_frame)
-                    || (iter != line.current_iteration)
-                    || (rep != line.current_repetition);
-
-                if has_changed {
-                    if frame != line.current_frame || iter != line.current_iteration {
-                        line.frames_passed += 1;
-                    }
-                    positions_changed = true;
-                }
-
-                if frame < usize::MAX && has_changed && line.is_frame_enabled(frame) {
-                    let script = &line.frame(frame).script;
-                    Self::execute_script(
-                        &mut self.executions,
-                        script,
-                        &self.interpreters,
-                        scheduled_date,
-                    );
-                    if frame != line.current_frame || iter != line.current_iteration {
-                        line.frames_executed += 1;
-                    }
-                }
-                line.current_frame = frame;
-                line.current_iteration = iter;
-                line.current_repetition = rep;
+            for line in self.scene.lines.iter_mut() {
+                positions_changed |= line.step(&self.clock, date, &self.languages.interpreters);
+                next_frame_delay = std::cmp::min(next_frame_delay, line.before_next_trigger(&self.clock, date));
             }
 
-            if positions_changed && !self.processed_scene_modification {
-                let frame_updates: Vec<(usize, usize, usize)> = self
-                    .current_positions
-                    .iter()
-                    .enumerate()
-                    .map(|(i, &(f, r))| (i, f, r))
-                    .collect();
+            if positions_changed {
+                let frame_updates: Vec<(usize, usize)> = self.scene.positions().collect();
                 let _ = self
                     .update_notifier
-                    .send(SchedulerNotification::FramePositionChanged(frame_updates));
+                    .send(SovaNotification::FramePositionChanged(frame_updates));
             }
 
             // Clone global vars to detect changes
             let one_letters_before : VariableStore = self.global_vars.one_letter_vars().collect();
 
-            let next_exec_delay = ExecutionManager::process_executions(
-                &self.clock,
-                &mut self.scene,
-                &mut self.executions,
-                &mut self.global_vars,
-                self.devices.clone(),
-                &self.world_iface,
-                &mut self.audio_engine_events,
-                date,
-            );
+            let next_exec_delay = self.process_executions(date);
 
             // Check if global variables changed and send notification
             let one_letter_vars : VariableStore = self.global_vars.one_letter_vars().collect();
             if one_letter_vars != one_letters_before {
-                let _ =
-                    self.update_notifier
-                        .send(SchedulerNotification::GlobalVariablesChanged(
-                            one_letter_vars.into()
-                        ));
+                let _ = self.update_notifier
+                    .send(SovaNotification::GlobalVariablesChanged(
+                        one_letter_vars.into()
+                    ));
             }
 
             let next_delay = std::cmp::min(next_exec_delay, next_frame_delay);
@@ -428,32 +316,29 @@ impl Scheduler {
         }
     }
 
-    #[inline]
-    pub fn kill_all(&mut self) {
-        self.executions.clear();
+    pub fn process_transport_start(&mut self) {
+        let start_date = self.clock.next_phase_reset_date();
+
+        let start_beat = self.clock.beat_at_date(start_date);
+        log_println!(
+            "[SCHEDULER] Requesting transport start via Link at beat {} ({} micros)",
+            start_beat, start_date
+        );
+
+        self.clock.session_state.set_is_playing(true, start_date);
+        self.clock.commit_app_state();
+        let _ = self.update_notifier.send(SovaNotification::TransportStarted);
     }
 
-    pub fn execute_script(
-        executions: &mut Vec<ScriptExecution>,
-        script: &Arc<Script>,
-        interpreters: &InterpreterDirectory,
-        date: SyncTime,
-    ) {
-        if script.is_empty() { // TODO: Mettre indicateur de compilation
-            return;
-        }
-        if let Some(interpreter) = interpreters.get_interpreter(script) {
-            executions.push(ScriptExecution::execute_at(
-                Arc::clone(script),
-                interpreter,
-                date,
-            ));
-        } else {
-            log_eprintln!(
-                "[!] Scheduler: Unable to find an interpreter for script on line {} at frame {} !",
-                script.line_index,
-                script.index
-            );
-        }
+    pub fn process_transport_stop(&mut self) {
+        let now_micros = self.clock.micros();
+        log_println!("[SCHEDULER] Requesting transport stop via Link now");
+
+        self.clock.session_state.set_is_playing(false, now_micros);
+        self.clock.commit_app_state();
+
+        self.scene.kill_executions();
+        let _ = self.update_notifier.send(SovaNotification::TransportStopped);
     }
+
 }

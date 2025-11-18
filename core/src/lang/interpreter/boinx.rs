@@ -1,7 +1,7 @@
 use std::{cmp, collections::VecDeque};
 
 use crate::{
-    clock::{SyncTime, TimeSpan},
+    clock::{SyncTime, TimeSpan, NEVER},
     lang::{
         evaluation_context::EvaluationContext,
         event::ConcreteEvent,
@@ -73,7 +73,7 @@ impl BoinxLine {
         }
         let item = self.output.compo.yield_item(ctx);
         let date = ctx.clock.micros();
-        let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len());
+        let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len);
         let items = item.at(ctx, len, date);
         let mut new_lines = Vec::new();
         for (item, dur) in items {
@@ -109,7 +109,7 @@ impl Interpreter for BoinxInterpreter {
     ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
         let mut new_lines = Vec::new();
         let mut event = None;
-        let mut wait = SyncTime::MAX;
+        let mut wait = NEVER;
         for line in self.execution_lines.iter_mut() {
             let mut lines = line.update(ctx);
             new_lines.append(&mut lines);
@@ -132,7 +132,7 @@ impl Interpreter for BoinxInterpreter {
     }
 }
 
-pub struct BoinxInterpreterFactory {}
+pub struct BoinxInterpreterFactory;
 
 impl InterpreterFactory for BoinxInterpreterFactory {
     fn name(&self) -> &str {

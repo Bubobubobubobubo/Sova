@@ -1,30 +1,32 @@
-use crate::protocol::osc::Argument;
+use crate::protocol::audio_engine_proxy::AudioEnginePayload;
+use crate::protocol::device::ProtocolDevice;
+use crate::protocol::message::ProtocolMessage;
 use crate::protocol::{log::LogMessage, midi::MIDIMessage, osc::OSCMessage};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use std::sync::Arc;
 
 /// Represents the actual data payload for different protocols.
 ///
 /// This enum unifies message types from various protocols (OSC, MIDI, Log)
 /// into a single type for easier handling within the system.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct AudioEnginePayload {
-    pub args: Vec<Argument>,
-    pub device_id: usize,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum ControlMessage {
-    Shutdown,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ProtocolPayload {
     OSC(OSCMessage),
     MIDI(MIDIMessage),
     LOG(LogMessage),
     AudioEngine(AudioEnginePayload),
-    Control(ControlMessage),
+}
+
+impl ProtocolPayload {
+
+    pub fn with_device(self, device: Arc<ProtocolDevice>) -> ProtocolMessage {
+        ProtocolMessage {
+            payload: self,
+            device
+        }
+    }
+
 }
 
 impl Display for ProtocolPayload {
@@ -35,11 +37,9 @@ impl Display for ProtocolPayload {
             ProtocolPayload::LOG(m) => std::fmt::Display::fmt(m, f),
             ProtocolPayload::AudioEngine(m) => write!(
                 f,
-                "AudioEngine: {} args (device {})",
+                "AudioEngine: {} args",
                 m.args.len(),
-                m.device_id
             ),
-            ProtocolPayload::Control(m) => write!(f, "Control: {:?}", m),
         }
     }
 }
@@ -65,16 +65,5 @@ impl From<LogMessage> for ProtocolPayload {
 impl From<AudioEnginePayload> for ProtocolPayload {
     fn from(value: AudioEnginePayload) -> Self {
         Self::AudioEngine(value)
-    }
-}
-
-impl From<crate::lang::event::ConcreteEvent> for Option<AudioEnginePayload> {
-    fn from(event: crate::lang::event::ConcreteEvent) -> Self {
-        match event {
-            crate::lang::event::ConcreteEvent::AudioEngine { args, device_id } => {
-                Some(AudioEnginePayload { args, device_id })
-            }
-            _ => None,
-        }
     }
 }

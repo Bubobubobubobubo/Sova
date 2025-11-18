@@ -4,18 +4,15 @@ pub mod device_map;
 pub mod lang;
 pub mod logger;
 pub mod protocol;
-pub mod relay_client;
 pub mod scene;
 pub mod schedule;
 pub mod server;
-pub mod shared_types;
-pub mod transcoder;
 pub mod util;
 pub mod world;
+pub mod init;
 
-pub use protocol::message::TimedMessage;
+pub use protocol::TimedMessage;
 pub use scene::Scene;
-pub use shared_types::GridSelection;
 
 // Re-export logging functionality
 pub use logger::{
