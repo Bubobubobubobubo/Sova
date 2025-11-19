@@ -77,7 +77,7 @@ impl EditWidget {
                         .map(|f| f.script().lang().to_owned())
                         .unwrap_or(String::new())),
                     Box::new(|state, x| {
-                        upload_lang(state, x.text());
+                        upload_lang(state, x.into());
                     })));
             }
             _ => { 

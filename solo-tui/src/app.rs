@@ -199,7 +199,7 @@ impl App {
                     "Are you sure you want to quit ?".to_owned(), 
                     PopupValue::Bool(false), 
                     Box::new(|state, x| {
-                        if x.bool() {
+                        if bool::from(x) {
                             state.events.send(AppEvent::Quit)
                         }
                     })

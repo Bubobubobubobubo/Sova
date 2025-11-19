@@ -112,7 +112,7 @@ impl SceneWidget {
                     PopupValue::Float(dur), 
                     Box::new(move |state, value| {
                         let mut new = cloned;
-                        new.duration = value.float();
+                        new.duration = value.into();
                         state.events.send(SchedulerMessage::SetFrames(vec![(
                             line_index, frame_index, new
                         )], ActionTiming::Immediate).into());

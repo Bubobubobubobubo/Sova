@@ -6,42 +6,8 @@ use tui_textarea::{CursorMove, TextArea};
 
 use crate::app::AppState;
 
-#[derive(Default)]
-pub enum PopupValue {
-    #[default]
-    None,
-    Bool(bool),
-    Text(String),
-    Float(f64),
-    Int(i64)
-}
-
-impl PopupValue {
-    pub fn float(self) -> f64 {
-        match self {
-            Self::Float(x) => x,
-            _ => Default::default()
-        }
-    }
-    pub fn bool(self) -> bool {
-        match self {
-            Self::Bool(x) => x,
-            _ => Default::default()
-        }
-    }
-    pub fn int(self) -> i64 {
-        match self {
-            Self::Int(x) => x,
-            _ => Default::default()
-        }
-    }
-    pub fn text(self) -> String {
-        match self {
-            Self::Text(x) => x,
-            _ => Default::default()
-        }
-    }
-}
+mod popup_value;
+pub use popup_value::PopupValue;
 
 #[derive(Default)]
 pub struct Popup {
@@ -68,16 +34,7 @@ impl Popup {
         self.callback = Some(callback);
         self.showing = true;
 
-        match &self.value {
-            PopupValue::Text(txt) => self.text_area = vec![txt.clone()].into(),
-            PopupValue::Float(f) => self.text_area = vec![format!("{f}")].into(),
-            PopupValue::Int(i) => self.text_area = vec![format!("{i}")].into(),
-            _ => ()
-        }
-        self.text_area.set_block(Block::bordered()
-            .border_style(Color::LightGreen).border_type(BorderType::Rounded)
-        );
-        self.text_area.move_cursor(CursorMove::End);
+        Self::update_textarea(&mut self.text_area, &self.value);
     }
 
     pub fn info(
@@ -110,6 +67,19 @@ impl Popup {
         );
     }
 
+    fn update_textarea(text_area: &mut TextArea, value: &PopupValue) {
+        match &value {
+            PopupValue::Text(txt) => *text_area = vec![txt.clone()].into(),
+            PopupValue::Float(f) => *text_area = vec![format!("{f}")].into(),
+            PopupValue::Int(i) => *text_area = vec![format!("{i}")].into(),
+            _ => ()
+        }
+        text_area.set_block(Block::bordered()
+            .border_style(Color::LightGreen).border_type(BorderType::Rounded)
+        );
+        text_area.move_cursor(CursorMove::End);
+    }
+
     pub fn process_event(&mut self, state: &mut AppState, event: KeyEvent) {
         match event.code {
             KeyCode::Esc => self.hide(),
@@ -120,17 +90,46 @@ impl Popup {
                     KeyCode::Left => *b = true,
                     KeyCode::Right => *b = false,
                     _ => ()
-                },
+                }
+                PopupValue::Choice(i, v) => match event.code {
+                    KeyCode::Left | KeyCode::Up => *i = (*i - 1 + v.len()) % v.len(),
+                    KeyCode::Right | KeyCode::Down => *i = (*i + 1) % v.len(),
+                    _ => ()
+                }
                 PopupValue::Text(txt) => {
                     self.text_area.input(event);
                     *txt = self.text_area.lines().get(0).cloned().unwrap_or_default()
-                },
+                }
                 PopupValue::Float(f) => {
-                    self.text_area.input(event);
+                    match event.code {
+                        KeyCode::Up => {
+                            *f += 1.0;
+                            Self::update_textarea(&mut self.text_area, &(*f).into());
+                        }
+                        KeyCode::Down => {
+                            *f -= 1.0;
+                            Self::update_textarea(&mut self.text_area, &(*f).into());
+                        }
+                        _ => { 
+                            let _ = self.text_area.input(event);
+                        }
+                    }
                     Self::validate_input(&mut self.text_area, f);
-                },
+                }
                 PopupValue::Int(i) => {
-                    self.text_area.input(event);
+                    match event.code {
+                        KeyCode::Up => {
+                            *i += 1;
+                            Self::update_textarea(&mut self.text_area, &(*i).into());
+                        }
+                        KeyCode::Down => {
+                            *i -= 1;
+                            Self::update_textarea(&mut self.text_area, &(*i).into());
+                        }
+                        _ => { 
+                            let _ = self.text_area.input(event);
+                        }
+                    }
                     Self::validate_input(&mut self.text_area, i);
                 },
             }
@@ -141,7 +140,6 @@ impl Popup {
         let value = std::mem::take(&mut self.value);
         if let Some(callback) = std::mem::take(&mut self.callback) {
             callback(state, value);
-            self.callback = None;
         }
         self.showing = false;
     }
@@ -209,6 +207,9 @@ impl Widget for &Popup {
                 | PopupValue::Int(_) => {
                 self.text_area.render(input_area, buf);
             },
+            PopupValue::Choice(i, v) => {
+                todo!()
+            }
         }
     }
 }
