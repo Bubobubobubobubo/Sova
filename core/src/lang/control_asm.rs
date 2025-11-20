@@ -780,10 +780,7 @@ impl ControlASM {
 
                 if let Some(device_name) = ctx.device_map.get_name_for_slot(device_id) {
                     let input_connections = ctx.device_map.input_connections.lock().unwrap();
-                    if let Some((_name, device_arc)) = input_connections
-                        .values()
-                        .find(|(name, _)| *name == device_name)
-                    {
+                    if let Some(device_arc) = input_connections.get(&device_name) {
                         if let ProtocolDevice::MIDIInDevice(midi_in) = &**device_arc {
                             if let Ok(memory_guard) = midi_in.memory.lock() {
                                 let midi_chan_0_based =

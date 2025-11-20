@@ -30,10 +30,6 @@ use crate::{
 
 use midir::{Ignore, MidiInput, MidiOutput};
 
-/// A tuple representing a registered device, containing its user-assigned name
-/// and a reference-counted, thread-safe `ProtocolDevice` instance.
-pub type DeviceItem = (String, Arc<ProtocolDevice>);
-
 /// Maximum number of user-assignable device slots (1-based).
 const MAX_DEVICE_SLOTS: usize = 16;
 
@@ -42,12 +38,12 @@ const MAX_DEVICE_SLOTS: usize = 16;
 /// Provides thread-safe access to device information and handles the underlying
 /// MIDI and OSC communication setup via `midir` and `rosc`.
 pub struct DeviceMap {
-    /// Currently connected input devices, keyed by their unique address/identifier string.
+    /// Currently connected input devices, keyed by their unique user-given name.
     /// Values are `DeviceItem`s containing the assigned name and the device handle.
-    pub input_connections: Mutex<HashMap<String, DeviceItem>>,
-    /// Currently connected output devices, keyed by their unique address/identifier string.
+    pub input_connections: Mutex<HashMap<String, Arc<ProtocolDevice>>>,
+    /// Currently connected output devices, keyed by their unique user-given name.
     /// Values are `DeviceItem`s containing the assigned name and the device handle.
-    pub output_connections: Mutex<HashMap<String, DeviceItem>>,
+    pub output_connections: Mutex<HashMap<String, Arc<ProtocolDevice>>>,
     /// Maps user-assigned Slot IDs (1-N) to the system or virtual device name assigned to it.
     /// Slot 0 is implicitly the Log device and is not stored here.
     pub slot_assignments: Mutex<[Option<String> ; MAX_DEVICE_SLOTS]>,
@@ -101,9 +97,7 @@ impl DeviceMap {
     /// Associates the given `name` with the `device` and stores it in the
     /// `input_connections` map, keyed by the device's address.
     pub fn register_input_connection(&self, name: String, device: ProtocolDevice) {
-        let address = device.address().to_owned();
-        let item = (name, Arc::new(device));
-        self.input_connections.lock().unwrap().insert(address, item);
+        self.input_connections.lock().unwrap().insert(name, Arc::new(device));
     }
 
     /// Registers a connected output device.
@@ -112,12 +106,10 @@ impl DeviceMap {
     /// `output_connections` map, keyed by the device's address.
     /// Note: This only registers the connection; slot assignment is separate.
     pub fn register_output_connection(&self, name: String, device: ProtocolDevice) {
-        let address = device.address();
-        let item = (name, Arc::new(device));
         self.output_connections
             .lock()
             .unwrap()
-            .insert(address, item);
+            .insert(name, Arc::new(device));
     }
 
     /// Assigns a device (identified by its `device_name`) to a specific slot ID (1-N).
@@ -243,7 +235,7 @@ impl DeviceMap {
             .and_then(|name| {
                 let outputs = self.output_connections.lock().unwrap();
                 let dev_item = outputs.get(&name);
-                dev_item.map(|(_, dev)| Arc::clone(dev))
+                dev_item.map(Arc::clone)
             })
     }
 
@@ -303,9 +295,8 @@ impl DeviceMap {
         let device_opt = self.output_connections
             .lock()
             .unwrap()
-            .values()
-            .find(|(name, _)| name == target_device_name)
-            .map(|(_, device_arc)| Arc::clone(device_arc));
+            .get(target_device_name)
+            .map(Arc::clone);
 
         let Some(device) = device_opt else {
             // Log error if the device name was not "log" and wasn't found
@@ -481,7 +472,7 @@ impl DeviceMap {
 
         // Add currently connected devices (MIDI & OSC) from output_connections, potentially overwriting discovered info
         // This ensures `is_connected` is true and OSC address is included for these.
-        for (_device_addr, (name, device_arc)) in connected_map.iter() {
+        for (name, device_arc) in connected_map.iter() {
             // Determine kind and get device reference
             let (kind, device_ref) = match &**device_arc {
                 ProtocolDevice::MIDIOutDevice { .. } => (DeviceKind::Midi, Some(&**device_arc)),
@@ -538,8 +529,7 @@ impl DeviceMap {
             .output_connections
             .lock()
             .unwrap()
-            .values()
-            .any(|(name, _)| name == device_name)
+            .contains_key(device_name)
         {
             return Err(format!("Device '{}' is already connected.", device_name));
         }
@@ -614,73 +604,36 @@ impl DeviceMap {
             "[🔌] Attempting to disconnect MIDI device (In/Out): {}",
             device_name
         );
-        let mut output_connections = self.output_connections.lock().unwrap();
-        let mut input_connections = self.input_connections.lock().unwrap();
 
-        // Find the keys (addresses) associated with the device name
-        let output_key_to_remove = output_connections
-            .iter()
-            .find(|(_address, (name, _device))| name == device_name)
-            .map(|(address, _item)| address.clone());
-
-        let input_key_to_remove = input_connections
-            .iter()
-            .find(|(_address, (name, _device))| name == device_name)
-            .map(|(address, _item)| address.clone());
-
-        match (output_key_to_remove, input_key_to_remove) {
-            (Some(out_key), Some(in_key)) => {
-                // Remove from both maps. Dropping the Arc<ProtocolDevice> will eventually drop
-                // the MidiIn/MidiOut handlers, closing the ports.
-                let out_removed = output_connections.remove(&out_key).is_some();
-                let in_removed = input_connections.remove(&in_key).is_some();
-
-                if out_removed && in_removed {
-                    log_println!(
-                        "[✅] Disconnected and removed registration for MIDI In/Out '{}'",
-                        device_name
-                    );
-                    // Release locks before calling another method that might lock
-                    drop(output_connections);
-                    drop(input_connections);
-                    // Unassign from any slot
-                    self.unassign_device_by_name(device_name);
-                    Ok(())
-                } else {
-                    // This indicates an internal logic error if keys were found but removal failed
-                    log_eprintln!(
-                        "[!] Mismatch removing connections for '{}'. Out removed: {}, In removed: {}",
-                        device_name, out_removed, in_removed
-                    );
-                    Err(format!(
-                        "Internal error removing connections for {}",
-                        device_name
-                    ))
-                }
-            }
-            (None, None) => {
-                log_eprintln!(
-                    "[!] Cannot disconnect MIDI device '{}': Not found in connections.",
-                    device_name
-                );
-                Err(format!(
-                    "Device '{}' not found or not connected.",
-                    device_name
-                ))
-            }
-            _ => {
-                // Found in one map but not the other - indicates an inconsistent state
-                log_eprintln!(
-                    "[!] Cannot disconnect MIDI device '{}': Inconsistent connection state (In/Out mismatch).",
-                    device_name
-                );
-                // Attempt removal from wherever it was found to try and clean up? Or just error?
-                // For now, just error out. Consider adding cleanup logic if this state occurs.
-                Err(format!(
-                    "Device '{}' has inconsistent connection state.",
-                    device_name
-                ))
-            }
+        let (input, output) = (
+            self.output_connections.lock().unwrap().remove(device_name).is_some(),
+            self.input_connections.lock().unwrap().remove(device_name).is_some() 
+        );
+        
+        if input && output {
+            log_println!(
+                "[✅] Disconnected and removed registration for MIDI In/Out '{}'",
+                device_name
+            );
+            Ok(())
+        } else if input || output {
+            log_eprintln!(
+                "[!] Cannot disconnect MIDI device '{}': Inconsistent connection state (In/Out mismatch).",
+                device_name
+            );
+            Err(format!(
+                "Device '{}' has inconsistent connection state.",
+                device_name
+            ))
+        } else {
+            log_eprintln!(
+                "[!] Cannot disconnect MIDI device '{}': Not found in connections.",
+                device_name
+            );
+            Err(format!(
+                "Device '{}' not found or not connected.",
+                device_name
+            ))
         }
     }
 
@@ -806,7 +759,7 @@ impl DeviceMap {
         {
             // Scope for lock
             let output_connections = self.output_connections.lock().unwrap();
-            for (existing_name, device_arc) in output_connections.values() {
+            for (existing_name, device_arc) in output_connections.iter() {
                 if existing_name == name {
                     let err_msg =
                         format!("Cannot create OSC device: Name '{}' already exists.", name);
@@ -859,7 +812,7 @@ impl DeviceMap {
         }
     }
 
-    /// Removes an OSC Output device by its name.
+    /// Removes an output device by its name.
     ///
     /// Removes the device registration from `output_connections`. The underlying socket
     /// will be closed when the `ProtocolDevice::OSCOutDevice` is dropped.
@@ -871,42 +824,57 @@ impl DeviceMap {
     /// # Returns
     /// - `Ok(())` on successful removal from registration.
     /// - `Err(String)` if no OSC Output device with the given name is found.
-    pub fn remove_osc_output_device(&self, name: &str) -> Result<(), String> {
+    pub fn remove_input_device(&self, name: &str) -> Result<(), String> {
+        log_println!("[🗑️] Removing OSC Output device: '{}'", name);
+        let mut input_connections = self.input_connections.lock().unwrap();
+
+        if input_connections.remove(name).is_some() {
+            log_println!("[✅] Removed OSC Output device registration: '{}'", name);
+            // Release lock before potentially calling another method
+            drop(input_connections);
+            // Unassign from any slot
+            self.unassign_device_by_name(name);
+            Ok(())
+        } else  {
+            let err_msg = format!(
+                "Cannot remove OSC device '{}': Not found or not an OSC device.",
+                name
+            );
+            log_eprintln!("[!] {}", err_msg);
+            Err(err_msg)
+        }
+    }
+
+    /// Removes an output device by its name.
+    ///
+    /// Removes the device registration from `output_connections`. The underlying socket
+    /// will be closed when the `ProtocolDevice::OSCOutDevice` is dropped.
+    /// Also unassigns the device from any slot it might occupy.
+    ///
+    /// # Arguments
+    /// * `name` - The name of the OSC Output device to remove.
+    ///
+    /// # Returns
+    /// - `Ok(())` on successful removal from registration.
+    /// - `Err(String)` if no OSC Output device with the given name is found.
+    pub fn remove_output_device(&self, name: &str) -> Result<(), String> {
         log_println!("[🗑️] Removing OSC Output device: '{}'", name);
         let mut output_connections = self.output_connections.lock().unwrap();
 
-        // Find the key (address string) associated with the named OSC device
-        let key_to_remove = output_connections
-            .iter()
-            .find(|(_address, (n, device))| {
-                n == name && matches!(**device, ProtocolDevice::OSCOutDevice { .. })
-            })
-            .map(|(address, _item)| address.clone());
-
-        match key_to_remove {
-            Some(key) => {
-                if output_connections.remove(&key).is_some() {
-                    log_println!("[✅] Removed OSC Output device registration: '{}'", name);
-                    // Release lock before potentially calling another method
-                    drop(output_connections);
-                    // Unassign from any slot
-                    self.unassign_device_by_name(name);
-                    Ok(())
-                } else {
-                    // Should not happen if key was found
-                    let err_msg = format!("Internal error removing OSC device '{}'", name);
-                    log_eprintln!("[!] {}", err_msg);
-                    Err(err_msg)
-                }
-            }
-            None => {
-                let err_msg = format!(
-                    "Cannot remove OSC device '{}': Not found or not an OSC device.",
-                    name
-                );
-                log_eprintln!("[!] {}", err_msg);
-                Err(err_msg)
-            }
+        if output_connections.remove(name).is_some() {
+            log_println!("[✅] Removed OSC Output device registration: '{}'", name);
+            // Release lock before potentially calling another method
+            drop(output_connections);
+            // Unassign from any slot
+            self.unassign_device_by_name(name);
+            Ok(())
+        } else  {
+            let err_msg = format!(
+                "Cannot remove OSC device '{}': Not found or not an OSC device.",
+                name
+            );
+            log_eprintln!("[!] {}", err_msg);
+            Err(err_msg)
         }
     }
 
@@ -936,7 +904,7 @@ impl DeviceMap {
         log_println!("[!] Sending MIDI Panic (All Notes Off CC 123) to all outputs...");
         let connections = self.output_connections.lock().unwrap();
 
-        for (_device_addr, (name, device_arc)) in connections.iter() {
+        for (name, device_arc) in connections.iter() {
             // Target MIDIOutDevice (covers both physical and virtual)
             if let ProtocolDevice::MIDIOutDevice(midi_out) = &**device_arc {
                 log_println!("[!] Sending Panic to MIDI device: {}", name);
