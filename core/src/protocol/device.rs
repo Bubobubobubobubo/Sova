@@ -14,7 +14,7 @@ use std::fmt::{self, Debug, Display};
 // Placeholder for richer device info
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeviceInfo {
-    pub id: usize,
+    pub slot_id: usize,
     pub name: String,
     pub kind: DeviceKind,
     pub is_connected: bool,
