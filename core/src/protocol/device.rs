@@ -9,6 +9,7 @@ use crate::protocol::{midi::MidiOut, payload::ProtocolPayload};
 use crate::{log_eprintln, LogMessage};
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Debug, Display};
+
 // SystemTime and UNIX_EPOCH no longer needed - using target_time directly
 // Placeholder for richer device info
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -32,7 +33,6 @@ pub enum DeviceKind {
     Other,
 }
 
-
 /// Represents the different types of devices the system can interact with.
 ///
 /// Each variant encapsulates the specific logic for communicating with a type
@@ -52,6 +52,10 @@ pub enum ProtocolDevice {
     OSCInDevice,
     /// An OSC output device targeting a specific network address.
     OSCOutDevice(OSCOut),
+    /// An OSC output device targeting a specific network address.
+    DirtOutDevice(OSCOut),
+    /// An OSC output device targeting a specific network address.
+    DoughOutDevice(OSCOut),
     /// Internal audio engine (Sova) - no external connectivity required
     AudioEngine(AudioEngineProxy),
 }
@@ -85,7 +89,9 @@ impl ProtocolDevice {
             ProtocolDevice::MIDIOutDevice(midi_out) => {
                 midi_out.connect()
             }
-            ProtocolDevice::OSCOutDevice(osc_out) => {
+            ProtocolDevice::OSCOutDevice(osc_out)
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) => {
                 osc_out.connect()
             }
             ProtocolDevice::Log => Ok(()), // Log device doesn't need connection
@@ -132,7 +138,9 @@ impl ProtocolDevice {
                 };
                 midi_out.send(midi_msg)
             }
-            ProtocolDevice::OSCOutDevice(osc_out) => {
+            ProtocolDevice::OSCOutDevice(osc_out)
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) => {
                 let ProtocolPayload::OSC(crate_osc_msg) = message else {
                     return Err(ProtocolError(format!(
                         "Invalid message format for OSC device '{}'!",
@@ -185,7 +193,9 @@ impl ProtocolDevice {
             ProtocolDevice::MIDIOutDevice(midi_out) => {
                 midi_out.flush();
             }
-            ProtocolDevice::OSCOutDevice(osc_out) => {
+            ProtocolDevice::OSCOutDevice(osc_out)
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) => {
                 // UDP sends are typically fire-and-forget, no explicit flush needed at socket level.
                 crate::log_println!(
                     "[~] Flush called on OSCOutDevice '{}' @ {} (no-op for UDP)",
@@ -216,7 +226,9 @@ impl ProtocolDevice {
             ProtocolDevice::OSCInDevice => "OSC_IN_ADDRESS_TBD".to_string(), // Placeholder
             ProtocolDevice::MIDIInDevice(midi_in) => midi_in.name.clone(),
             ProtocolDevice::MIDIOutDevice(midi_out) => midi_out.name.clone(),
-            ProtocolDevice::OSCOutDevice(osc_out) => osc_out.name.clone(),
+            ProtocolDevice::OSCOutDevice(osc_out) 
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) => osc_out.name.clone(),
             ProtocolDevice::AudioEngine { .. } => "AudioEngine".to_string(),
         }
     }
@@ -227,6 +239,12 @@ impl ProtocolDevice {
         match self {
             ProtocolDevice::OSCOutDevice(_) => {
                 OSCMessage::generate_messages(event, date, clock)
+            }
+            ProtocolDevice::DirtOutDevice(_) => {
+                todo!()
+            }
+            ProtocolDevice::DoughOutDevice(_) => {
+                todo!()
             }
             ProtocolDevice::MIDIOutDevice(_) => {
                 MIDIMessage::generate_messages(event, date)
@@ -283,7 +301,9 @@ impl Debug for ProtocolDevice {
             ProtocolDevice::MIDIOutDevice(midi_out) => {
                 Debug::fmt(midi_out, f)
             }
-            ProtocolDevice::OSCOutDevice(osc_out) => {
+            ProtocolDevice::OSCOutDevice(osc_out)
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) => {
                 Debug::fmt(osc_out, f)
             }
             ProtocolDevice::AudioEngine { ..}=> write!(f, "AudioEngine"),
@@ -303,7 +323,10 @@ impl Display for ProtocolDevice {
             ProtocolDevice::MIDIOutDevice(midi_out) => {
                 Display::fmt(&midi_out, f)
             }
-            ProtocolDevice::OSCOutDevice(osc_out) => write!(f, "OSCOutDevice({})", osc_out.name),
+            ProtocolDevice::OSCOutDevice(osc_out) 
+            | ProtocolDevice::DirtOutDevice(osc_out)
+            | ProtocolDevice::DoughOutDevice(osc_out) 
+                => write!(f, "OSCOutDevice({})", osc_out.name),
             ProtocolDevice::AudioEngine { .. } => write!(f, "AudioEngine"),
         }
     }

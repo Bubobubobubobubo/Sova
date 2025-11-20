@@ -1,0 +1,161 @@
+use std::{collections::HashMap, fmt::Display};
+
+use serde::{Deserialize, Serialize};
+
+use crate::{clock::{Clock, SyncTime}, lang::event::ConcreteEvent, protocol::{ProtocolPayload, osc::Argument}};
+
+/// Represents a single OSC message, consisting of an address pattern and a list of arguments.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct OSCMessage {
+    /// The OSC address pattern (e.g., "/synth/play").
+    pub addr: String,
+    /// The list of arguments associated with the message.
+    pub args: Vec<Argument>,
+    /// An optional Timetag
+    pub timetag: Option<SyncTime>
+}
+
+impl Display for OSCMessage {
+    /// Formats the `OSCMessage` for display, showing the address and arguments.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "OSCMessage {{ addr: \"{}\", args: {:?} }}",
+            self.addr, self.args
+        )
+    }
+}
+
+impl OSCMessage {
+    /// Creates a new `OSCMessage` with the given address and arguments.
+    ///
+    /// # Arguments
+    /// * `addr` - The OSC address pattern string.
+    /// * `args` - A vector containing the `Argument` values for the message.
+    pub fn new(addr: String, args: Vec<Argument>) -> Self {
+        OSCMessage { addr, args, timetag: None }
+    }
+
+    /// Utility function to chain creation and date assignement of an OSCMessage
+    pub fn at_date(mut self, date: SyncTime) -> Self {
+        self.timetag = Some(date);
+        self
+    }
+
+    /// Creates an OSC message specifically formatted for SuperDirt's `/dirt/play` address.
+    ///
+    /// SuperDirt expects arguments in a flattened key-value format.
+    /// This function takes a `HashMap` where keys are SuperDirt parameter names
+    /// (e.g., "s", "n", "amp") and values are the corresponding `Argument` types.
+    /// The arguments in the resulting `OSCMessage` will be ordered as `[key1, val1, key2, val2, ...]`, though the specific order
+    /// might vary due to HashMap iteration order (which is usually acceptable for SuperDirt).
+    ///
+    /// # Arguments
+    /// * `data` - A `HashMap` mapping SuperDirt parameter names (String) to their values (`Argument`).
+    /// * `cps` - The cps (cycles per second) parameter.
+    /// * `cycle` - The cycle parameter.
+    /// * `delta` - The delta parameter.
+    /// * `orbit` - The orbit parameter.
+    ///
+    /// # Returns
+    /// An `OSCMessage` with `addr` set to "/dirt/play" and `args` containing the flattened key-value pairs.
+    pub fn dirt(
+        data: HashMap<String, Argument>,
+        cps: f64,
+        cycle: f64,
+        delta: f64,
+        orbit: i64,
+    ) -> Self {
+        let mut args = Vec::with_capacity(data.len() * 2 + 8); // +8 for the 4 temporal key-value pairs
+        // Optional: Sort keys for deterministic argument order, though usually not required by SuperDirt.
+
+        // Add temporal information required by SuperDirt
+        args.push(Argument::String("cps".to_string()));
+        args.push(Argument::Float(cps as f32));
+        args.push(Argument::String("cycle".to_string()));
+        args.push(Argument::Float(cycle as f32));
+        args.push(Argument::String("delta".to_string()));
+        args.push(Argument::Float(delta as f32));
+        args.push(Argument::String("orbit".to_string()));
+        args.push(Argument::Int(orbit as i32));
+
+        // Unordered iteration is fine for SuperDirt:
+        for (key, value) in data {
+            args.push(Argument::String(key));
+            args.push(value);
+        }
+
+        OSCMessage {
+            addr: "/dirt/play".to_string(),
+            args,
+            timetag: None
+        }
+    }
+
+    pub fn generate_messages(event: ConcreteEvent, date: SyncTime, clock: &Clock) 
+        -> Vec<(ProtocolPayload, SyncTime)>
+    {
+        match event {
+            // Handle Generic OSC Event (pass-through)
+            ConcreteEvent::Osc {
+                mut message,
+                device_id: _,
+            } => {
+                if message.timetag.is_none() {
+                    message.timetag = Some(date);
+                }
+                vec![(message.into(), date)]
+            }
+            // Handle Dirt Event (map to /dirt/play with context)
+            ConcreteEvent::Dirt { args, device_id: _ } => {
+                // Calculate SuperDirt context using the clock
+                let tempo_bpm = clock.tempo();
+                let cps = tempo_bpm / 60.0;
+                let cycle = clock.beat_at_date(date); // Beat at the event's specific time
+                let delta_micros = clock.beats_to_micros(1.0); // Use 1 beat for delta
+                let delta = delta_micros as f64 / 1_000_000.0;
+                let orbit = 0i32; // Default orbit
+
+                todo!();
+                //let dirt_msg = Self::dirt(args, cps, cycle, delta, orbit).at_date(date);
+
+                //vec![(dirt_msg.into(), date)]
+            }
+            // Legacy MIDI-to-OSC mappings (consider removal/refinement)
+            ConcreteEvent::MidiNote(note, vel, chan, _dur, _device_id) => {
+                vec![(OSCMessage {
+                    addr: "/midi/noteon".to_string(),
+                    args: vec![
+                        Argument::Int(note as i32),
+                        Argument::Int(vel as i32),
+                        Argument::Int(chan as i32),
+                    ],
+                    timetag: Some(date)
+                }.into(), date)]
+            }
+            ConcreteEvent::MidiControl(control, value, chan, _device_id) => {
+                vec![(OSCMessage {
+                    addr: "/midi/cc".to_string(),
+                    args: vec![
+                        Argument::Int(control as i32),
+                        Argument::Int(value as i32),
+                        Argument::Int(chan as i32),
+                    ],
+                    timetag: Some(date)
+                }.into(), date)]
+            }
+            ConcreteEvent::MidiProgram(program, chan, _device_id) => {
+                vec![(OSCMessage {
+                    addr: "/midi/program".to_string(),
+                    args: vec![
+                        Argument::Int(program as i32),
+                        Argument::Int(chan as i32),
+                    ],
+                    timetag: Some(date)
+                }.into(), date)]
+            }
+            _ => Vec::new(), // Ignore other events for OSC for now
+        }
+    }
+
+}

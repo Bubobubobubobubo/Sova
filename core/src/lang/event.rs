@@ -34,11 +34,23 @@ pub enum ConcreteEvent {
         message: OSCMessage,
         device_id: usize,
     },
-    StartProgram(Program)
+    StartProgram(Program),
+
+    /// ----- Generic events -----
+
+    /// Play a sound : Sound(delay_before, duration, instrument, value, device)
+    /// Supported by : Midi, Dough, Dirt 
+    Sound(SyncTime, SyncTime, Argument, Argument, usize),
+    /// Play a sound on a voice : Sound(voice, delay_before, duration, instrument, value, device)
+    /// Supported by : Midi, Dough, Dirt 
+    VoiceSound(Argument, SyncTime, SyncTime, Argument, Argument, usize),
+    /// Change voice setting : Setting(voice, delay_before, setting, value)
+    /// Supported by : Midi, Dough 
+    VoiceSetting(Argument, SyncTime, Argument, Argument),
 }
 
 impl ConcreteEvent {
-    pub fn device_id(&self) -> usize {
+    pub fn device_id(&self) -> Option<usize> {
         match self {
             ConcreteEvent::MidiNote(_, _, _, _, device_id) 
             | ConcreteEvent::MidiControl(_, _, _, device_id) 
@@ -53,10 +65,10 @@ impl ConcreteEvent {
             | ConcreteEvent::MidiClock(device_id) 
             | ConcreteEvent::Dirt { args: _, device_id } 
             | ConcreteEvent::Osc { message: _, device_id } 
-                => *device_id,
+                => Some(*device_id),
             ConcreteEvent::Nop 
             | ConcreteEvent::StartProgram(_) 
-                => usize::MAX,
+                => None,
         }
     }
 }
@@ -87,7 +99,10 @@ pub enum Event {
         args: Vec<Variable>,
         device_id: Variable,
     },
-    StartProgram(Variable)
+    StartProgram(Variable),
+    Sound(Variable, Variable, Variable, Variable, Variable),
+    VoiceSound(Variable, Variable, Variable, Variable, Variable, Variable),
+    VoiceSetting(Variable, Variable, Variable, Variable),
 }
 
 impl Event {

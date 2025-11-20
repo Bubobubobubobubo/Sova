@@ -387,7 +387,10 @@ impl DeviceMap {
         date: SyncTime,
         clock: &Clock, // Pass clock through
     ) -> Vec<TimedMessage> {
-        self.map_event_for_slot_id(event.device_id(), event, date, clock)
+        let Some(device_id) = event.device_id() else {
+            return Vec::new();
+        };
+        self.map_event_for_slot_id(device_id, event, date, clock)
     }
 
     /// Generates a list of discoverable and currently connected devices.
