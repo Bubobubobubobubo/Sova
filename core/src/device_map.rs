@@ -414,9 +414,7 @@ impl DeviceMap {
 
             // Determine connection status based on presence in connected_map for outputs
             // For system ports discovered but not explicitly connected via Sova, this might show false.
-            let is_connected = connected_map
-                .values()
-                .any(|(conn_name, _)| conn_name == &name);
+            let is_connected = connected_map.contains_key(&name);
 
             // Extract address specifically for OSC devices using the provided reference
             let address = if kind == DeviceKind::Osc {
@@ -429,9 +427,10 @@ impl DeviceMap {
             };
 
             DeviceInfo {
-                id: assigned_slot_id,
+                slot_id: assigned_slot_id,
                 name,
                 kind,
+                direction,
                 is_connected,
                 address,
             }
@@ -485,7 +484,7 @@ impl DeviceMap {
                 // Insert or update the entry using create_device_info with the device reference
                 discovered_devices_map.insert(
                     name.clone(),
-                    create_device_info(name.clone(), kind, device_ref),
+                    create_device_info(name.clone(), kind, DeviceDirection::Output, device_ref),
                 );
             }
         }
