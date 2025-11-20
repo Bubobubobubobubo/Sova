@@ -24,7 +24,7 @@ use std::{
 
 use crate::{
     clock::{Clock, SyncTime}, lang::event::ConcreteEvent, log_eprintln, log_println, protocol::{
-        audio_engine_proxy::AudioEngineProxy, log::{LogMessage, Severity, LOG_NAME}, midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut}, osc::OSCOut, DeviceInfo, DeviceKind, ProtocolDevice, ProtocolMessage, TimedMessage
+        DeviceDirection, DeviceInfo, DeviceKind, ProtocolDevice, ProtocolMessage, TimedMessage, audio_engine_proxy::AudioEngineProxy, log::{LOG_NAME, LogMessage, Severity}, midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut}, osc::OSCOut
     }
 };
 
@@ -407,6 +407,7 @@ impl DeviceMap {
         // Helper to create DeviceInfo, checking slot assignment and connection status
         let create_device_info = |name: String,
                                   kind: DeviceKind,
+                                  direction: DeviceDirection,
                                   device_ref_opt: Option<&ProtocolDevice>|
          -> DeviceInfo {
             let assigned_slot_id = self.get_slot_for_name(&name).unwrap_or(0);
@@ -445,7 +446,7 @@ impl DeviceMap {
                             // Pass None for device_ref_opt as this is just discovery
                             discovered_devices_map.insert(
                                 name.clone(),
-                                create_device_info(name, DeviceKind::Midi, None),
+                                create_device_info(name, DeviceKind::Midi, DeviceDirection::Output, None),
                             );
                         }
                     }
@@ -462,7 +463,7 @@ impl DeviceMap {
                             // Pass None for device_ref_opt
                             discovered_devices_map.insert(
                                 name.clone(),
-                                create_device_info(name, DeviceKind::Midi, None),
+                                create_device_info(name, DeviceKind::Midi, DeviceDirection::Input, None),
                             );
                         }
                     }
@@ -494,7 +495,7 @@ impl DeviceMap {
 
         // Sort: Assigned devices first (by Slot ID), then unassigned devices (alphabetically)
         final_list.sort_by(|a, b| {
-            match (a.id, b.id) {
+            match (a.slot_id, b.slot_id) {
                 (0, 0) => a.name.cmp(&b.name),         // Both unassigned: sort by name
                 (0, _) => std::cmp::Ordering::Greater, // Unassigned goes after assigned
                 (_, 0) => std::cmp::Ordering::Less,    // Assigned goes before unassigned

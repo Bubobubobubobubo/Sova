@@ -17,6 +17,7 @@ pub struct DeviceInfo {
     pub slot_id: usize,
     pub name: String,
     pub kind: DeviceKind,
+    pub direction: DeviceDirection,
     pub is_connected: bool,
     // Add field for OSC address (IP:Port)
     pub address: Option<String>,
@@ -31,6 +32,13 @@ pub enum DeviceKind {
     AudioEngine,
     #[default]
     Other,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
+pub enum DeviceDirection {
+    #[default]
+    Output,
+    Input
 }
 
 /// Represents the different types of devices the system can interact with.
@@ -229,7 +237,7 @@ impl ProtocolDevice {
             ProtocolDevice::OSCOutDevice(osc_out) 
             | ProtocolDevice::DirtOutDevice(osc_out)
             | ProtocolDevice::DoughOutDevice(osc_out) => osc_out.name.clone(),
-            ProtocolDevice::AudioEngine { .. } => "AudioEngine".to_string(),
+            ProtocolDevice::AudioEngine { .. } => "Internal".to_string(),
         }
     }
 
