@@ -498,7 +498,8 @@ impl From<VariableValue> for BoinxItem {
                     }
                     _ => BoinxItem::Mute,
                 }
-            }
+            },
+            VariableValue::Blob(_) => Self::default()
         }
     }
 }

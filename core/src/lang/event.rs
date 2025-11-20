@@ -3,9 +3,7 @@ use std::collections::HashMap;
 
 use crate::clock::SyncTime;
 use crate::lang::Program;
-use crate::protocol::osc::{Argument, OSCMessage};
-use crate::util::decimal_operations::float64_from_decimal;
-use crate::log_eprintln;
+use crate::protocol::osc::OSCMessage;
 
 use super::variable::VariableValue;
 use super::{evaluation_context::EvaluationContext, variable::Variable};
@@ -27,7 +25,7 @@ pub enum ConcreteEvent {
     MidiContinue(usize),
     MidiClock(usize),
     Dirt {
-        args: Vec<Argument>,
+        args: Vec<VariableValue>,
         device_id: usize,
     },
     Osc {
@@ -40,13 +38,13 @@ pub enum ConcreteEvent {
 
     /// Play a sound : Sound(delay_before, duration, instrument, value, device)
     /// Supported by : Midi, Dough, Dirt 
-    Sound(SyncTime, SyncTime, Argument, Argument, usize),
+    Sound(SyncTime, SyncTime, VariableValue, VariableValue, usize),
     /// Play a sound on a voice : Sound(voice, delay_before, duration, instrument, value, device)
     /// Supported by : Midi, Dough, Dirt 
-    VoiceSound(Argument, SyncTime, SyncTime, Argument, Argument, usize),
-    /// Change voice setting : Setting(voice, delay_before, setting, value)
+    VoiceSound(VariableValue, SyncTime, SyncTime, VariableValue, VariableValue, usize),
+    /// Change voice setting : Setting(voice, delay_before, setting, value, device)
     /// Supported by : Midi, Dough 
-    VoiceSetting(Argument, SyncTime, Argument, Argument),
+    VoiceSetting(VariableValue, SyncTime, VariableValue, VariableValue, usize),
 }
 
 impl ConcreteEvent {
@@ -65,6 +63,9 @@ impl ConcreteEvent {
             | ConcreteEvent::MidiClock(device_id) 
             | ConcreteEvent::Dirt { args: _, device_id } 
             | ConcreteEvent::Osc { message: _, device_id } 
+            | ConcreteEvent::Sound(_, _, _, _, device_id)
+            | ConcreteEvent::VoiceSound(_, _, _, _, _, device_id) 
+            | ConcreteEvent::VoiceSetting(_, _, _, _, device_id) 
                 => Some(*device_id),
             ConcreteEvent::Nop 
             | ConcreteEvent::StartProgram(_) 
@@ -102,7 +103,7 @@ pub enum Event {
     StartProgram(Variable),
     Sound(Variable, Variable, Variable, Variable, Variable),
     VoiceSound(Variable, Variable, Variable, Variable, Variable, Variable),
-    VoiceSetting(Variable, Variable, Variable, Variable),
+    VoiceSetting(Variable, Variable, Variable, Variable, Variable),
 }
 
 impl Event {
@@ -192,39 +193,13 @@ impl Event {
                 let mut args = Vec::new();
 
                 // add sound to args
-                args.push(Argument::String("s".to_string()));
-                let sound = ctx.evaluate(sound);
-                let sound = match sound {
-                    VariableValue::Integer(i) => Argument::Int(i as i32),
-                    VariableValue::Float(f) => Argument::Float(f as f32),
-                    VariableValue::Decimal(sig, num, den) => {
-                        Argument::Float(float64_from_decimal(sig, num, den) as f32)
-                    }
-                    VariableValue::Str(s) => Argument::String(s),
-                    _ => todo!(),
-                };
-                args.push(sound);
+                args.push(VariableValue::Str("s".to_string()));
+                args.push(ctx.evaluate(sound));
 
                 // add params to args
                 for (key, value) in params {
-                    args.push(Argument::String(key.clone()));
-                    let param_arg = match ctx.evaluate(value) {
-                        VariableValue::Integer(i) => Argument::Int(i as i32),
-                        VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => {
-                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
-                        }
-                        VariableValue::Str(s) => Argument::String(s),
-                        VariableValue::Bool(b) => Argument::Int(if b { 1 } else { 0 }),
-                        _ => {
-                            log_eprintln!(
-                                "[WARN] Dirt to OSC: Unsupported param type {:?} for key '{}'. Sending Int 0.",
-                                value, key
-                            );
-                            Argument::Int(0)
-                        }
-                    };
-                    args.push(param_arg);
+                    args.push(VariableValue::Str(key.clone()));
+                    args.push(ctx.evaluate(value));
                 }
 
                 ConcreteEvent::Dirt { args, device_id }
@@ -238,20 +213,7 @@ impl Event {
                     .evaluate(device_id)
                     .as_integer(ctx.clock, ctx.frame_len) as usize;
                 let addr = ctx.evaluate(addr).as_str(ctx.clock, ctx.frame_len);
-                let mut osc_args = Vec::new();
-                for arg in args.iter() {
-                    let arg = ctx.evaluate(arg);
-                    let arg = match arg {
-                        VariableValue::Integer(i) => Argument::Int(i as i32),
-                        VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => {
-                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
-                        }
-                        VariableValue::Str(s) => Argument::String(s),
-                        _ => todo!(),
-                    };
-                    osc_args.push(arg);
-                }
+                let osc_args = args.iter().map(|var| ctx.evaluate(var)).collect();
                 let message = OSCMessage::new(addr, osc_args);
                 ConcreteEvent::Osc {
                     message,
@@ -264,6 +226,34 @@ impl Event {
                 } else {
                     ConcreteEvent::StartProgram(Program::default())
                 }
+            }
+            Event::Sound(delay_before, duration, instrument, value, dev) => {
+                ConcreteEvent::Sound(
+                    ctx.evaluate(delay_before).as_dur().as_micros(ctx.clock, ctx.frame_len), 
+                    ctx.evaluate(duration).as_dur().as_micros(ctx.clock, ctx.frame_len), 
+                    ctx.evaluate(instrument), 
+                    ctx.evaluate(value), 
+                    ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize
+                )
+            }
+            Event::VoiceSound(voice, delay_before, duration, instrument, value, dev) => {
+                ConcreteEvent::VoiceSound(
+                    ctx.evaluate(voice), 
+                    ctx.evaluate(delay_before).as_dur().as_micros(ctx.clock, ctx.frame_len), 
+                    ctx.evaluate(duration).as_dur().as_micros(ctx.clock, ctx.frame_len), 
+                    ctx.evaluate(instrument), 
+                    ctx.evaluate(value), 
+                    ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize
+                )
+            }
+            Event::VoiceSetting(voice, delay_before, setting, value, dev) => {
+                ConcreteEvent::VoiceSetting(
+                    ctx.evaluate(voice), 
+                    ctx.evaluate(delay_before).as_dur().as_micros(ctx.clock, ctx.frame_len), 
+                    ctx.evaluate(setting), 
+                    ctx.evaluate(value), 
+                    ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize
+                )
             }
         }
     }

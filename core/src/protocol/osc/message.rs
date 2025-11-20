@@ -1,16 +1,16 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{clock::{Clock, SyncTime}, lang::event::ConcreteEvent, protocol::{ProtocolPayload, osc::Argument}};
+use crate::{clock::{Clock, SyncTime}, lang::{event::ConcreteEvent, variable::VariableValue}, protocol::ProtocolPayload};
 
 /// Represents a single OSC message, consisting of an address pattern and a list of arguments.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct OSCMessage {
     /// The OSC address pattern (e.g., "/synth/play").
     pub addr: String,
     /// The list of arguments associated with the message.
-    pub args: Vec<Argument>,
+    pub args: Vec<VariableValue>,
     /// An optional Timetag
     pub timetag: Option<SyncTime>
 }
@@ -32,7 +32,7 @@ impl OSCMessage {
     /// # Arguments
     /// * `addr` - The OSC address pattern string.
     /// * `args` - A vector containing the `Argument` values for the message.
-    pub fn new(addr: String, args: Vec<Argument>) -> Self {
+    pub fn new(addr: String, args: Vec<VariableValue>) -> Self {
         OSCMessage { addr, args, timetag: None }
     }
 
@@ -60,30 +60,23 @@ impl OSCMessage {
     /// # Returns
     /// An `OSCMessage` with `addr` set to "/dirt/play" and `args` containing the flattened key-value pairs.
     pub fn dirt(
-        data: HashMap<String, Argument>,
+        mut args: Vec<VariableValue>,
         cps: f64,
         cycle: f64,
         delta: f64,
         orbit: i64,
     ) -> Self {
-        let mut args = Vec::with_capacity(data.len() * 2 + 8); // +8 for the 4 temporal key-value pairs
         // Optional: Sort keys for deterministic argument order, though usually not required by SuperDirt.
 
         // Add temporal information required by SuperDirt
-        args.push(Argument::String("cps".to_string()));
-        args.push(Argument::Float(cps as f32));
-        args.push(Argument::String("cycle".to_string()));
-        args.push(Argument::Float(cycle as f32));
-        args.push(Argument::String("delta".to_string()));
-        args.push(Argument::Float(delta as f32));
-        args.push(Argument::String("orbit".to_string()));
-        args.push(Argument::Int(orbit as i32));
-
-        // Unordered iteration is fine for SuperDirt:
-        for (key, value) in data {
-            args.push(Argument::String(key));
-            args.push(value);
-        }
+        args.push(VariableValue::Str("cps".to_string()));
+        args.push(VariableValue::Float(cps));
+        args.push(VariableValue::Str("cycle".to_string()));
+        args.push(VariableValue::Float(cycle));
+        args.push(VariableValue::Str("delta".to_string()));
+        args.push(VariableValue::Float(delta));
+        args.push(VariableValue::Str("orbit".to_string()));
+        args.push(VariableValue::Integer(orbit));
 
         OSCMessage {
             addr: "/dirt/play".to_string(),
@@ -114,21 +107,20 @@ impl OSCMessage {
                 let cycle = clock.beat_at_date(date); // Beat at the event's specific time
                 let delta_micros = clock.beats_to_micros(1.0); // Use 1 beat for delta
                 let delta = delta_micros as f64 / 1_000_000.0;
-                let orbit = 0i32; // Default orbit
+                let orbit = 0; // Default orbit
 
-                todo!();
-                //let dirt_msg = Self::dirt(args, cps, cycle, delta, orbit).at_date(date);
+                let dirt_msg = Self::dirt(args, cps, cycle, delta, orbit).at_date(date);
 
-                //vec![(dirt_msg.into(), date)]
+                vec![(dirt_msg.into(), date)]
             }
             // Legacy MIDI-to-OSC mappings (consider removal/refinement)
             ConcreteEvent::MidiNote(note, vel, chan, _dur, _device_id) => {
                 vec![(OSCMessage {
                     addr: "/midi/noteon".to_string(),
                     args: vec![
-                        Argument::Int(note as i32),
-                        Argument::Int(vel as i32),
-                        Argument::Int(chan as i32),
+                        VariableValue::Integer(note as i64),
+                        VariableValue::Integer(vel as i64),
+                        VariableValue::Integer(chan as i64),
                     ],
                     timetag: Some(date)
                 }.into(), date)]
@@ -137,9 +129,9 @@ impl OSCMessage {
                 vec![(OSCMessage {
                     addr: "/midi/cc".to_string(),
                     args: vec![
-                        Argument::Int(control as i32),
-                        Argument::Int(value as i32),
-                        Argument::Int(chan as i32),
+                        VariableValue::Integer(control as i64),
+                        VariableValue::Integer(value as i64),
+                        VariableValue::Integer(chan as i64),
                     ],
                     timetag: Some(date)
                 }.into(), date)]
@@ -148,8 +140,8 @@ impl OSCMessage {
                 vec![(OSCMessage {
                     addr: "/midi/program".to_string(),
                     args: vec![
-                        Argument::Int(program as i32),
-                        Argument::Int(chan as i32),
+                        VariableValue::Integer(program as i64),
+                        VariableValue::Integer(chan as i64),
                     ],
                     timetag: Some(date)
                 }.into(), date)]

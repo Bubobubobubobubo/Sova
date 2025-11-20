@@ -2,13 +2,16 @@ use rosc::{OscBundle, OscMessage, OscPacket, OscTime, OscType};
 use std::fmt;
 use std::net::{SocketAddr, UdpSocket};
 
+use crate::clock::TimeSpan;
+use crate::lang::variable::VariableValue;
 use crate::protocol::error::ProtocolError;
+use crate::util::decimal_operations::float64_from_decimal;
 
 mod message;
 pub use message::*;
 
-mod argument;
-pub use argument::Argument;
+// mod argument;
+// pub use argument::Argument;
 
 pub struct OSCOut {
     /// User-defined name to identify this device.
@@ -65,14 +68,24 @@ impl OSCOut {
                 .into_iter()
                 .map(|arg| {
                     match arg {
-                        Argument::Int(i) => Ok(OscType::Int(i)),
-                        Argument::Float(f) => Ok(OscType::Float(f)),
-                        Argument::String(s) => Ok(OscType::String(s)),
-                        Argument::Blob(b) => Ok(OscType::Blob(b)),
-                        Argument::Timetag(t) => Ok(OscType::Time(OscTime {
-                            seconds: (t >> 32) as u32,
-                            fractional: (t & 0xFFFFFFFF) as u32,
-                        })),
+                        VariableValue::Integer(i) => Ok(OscType::Int(i as i32)),
+                        VariableValue::Float(f) => Ok(OscType::Float(f as f32)),
+                        VariableValue::Decimal(sign, num, den) => {
+                            let f = float64_from_decimal(sign, num, den);
+                            Ok(OscType::Float(f as f32))
+                        }
+                        VariableValue::Str(s) => Ok(OscType::String(s)),
+                        VariableValue::Blob(b) => Ok(OscType::Blob(b)),
+                        VariableValue::Dur(t) => {
+                            let TimeSpan::Micros(t) = t else {
+                                return Err(rosc::OscError::Unimplemented);
+                            };
+                            Ok(OscType::Time(OscTime {
+                                seconds: (t >> 32) as u32,
+                                fractional: (t & 0xFFFFFFFF) as u32,
+                            }))
+                        },
+                        _ => Err(rosc::OscError::Unimplemented)
                         // ... etc.
                     }
                 })

@@ -4,11 +4,11 @@ use bubo_engine::{registry::ModuleRegistry, server::ScheduledEngineMessage, type
 use crossbeam_channel::{Receiver, SendError, Sender};
 use serde::{Serialize, Deserialize};
 
-use crate::{clock::SyncTime, lang::event::ConcreteEvent, log_eprintln, protocol::{error::ProtocolError, osc::Argument, payload::ProtocolPayload}, LogMessage};
+use crate::{LogMessage, clock::SyncTime, lang::{event::ConcreteEvent, variable::VariableValue}, log_eprintln, protocol::{error::ProtocolError, payload::ProtocolPayload}};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AudioEnginePayload {
-    pub args: Vec<Argument>,
+    pub args: Vec<VariableValue>,
     pub timetag: Option<SyncTime>,
 }
 
@@ -102,10 +102,10 @@ impl AudioEngineProxy {
         
         for arg in payload.args {
             match arg {
-                Argument::String(s) => string_args.push(s.clone()),
-                Argument::Int(i) => string_args.push(i.to_string()),
-                Argument::Float(f) => string_args.push(f.to_string()),
-                Argument::Blob(_) | Argument::Timetag(_) => continue,
+                VariableValue::Str(s) => string_args.push(s.clone()),
+                VariableValue::Integer(i) => string_args.push(i.to_string()),
+                VariableValue::Float(f) => string_args.push(f.to_string()),
+                _ => continue,
             }
         }
         
