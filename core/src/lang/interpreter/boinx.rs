@@ -10,9 +10,11 @@ use crate::{
     scene::script::Script,
 };
 
-mod boinx_ast;
+mod ast;
+mod parser;
 
-use boinx_ast::*;
+use ast::*;
+use parser::*;
 
 pub struct BoinxLine {
     pub start_date: SyncTime,
@@ -140,6 +142,11 @@ impl InterpreterFactory for BoinxInterpreterFactory {
     }
 
     fn make_instance(&self, script: &Script) -> Result<Box<dyn Interpreter>, String> {
-        todo!()
+        match parse_boinx(script.content()) {
+            Ok(prog) => {
+                todo!()
+            }
+            Err(e) => Err(e.to_string())
+        }
     }
 }

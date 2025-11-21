@@ -30,7 +30,7 @@ impl Display for BoinxIdentQualif {
 }
 
 #[derive(Debug, Clone)]
-pub struct BoinxIdent(String, BoinxIdentQualif);
+pub struct BoinxIdent(pub String, pub BoinxIdentQualif);
 
 impl BoinxIdent {
     pub fn evaluate(&self, ctx: &EvaluationContext) -> BoinxItem {
@@ -196,6 +196,7 @@ pub enum BoinxItem {
     Arithmetic(Box<BoinxItem>, BoinxArithmeticOp, Box<BoinxItem>),
     WithDuration(Box<BoinxItem>, TimeSpan),
     External(Program),
+    Negative(Box<BoinxItem>),
 }
 
 impl BoinxItem {
@@ -354,6 +355,7 @@ impl BoinxItem {
             BoinxItem::Arithmetic(_, _, _) => 12,
             BoinxItem::WithDuration(_, _) => 13,
             BoinxItem::External(_) => 14,
+            BoinxItem::Negative(_) => 15,
         }
     }
 
@@ -408,6 +410,10 @@ impl From<BoinxItem> for VariableValue {
                 map.into()
             }
             BoinxItem::External(prog) => VariableValue::Func(prog),
+            BoinxItem::Negative(i) => {
+                map.insert("0".to_owned(), (*i).into());
+                map.into()
+            }
         }
     }
 }
@@ -495,6 +501,12 @@ impl From<VariableValue> for BoinxItem {
                             return BoinxItem::Mute;
                         };
                         BoinxItem::WithDuration(Box::new(item.into()), time_span)
+                    }
+                    15 => {
+                        let Some(item) = map.remove("0") else {
+                            return BoinxItem::Mute;
+                        };
+                        BoinxItem::Negative(Box::new(item.into()))
                     }
                     _ => BoinxItem::Mute,
                 }
@@ -599,9 +611,22 @@ impl BoinxCompo {
         next.flatten()
     }
 
+    pub fn chain(mut self, op: BoinxCompoOp, other: BoinxCompo) -> BoinxCompo {
+        let mut placeholder = &mut self.next;
+        while placeholder.is_some() {
+            placeholder = &mut placeholder.as_mut().unwrap().1.next;
+        }
+        *placeholder = Some((op, Box::new(other)));
+        self
+    }
+
     /// Evaluates the composition, then flattens it into a single item
     pub fn yield_item(&self, ctx: &EvaluationContext) -> BoinxItem {
         self.evaluate(ctx).flatten()
+    }
+
+    pub fn extract(self) -> BoinxItem {
+        self.item
     }
 
 }
@@ -636,6 +661,15 @@ impl From<BoinxCompo> for VariableValue {
             map.insert("_next".to_owned(), (*compo).into());
         };
         map.into()
+    }
+}
+
+impl From<BoinxItem> for BoinxCompo {
+    fn from(value: BoinxItem) -> Self {
+        BoinxCompo {
+            item: value,
+            next: None
+        }
     }
 }
 
@@ -753,7 +787,7 @@ impl From<BoinxStatement> for VariableValue {
 }
 
 #[derive(Debug, Clone, Default)]
-pub struct BoinxProg(Vec<BoinxStatement>);
+pub struct BoinxProg(pub Vec<BoinxStatement>);
 
 impl BoinxProg {
 

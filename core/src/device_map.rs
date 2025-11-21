@@ -417,13 +417,9 @@ impl DeviceMap {
             let is_connected = connected_map.contains_key(&name);
 
             // Extract address specifically for OSC devices using the provided reference
-            let address = if kind == DeviceKind::Osc {
-                device_ref_opt.and_then(|device| match device {
-                    ProtocolDevice::OSCOutDevice(osc_out) => Some(osc_out.address.to_string()),
-                    _ => None,
-                })
-            } else {
-                None
+            let address = match device_ref_opt {
+                Some(d) => Some(d.address()),
+                _ => None,
             };
 
             DeviceInfo {

@@ -26,7 +26,7 @@ note = ${ note_letter ~ (sharp | flat)* ~ int? ~ !letter }
 
 real = @{ int ~ "." ~ int }
 number = _{ real | int }
-micros = ${ number ~ "u" } 
+micros = ${ int ~ "u" } 
 semibeats = ${ number ~ "''" } 
 beats = ${ number ~ "'" } 
 
@@ -40,13 +40,23 @@ shr = { ">>" }
 pow = { "^" }
 
 bin_op = _{ add | sub | mul | div | rem | shl | shr | pow }
+
 minus = { "-" }
-comp_op = { "<" | "<=" | "==" | ">=" | ">" | "!=" }
+un_op = _{ minus }
+
+lt = { "<" }
+le = { "<=" }
+eq = { "==" }
+ge = { ">=" }
+gt = { ">" }
+neq = { "!=" }
+
+comp_op = _{ lt | le | eq | ge | gt | neq }
 
 name = { (letter | digit | "_")+ }
-ident = ${ !note ~ qualif? ~ name }
+ident = ${ !int ~ !note ~ qualif? ~ name }
 
-duration = { micros | semibeats | beats | real }
+duration = _{ micros | semibeats | beats }
 
 mute = { "_" }
 placeholder = { "." }
@@ -55,16 +65,17 @@ sub_prog = { "{" ~ block ~ "}" }
 cond = { item ~ comp_op ~ item }
 if_else = { cond_op ~ cond ~ sub_prog ~ else_op ~ sub_prog }
 el = _{ sub_prog | simul | seque | if_else | placeholder | stop | prev | note | duration | number | ident | mute }
-item = { minus? ~ el ~ (bin_op ~ item)? }
+
+item = _{ un_op? ~ el ~ (bin_op ~ item)? }
+
 seque = { "[" ~ item* ~ "]" }
-
 simul = { "(" ~ item* ~ ")" }
-atomic_compo = _{ seque | simul | item }
-compo = _{ atomic_compo ~ ( (compo_op | iter_op | each_op) ~ atomic_compo )* }
 
-dev = { (!":" ~ ANY)+ }
+compo = { item ~ ( (compo_op | iter_op | each_op) ~ item )* }
+
+dev = { !":" ~ (int | ident) }
 chan = { int | ident }
-target = _{ dev? ~ ":" ~ chan }
+target = _{ dev ~ (":" ~ chan)? }
 
 output = { compo ~ ("@" ~ target)? }
 assign = { ident ~ "=" ~ compo }
@@ -72,7 +83,7 @@ assign = { ident ~ "=" ~ compo }
 statement = _{ assign | output }
 block = _{ statement+ }
 
-prog = _{ SOI ~ block* ~ EOI }
+prog = _{ SOI ~ block? ~ EOI }
 
 /*
 Example track:
