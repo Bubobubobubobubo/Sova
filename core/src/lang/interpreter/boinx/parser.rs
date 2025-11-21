@@ -1,7 +1,7 @@
 use pest::{Parser, iterators::Pairs, pratt_parser::PrattParser};
 use pest_derive::Parser;
 
-use crate::{clock::TimeSpan, compiler::CompilationError, lang::interpreter::boinx::ast::{BoinxArithmeticOp, BoinxCompo, BoinxCompoOp, BoinxCondition, BoinxIdent, BoinxIdentQualif, BoinxItem, BoinxOutput, BoinxProg, BoinxStatement}};
+use crate::{clock::{SyncTime, TimeSpan}, compiler::CompilationError, lang::interpreter::boinx::ast::{BoinxArithmeticOp, BoinxCompo, BoinxCompoOp, BoinxCondition, BoinxIdent, BoinxIdentQualif, BoinxItem, BoinxOutput, BoinxProg, BoinxStatement}};
 
 #[derive(Parser)]
 #[grammar = "lang/interpreter/boinx/boinx.pest"]
@@ -102,13 +102,23 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
             Rule::ident => 
                 BoinxItem::Identity(parse_ident(primary.into_inner())).into(),
             Rule::micros => {
-                
-                BoinxItem::Duration(parse_duration(primary.into_inner())).into(),
+                let mut inner = primary.into_inner();
+                let inner = inner.next().unwrap();
+                let date = inner.as_str().parse::<SyncTime>().unwrap_or_default();
+                BoinxItem::Duration(TimeSpan::Micros(date)).into()
             }
-            Rule::semibeats => 
-                BoinxItem::Duration(parse_duration(primary.into_inner())).into(),
-            Rule::beats => 
-                BoinxItem::Duration(parse_duration(primary.into_inner())).into(),
+            Rule::semibeats => {
+                let mut inner = primary.into_inner();
+                let inner = inner.next().unwrap();
+                let ts = inner.as_str().parse::<f64>().unwrap_or_default();
+                BoinxItem::Duration(TimeSpan::Beats(ts / 2.0)).into()
+            }
+            Rule::beats => {
+                let mut inner = primary.into_inner();
+                let inner = inner.next().unwrap();
+                let ts = inner.as_str().parse::<f64>().unwrap_or_default();
+                BoinxItem::Duration(TimeSpan::Beats(ts)).into()
+            }
             Rule::mute => BoinxItem::Mute.into(),
             Rule::placeholder => BoinxItem::Placeholder.into(),
             Rule::sub_prog => {
@@ -128,13 +138,13 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
             },
             Rule::seque => {
                 let vec = primary.into_inner()
-                    .map(|p| parse_compo(Pairs::single(p)).extract())
+                    .map(|p| parse_compo(p.into_inner()).extract())
                     .collect();
                 BoinxItem::Sequence(vec).into()
             }
             Rule::simul => {
                 let vec = primary.into_inner()
-                    .map(|p| parse_compo(Pairs::single(p)).extract())
+                    .map(|p| parse_compo(p.into_inner()).extract())
                     .collect();
                 BoinxItem::Simultaneous(vec).into()
             }
@@ -202,7 +212,8 @@ fn parse_prog(pairs: Pairs<Rule>) -> BoinxProg {
                 let assign = BoinxStatement::Assign(ident, compo);
                 statements.push(assign);
             }
-            _ => unreachable!()
+            Rule::EOI => break,
+            rule => unreachable!("Unreachable expression: {rule:?}")
         }
     }
     BoinxProg(statements)

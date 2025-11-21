@@ -68,8 +68,10 @@ el = _{ sub_prog | simul | seque | if_else | placeholder | stop | prev | note | 
 
 item = _{ un_op? ~ el ~ (bin_op ~ item)? }
 
-seque = { "[" ~ item* ~ "]" }
-simul = { "(" ~ item* ~ ")" }
+li = { item }
+
+seque = { "[" ~ li* ~ "]" }
+simul = { "(" ~ li* ~ ")" }
 
 compo = { item ~ ( (compo_op | iter_op | each_op) ~ item )* }
 
@@ -93,15 +95,15 @@ chords = [ C4 A3 F3 G5 ]
 maj = (. .+4 .+7)
 min = (. .+3 .+7)
 
-chords ° [ maj min maj maj ] ~ [[. .] . [. .] .] @: 1
+chords ° [ maj min maj maj ] ~ [[. .] . [. .] .] @ v : 1
 
-chords ~ (. - 12) ~ [....] ° [....] @: 2
+chords ~ (. - 12) ~ [....] ° [....] @ a: 2
 
-kick = 1 snare = 2 hh = 3  
+kick = 1u snare = 2 hh = 3  
 
-kick | [ . _ ] @: 3
-snare | [ _ . ] @: 3
-hh | [....] @: 3
+kick | [ . _ ] @ c: 3
+snare | [ _ . ] 
+hh | [....] @ c
 
 after = [_ .] ° [. 1.0]
 
@@ -110,5 +112,6 @@ after = [_ .] ° [. 1.0]
 [ (C E G) D [ E E ] F ]
 
 (kick snare) ~ (. hh) ° [ . hh . hh . hh .  hh]
+
 
 */

@@ -16,6 +16,8 @@ mod parser;
 use ast::*;
 use parser::*;
 
+pub use parser::parse_boinx;
+
 pub struct BoinxLine {
     pub start_date: SyncTime,
     pub time_span: TimeSpan,
