@@ -103,6 +103,7 @@ impl BoinxLine {
 pub struct BoinxInterpreter {
     pub prog: BoinxProg,
     pub execution_lines: Vec<BoinxLine>,
+    pub started: bool
 }
 
 impl Interpreter for BoinxInterpreter {
@@ -110,6 +111,14 @@ impl Interpreter for BoinxInterpreter {
         &mut self,
         ctx: &mut EvaluationContext,
     ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+        if !self.started {
+            self.execution_lines = self.prog.start(
+                ctx.clock.micros(), 
+                TimeSpan::Beats(ctx.frame_len),
+                ctx
+            );
+            self.started = true;
+        }
         let mut new_lines = Vec::new();
         let mut event = None;
         let mut wait = NEVER;
@@ -135,6 +144,16 @@ impl Interpreter for BoinxInterpreter {
     }
 }
 
+impl From<BoinxProg> for BoinxInterpreter {
+    fn from(prog: BoinxProg) -> Self {
+        BoinxInterpreter {
+            prog,
+            execution_lines: Vec::new(),
+            started: false,
+        }
+    }
+}
+
 pub struct BoinxInterpreterFactory;
 
 impl InterpreterFactory for BoinxInterpreterFactory {
@@ -145,7 +164,7 @@ impl InterpreterFactory for BoinxInterpreterFactory {
     fn make_instance(&self, script: &Script) -> Result<Box<dyn Interpreter>, String> {
         match parse_boinx(script.content()) {
             Ok(prog) => {
-                todo!()
+                Ok(Box::new(BoinxInterpreter::from(prog)))
             }
             Err(e) => Err(e.to_string())
         }
