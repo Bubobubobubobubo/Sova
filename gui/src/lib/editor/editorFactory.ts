@@ -9,8 +9,9 @@ import { vim } from '@replit/codemirror-vim';
 import { emacs } from '@replit/codemirror-emacs';
 import { get } from 'svelte/store';
 import { editorConfig } from '$lib/stores/editorConfig';
-import { currentTheme } from '$lib/stores/themeStore';
+import { currentTheme, currentTransparency } from '$lib/stores/themeStore';
 import { createHighlightStyle } from '$lib/themes';
+import { hexToRgba } from '$lib/utils/colorUtils';
 import type { Theme } from '$lib/themes';
 import type { EditorConfig } from '$lib/stores/editorConfig';
 
@@ -38,12 +39,14 @@ function getKeymapExtension(mode: string) {
   }
 }
 
-function createEditorTheme(fontSize: number, cursorBlinkRate: number, theme: Theme) {
+function createEditorTheme(fontSize: number, cursorBlinkRate: number, theme: Theme, transparency: number) {
+  const alpha = transparency / 100;
+
   return EditorView.theme({
     '&': {
       height: '100%',
       fontSize: `${fontSize}px`,
-      backgroundColor: theme.editor.background,
+      backgroundColor: hexToRgba(theme.editor.background, alpha),
       color: theme.editor.foreground
     },
     '.cm-content': {
@@ -54,18 +57,18 @@ function createEditorTheme(fontSize: number, cursorBlinkRate: number, theme: The
       animationDuration: cursorBlinkRate === 0 ? '0s' : `${cursorBlinkRate}ms`
     },
     '&.cm-focused .cm-selectionBackground, ::selection': {
-      backgroundColor: theme.editor.selection
+      backgroundColor: hexToRgba(theme.editor.selection, alpha)
     },
     '.cm-activeLine': {
-      backgroundColor: theme.editor.activeLine
+      backgroundColor: hexToRgba(theme.editor.activeLine, alpha)
     },
     '.cm-gutters': {
-      backgroundColor: theme.editor.gutter,
+      backgroundColor: hexToRgba(theme.editor.gutter, alpha),
       color: theme.editor.gutterText,
       border: 'none'
     },
     '.cm-activeLineGutter': {
-      backgroundColor: theme.editor.activeLineGutter
+      backgroundColor: hexToRgba(theme.editor.activeLineGutter, alpha)
     },
     '.cm-lineNumbers .cm-gutterElement': {
       color: theme.editor.lineNumber
@@ -76,7 +79,7 @@ function createEditorTheme(fontSize: number, cursorBlinkRate: number, theme: The
   }, { dark: theme.name !== 'light' });
 }
 
-function buildExtensions(config: EditorConfig, theme: Theme, language: Extension, extraKeymaps: Extension[] = []) {
+function buildExtensions(config: EditorConfig, theme: Theme, transparency: number, language: Extension, extraKeymaps: Extension[] = []) {
   return [
     keymapCompartment.of(getKeymapExtension(config.mode)),
     ...extraKeymaps,
@@ -107,7 +110,7 @@ function buildExtensions(config: EditorConfig, theme: Theme, language: Extension
     foldGutterCompartment.of(config.fold_gutter ? foldGutter() : []),
     matchHighlightingCompartment.of(config.match_highlighting ? highlightSelectionMatches() : []),
     language,
-    themeCompartment.of(createEditorTheme(config.font_size, config.cursor_blink_rate, theme))
+    themeCompartment.of(createEditorTheme(config.font_size, config.cursor_blink_rate, theme, transparency))
   ];
 }
 
@@ -119,9 +122,11 @@ export function createEditor(
   theme: Theme,
   extraKeymaps: Extension[] = []
 ): EditorView {
+  const transparency = get(currentTransparency);
+
   const startState = EditorState.create({
     doc: initialDoc,
-    extensions: buildExtensions(config, theme, language, extraKeymaps)
+    extensions: buildExtensions(config, theme, transparency, language, extraKeymaps)
   });
 
   return new EditorView({
@@ -133,6 +138,7 @@ export function createEditor(
 export function createEditorSubscriptions(view: EditorView): () => void {
   let config: EditorConfig = get(editorConfig);
   let theme: Theme = get(currentTheme);
+  let transparency: number = get(currentTransparency);
 
   const unsubscribeConfig = editorConfig.subscribe((newConfig) => {
     if (!view) return;
@@ -141,7 +147,7 @@ export function createEditorSubscriptions(view: EditorView): () => void {
     view.dispatch({
       effects: [
         keymapCompartment.reconfigure(getKeymapExtension(newConfig.mode)),
-        themeCompartment.reconfigure(createEditorTheme(newConfig.font_size, newConfig.cursor_blink_rate, theme)),
+        themeCompartment.reconfigure(createEditorTheme(newConfig.font_size, newConfig.cursor_blink_rate, theme, transparency)),
         lineNumbersCompartment.reconfigure(newConfig.show_line_numbers ? lineNumbers() : []),
         lineWrappingCompartment.reconfigure(newConfig.line_wrapping ? EditorView.lineWrapping : []),
         highlightActiveLineCompartment.reconfigure(newConfig.highlight_active_line ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
@@ -163,8 +169,19 @@ export function createEditorSubscriptions(view: EditorView): () => void {
 
     view.dispatch({
       effects: [
-        themeCompartment.reconfigure(createEditorTheme(config.font_size, config.cursor_blink_rate, newTheme)),
+        themeCompartment.reconfigure(createEditorTheme(config.font_size, config.cursor_blink_rate, newTheme, transparency)),
         highlightCompartment.reconfigure(syntaxHighlighting(createHighlightStyle(newTheme)))
+      ]
+    });
+  });
+
+  const unsubscribeTransparency = currentTransparency.subscribe((newTransparency) => {
+    if (!view) return;
+    transparency = newTransparency;
+
+    view.dispatch({
+      effects: [
+        themeCompartment.reconfigure(createEditorTheme(config.font_size, config.cursor_blink_rate, theme, newTransparency))
       ]
     });
   });
@@ -172,5 +189,6 @@ export function createEditorSubscriptions(view: EditorView): () => void {
   return () => {
     unsubscribeConfig();
     unsubscribeTheme();
+    unsubscribeTransparency();
   };
 }

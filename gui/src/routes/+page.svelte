@@ -36,10 +36,12 @@
 </ThemeProvider>
 
 <style>
+  :global(html),
   :global(body) {
     margin: 0;
     padding: 0;
     overflow: hidden;
+    background-color: transparent;
   }
 
   .app {
@@ -47,7 +49,7 @@
     height: 100vh;
     display: flex;
     flex-direction: column;
-    background-color: var(--colors-background, #1e1e1e);
+    background-color: var(--colors-background);
     color: var(--colors-text, #ffffff);
   }
 

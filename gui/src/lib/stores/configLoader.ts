@@ -1,12 +1,13 @@
 import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { editorConfig, type EditorConfig } from './editorConfig';
-import { currentThemeName } from './themeStore';
+import { currentThemeName, currentTransparency } from './themeStore';
 
 interface Config {
   editor: EditorConfig;
   appearance: {
     theme: string;
+    transparency: number;
   };
 }
 
@@ -14,6 +15,7 @@ interface ConfigUpdateEvent {
   editor: EditorConfig;
   appearance: {
     theme: string;
+    transparency: number;
   };
 }
 
@@ -25,6 +27,7 @@ export async function initializeConfig(): Promise<void> {
 
     editorConfig.set(config.editor);
     currentThemeName.set(config.appearance.theme);
+    currentTransparency.set(config.appearance.transparency);
 
     console.log('Config loaded on startup:', config);
   } catch (error) {
@@ -39,6 +42,7 @@ export async function initializeConfig(): Promise<void> {
       console.log('Config updated via event:', event.payload);
       editorConfig.set(event.payload.editor);
       currentThemeName.set(event.payload.appearance.theme);
+      currentTransparency.set(event.payload.appearance.transparency);
     }
   );
 }

@@ -1,5 +1,6 @@
 <script lang="ts">
-  import { currentTheme } from '$lib/stores/themeStore';
+  import { currentTheme, currentTransparency } from '$lib/stores/themeStore';
+  import { hexToRgba } from '$lib/utils/colorUtils';
   import type { Snippet } from 'svelte';
 
   interface Props {
@@ -12,21 +13,29 @@
     return str.replace(/([a-z])([A-Z])/g, '$1-$2').toLowerCase();
   }
 
-  function flattenTheme(theme: any): Record<string, string> {
+  function flattenTheme(theme: any, transparency: number): Record<string, string> {
     const result: Record<string, string> = {};
+    const alpha = transparency / 100;
+
+    const backgroundKeys = ['background', 'surface', 'gutter', 'activeLineGutter', 'activeLine', 'selection'];
 
     for (const [section, values] of Object.entries(theme)) {
       if (section === 'name' || typeof values !== 'object') continue;
 
       for (const [key, value] of Object.entries(values as Record<string, string>)) {
-        result[`--${section}-${toKebabCase(key)}`] = value;
+        const cssKey = `--${section}-${toKebabCase(key)}`;
+        if (typeof value === 'string' && value.startsWith('#') && backgroundKeys.includes(key)) {
+          result[cssKey] = hexToRgba(value, alpha);
+        } else {
+          result[cssKey] = value;
+        }
       }
     }
 
     return result;
   }
 
-  const themeVars = $derived(flattenTheme($currentTheme));
+  const themeVars = $derived(flattenTheme($currentTheme, $currentTransparency));
 
   const styleString = $derived(
     Object.entries(themeVars)

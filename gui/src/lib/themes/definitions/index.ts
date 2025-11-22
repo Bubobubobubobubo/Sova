@@ -1,4 +1,24 @@
-// Auto-generated ghostty themes
+// Theme definitions
+import { light } from './light.js';
+import { blue } from './blue.js';
+import { monokai } from './monokai.js';
+import { monolight } from './monolight.js';
+import { monodark } from './monodark.js';
+import { hacker } from './hacker.js';
+import { dracula } from './dracula.js';
+import { nord } from './nord.js';
+import { darcula } from './darcula.js';
+import { bluescreen } from './bluescreen.js';
+import { gruvbox } from './gruvbox.js';
+import { solarizeddark } from './solarizeddark.js';
+import { solarizedlight } from './solarizedlight.js';
+import { tokyonight } from './tokyonight.js';
+import { catppuccin } from './catppuccin.js';
+import { ayumirage } from './ayumirage.js';
+import { onedarkpro } from './onedarkpro.js';
+import { nightowl } from './nightowl.js';
+import { materialdarker } from './materialdarker.js';
+import { georges } from './georges.js';
 import { _0x96f } from './0x96f.js';
 import { _12bitRainbow } from './12-bit-rainbow.js';
 import { _3024Day } from './3024-day.js';
@@ -434,7 +454,27 @@ import { iTerm2SolarizedLight } from './iterm2-solarized-light.js';
 import { iTerm2TangoDark } from './iterm2-tango-dark.js';
 import { iTerm2TangoLight } from './iterm2-tango-light.js';
 
-export const ghosttyThemes = {
+export const themes = {
+  light,
+  blue,
+  monokai,
+  monolight,
+  monodark,
+  hacker,
+  dracula,
+  nord,
+  darcula,
+  bluescreen,
+  gruvbox,
+  solarizeddark,
+  solarizedlight,
+  tokyonight,
+  catppuccin,
+  ayumirage,
+  onedarkpro,
+  nightowl,
+  materialdarker,
+  georges,
   '0x96f': _0x96f,
   '12-bit-rainbow': _12bitRainbow,
   '3024-day': _3024Day,

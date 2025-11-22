@@ -26,6 +26,7 @@ impl Default for AppearanceConfig {
     fn default() -> Self {
         Self {
             theme: "monokai".to_string(),
+            transparency: 100,
         }
     }
 }

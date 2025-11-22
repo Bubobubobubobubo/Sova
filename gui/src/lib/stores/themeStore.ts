@@ -3,6 +3,7 @@ import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { themes, type Theme } from '$lib/themes';
 
 export const currentThemeName: Writable<string> = writable('monokai');
+export const currentTransparency: Writable<number> = writable(100);
 
 export const currentTheme: Readable<Theme> = derived(currentThemeName, ($name) => {
   const theme = themes[$name];
