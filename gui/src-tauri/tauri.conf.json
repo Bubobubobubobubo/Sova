@@ -1,19 +1,18 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "sova-gui",
+  "productName": "gui",
   "version": "0.1.0",
-  "identifier": "com.sova-gui.app",
+  "identifier": "sovagui",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "pnpm build",
-    "frontendDist": "../dist"
+    "frontendDist": "../build"
   },
   "app": {
     "windows": [
       {
-        "label": "main",
-        "title": "sova-gui",
+        "title": "gui",
         "width": 800,
         "height": 600
       }

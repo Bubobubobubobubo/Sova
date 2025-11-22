@@ -1,0 +1,58 @@
+use super::types::{AppearanceConfig, Config, EditorConfig};
+
+pub trait Validate {
+    fn validate(&mut self);
+}
+
+impl Validate for EditorConfig {
+    fn validate(&mut self) {
+        if self.font_size < 8.0 || self.font_size > 32.0 {
+            eprintln!(
+                "Invalid font_size: {}. Using default: 14.0",
+                self.font_size
+            );
+            self.font_size = 14.0;
+        }
+
+        if self.tab_size < 1 || self.tab_size > 16 {
+            eprintln!(
+                "Invalid tab_size: {}. Using default: 4",
+                self.tab_size
+            );
+            self.tab_size = 4;
+        }
+
+        if self.cursor_blink_rate > 3000 {
+            eprintln!(
+                "Invalid cursor_blink_rate: {}. Using default: 1200",
+                self.cursor_blink_rate
+            );
+            self.cursor_blink_rate = 1200;
+        }
+
+        if !self.indent_unit.chars().all(char::is_whitespace) || self.indent_unit.is_empty() {
+            eprintln!("Invalid indent_unit. Using default: two spaces");
+            self.indent_unit = "  ".to_string();
+        }
+
+        if self.use_tabs {
+            self.indent_unit = "\t".to_string();
+        }
+    }
+}
+
+impl Validate for AppearanceConfig {
+    fn validate(&mut self) {
+        if self.theme.trim().is_empty() {
+            eprintln!("Invalid theme: empty string. Using default: monokai");
+            self.theme = "monokai".to_string();
+        }
+    }
+}
+
+impl Validate for Config {
+    fn validate(&mut self) {
+        self.editor.validate();
+        self.appearance.validate();
+    }
+}

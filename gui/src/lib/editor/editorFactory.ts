@@ -1,0 +1,176 @@
+import { EditorView, lineNumbers, highlightActiveLineGutter, highlightSpecialChars, drawSelection, dropCursor, rectangularSelection, crosshairCursor, highlightActiveLine, keymap } from '@codemirror/view';
+import { EditorState, Compartment, type Extension } from '@codemirror/state';
+import { history, defaultKeymap, historyKeymap } from '@codemirror/commands';
+import { syntaxHighlighting, foldGutter, indentOnInput, bracketMatching, foldKeymap, indentUnit } from '@codemirror/language';
+import { autocompletion, completionKeymap, closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
+import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
+import { lintKeymap } from '@codemirror/lint';
+import { vim } from '@replit/codemirror-vim';
+import { emacs } from '@replit/codemirror-emacs';
+import { get } from 'svelte/store';
+import { editorConfig } from '$lib/stores/editorConfig';
+import { currentTheme } from '$lib/stores/themeStore';
+import { createHighlightStyle } from '$lib/themes';
+import type { Theme } from '$lib/themes';
+import type { EditorConfig } from '$lib/stores/editorConfig';
+
+const keymapCompartment = new Compartment();
+const themeCompartment = new Compartment();
+const highlightCompartment = new Compartment();
+const lineNumbersCompartment = new Compartment();
+const lineWrappingCompartment = new Compartment();
+const highlightActiveLineCompartment = new Compartment();
+const tabSizeCompartment = new Compartment();
+const indentUnitCompartment = new Compartment();
+const closeBracketsCompartment = new Compartment();
+const bracketMatchingCompartment = new Compartment();
+const autocompletionCompartment = new Compartment();
+const rectangularSelectionCompartment = new Compartment();
+const foldGutterCompartment = new Compartment();
+const matchHighlightingCompartment = new Compartment();
+
+function getKeymapExtension(mode: string) {
+  switch (mode) {
+    case 'vim': return vim();
+    case 'emacs': return emacs();
+    case 'normal': return [];
+    default: return [];
+  }
+}
+
+function createEditorTheme(fontSize: number, cursorBlinkRate: number, theme: Theme) {
+  return EditorView.theme({
+    '&': {
+      height: '100%',
+      fontSize: `${fontSize}px`,
+      backgroundColor: theme.editor.background,
+      color: theme.editor.foreground
+    },
+    '.cm-content': {
+      caretColor: theme.editor.caret
+    },
+    '.cm-cursor, .cm-dropCursor': {
+      borderLeftColor: theme.editor.caret,
+      animationDuration: cursorBlinkRate === 0 ? '0s' : `${cursorBlinkRate}ms`
+    },
+    '&.cm-focused .cm-selectionBackground, ::selection': {
+      backgroundColor: theme.editor.selection
+    },
+    '.cm-activeLine': {
+      backgroundColor: theme.editor.activeLine
+    },
+    '.cm-gutters': {
+      backgroundColor: theme.editor.gutter,
+      color: theme.editor.gutterText,
+      border: 'none'
+    },
+    '.cm-activeLineGutter': {
+      backgroundColor: theme.editor.activeLineGutter
+    },
+    '.cm-lineNumbers .cm-gutterElement': {
+      color: theme.editor.lineNumber
+    },
+    '.cm-scroller': {
+      overflow: 'auto'
+    }
+  }, { dark: theme.name !== 'light' });
+}
+
+function buildExtensions(config: EditorConfig, theme: Theme, language: Extension, extraKeymaps: Extension[] = []) {
+  return [
+    keymapCompartment.of(getKeymapExtension(config.mode)),
+    ...extraKeymaps,
+    keymap.of([
+      ...closeBracketsKeymap,
+      ...defaultKeymap,
+      ...searchKeymap,
+      ...historyKeymap,
+      ...foldKeymap,
+      ...completionKeymap,
+      ...lintKeymap
+    ]),
+    history(),
+    drawSelection(),
+    dropCursor(),
+    indentOnInput(),
+    highlightCompartment.of(syntaxHighlighting(createHighlightStyle(theme))),
+    highlightSpecialChars(),
+    lineNumbersCompartment.of(config.show_line_numbers ? lineNumbers() : []),
+    lineWrappingCompartment.of(config.line_wrapping ? EditorView.lineWrapping : []),
+    highlightActiveLineCompartment.of(config.highlight_active_line ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
+    tabSizeCompartment.of(EditorState.tabSize.of(config.tab_size)),
+    indentUnitCompartment.of(indentUnit.of(config.indent_unit)),
+    closeBracketsCompartment.of(config.close_brackets ? closeBrackets() : []),
+    bracketMatchingCompartment.of(config.bracket_matching ? bracketMatching() : []),
+    autocompletionCompartment.of(config.autocomplete ? autocompletion() : []),
+    rectangularSelectionCompartment.of(config.rectangular_selection ? [rectangularSelection(), crosshairCursor()] : []),
+    foldGutterCompartment.of(config.fold_gutter ? foldGutter() : []),
+    matchHighlightingCompartment.of(config.match_highlighting ? highlightSelectionMatches() : []),
+    language,
+    themeCompartment.of(createEditorTheme(config.font_size, config.cursor_blink_rate, theme))
+  ];
+}
+
+export function createEditor(
+  container: HTMLElement,
+  initialDoc: string,
+  language: Extension,
+  config: EditorConfig,
+  theme: Theme,
+  extraKeymaps: Extension[] = []
+): EditorView {
+  const startState = EditorState.create({
+    doc: initialDoc,
+    extensions: buildExtensions(config, theme, language, extraKeymaps)
+  });
+
+  return new EditorView({
+    state: startState,
+    parent: container
+  });
+}
+
+export function createEditorSubscriptions(view: EditorView): () => void {
+  let config: EditorConfig = get(editorConfig);
+  let theme: Theme = get(currentTheme);
+
+  const unsubscribeConfig = editorConfig.subscribe((newConfig) => {
+    if (!view) return;
+    config = newConfig;
+
+    view.dispatch({
+      effects: [
+        keymapCompartment.reconfigure(getKeymapExtension(newConfig.mode)),
+        themeCompartment.reconfigure(createEditorTheme(newConfig.font_size, newConfig.cursor_blink_rate, theme)),
+        lineNumbersCompartment.reconfigure(newConfig.show_line_numbers ? lineNumbers() : []),
+        lineWrappingCompartment.reconfigure(newConfig.line_wrapping ? EditorView.lineWrapping : []),
+        highlightActiveLineCompartment.reconfigure(newConfig.highlight_active_line ? [highlightActiveLine(), highlightActiveLineGutter()] : []),
+        tabSizeCompartment.reconfigure(EditorState.tabSize.of(newConfig.tab_size)),
+        indentUnitCompartment.reconfigure(indentUnit.of(newConfig.indent_unit)),
+        closeBracketsCompartment.reconfigure(newConfig.close_brackets ? closeBrackets() : []),
+        bracketMatchingCompartment.reconfigure(newConfig.bracket_matching ? bracketMatching() : []),
+        autocompletionCompartment.reconfigure(newConfig.autocomplete ? autocompletion() : []),
+        rectangularSelectionCompartment.reconfigure(newConfig.rectangular_selection ? [rectangularSelection(), crosshairCursor()] : []),
+        foldGutterCompartment.reconfigure(newConfig.fold_gutter ? foldGutter() : []),
+        matchHighlightingCompartment.reconfigure(newConfig.match_highlighting ? highlightSelectionMatches() : [])
+      ]
+    });
+  });
+
+  const unsubscribeTheme = currentTheme.subscribe((newTheme) => {
+    if (!view) return;
+    theme = newTheme;
+
+    view.dispatch({
+      effects: [
+        themeCompartment.reconfigure(createEditorTheme(config.font_size, config.cursor_blink_rate, newTheme)),
+        highlightCompartment.reconfigure(syntaxHighlighting(createHighlightStyle(newTheme)))
+      ]
+    });
+  });
+
+  return () => {
+    unsubscribeConfig();
+    unsubscribeTheme();
+  };
+}
