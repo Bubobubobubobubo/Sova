@@ -10,7 +10,6 @@ import { HelpView } from '../docs/HelpView';
 import { SovaClient } from '../../client';
 import { sceneStore } from '../../stores/scene/sceneData';
 import { peersStore, scriptEditorStore, updateGridSelection } from '../../stores/scene/sceneUI';
-import { setScriptLanguage } from '../../stores/scene/sceneOperations';
 import { handleServerMessage } from '../../stores/messageHandler';
 import { clearLogs } from '../../stores/logs';
 import { updateConnectionState } from '../../stores/connection/connection';
@@ -22,6 +21,7 @@ import { ResizeHandle } from '../ui/ResizeHandle';
 import { SplitResizeHandle } from '../ui/SplitResizeHandle';
 import { useStore } from '@nanostores/react';
 import { layoutStore, getSplitRatio } from '../../stores/ui/preferences';
+import { defaultFrame } from '../../types/frame';
 
 export const MainLayout: React.FC = () => {
   const [isConnected, setIsConnected] = useState(false);
@@ -140,7 +140,7 @@ export const MainLayout: React.FC = () => {
         // Request script content for the first frame
         const handleFirstFrameSelection = async () => {
           try {
-            await client.sendMessage({ GetScript: [0, 0] });
+            await client.sendMessage({ GetFrame: [0, 0] });
           } catch (error) {
             console.error('Failed to auto-select first frame:', error);
           }
@@ -216,14 +216,15 @@ export const MainLayout: React.FC = () => {
     };
   }, [client, isConnected]);
   
-  // Get current language from the selected frame
-  const currentLanguage = (() => {
-    if (!scene || !scriptEditor.selectedFrame) return 'bali';
+  // Get current selected frame
+  const currentFrame = (() => {
+    if (!scene || !scriptEditor.selectedFrame) return defaultFrame();
     const { line_idx, frame_idx } = scriptEditor.selectedFrame;
     const line = scene.lines[line_idx];
-    if (!line) return 'bali';
-    const script = line.frames[frame_idx]?.script;
-    return script?.lang || 'bali';
+    if (!line) return defaultFrame();
+    const frame = line.frames[frame_idx];
+    if (!frame) return defaultFrame();
+    return frame;
   })();
   
   const handleEvaluateScript = async () => {
@@ -234,8 +235,10 @@ export const MainLayout: React.FC = () => {
     
     const { line_idx, frame_idx } = scriptEditor.selectedFrame;
     try {
+      const newFrame = structuredClone(currentFrame);
+      newFrame.script.content = editorContent;
       await client.sendMessage({
-        SetScript: [line_idx, frame_idx, editorContent, "Immediate"]
+        SetFrames: [[[line_idx, frame_idx, newFrame]], "Immediate"]
       });
       
       // Don't show intermediate message - wait for actual compilation result
@@ -254,11 +257,13 @@ export const MainLayout: React.FC = () => {
 
   const handleLanguageChange = async (language: string) => {
     if (!client || !scriptEditor.selectedFrame) return;
-    
+    const newFrame = structuredClone(currentFrame);
+    newFrame.script.lang = language;
     const { line_idx, frame_idx } = scriptEditor.selectedFrame;
     try {
-      const message = setScriptLanguage(line_idx, frame_idx, language);
-      await client.sendMessage(message);
+      await client.sendMessage({
+        SetFrames: [[[line_idx, frame_idx, newFrame]], "Immediate"]
+      });
     } catch (error) {
       console.error('Failed to set script language:', error);
     }
@@ -328,7 +333,7 @@ export const MainLayout: React.FC = () => {
                 className="flex-1"
                 onEvaluate={handleEvaluateScript}
                 showEvaluateButton={!!scriptEditor.selectedFrame}
-                language={currentLanguage}
+                language={currentFrame.script.lang}
                 availableLanguages={getAvailableLanguages()}
                 onLanguageChange={handleLanguageChange}
               />

@@ -34,11 +34,31 @@ pub enum ConcreteEvent {
         message: OSCMessage,
         device_id: usize,
     },
-    AudioEngine {
-        args: Vec<Argument>,
-        device_id: usize,
-    },
     StartProgram(Program)
+}
+
+impl ConcreteEvent {
+    pub fn device_id(&self) -> usize {
+        match self {
+            ConcreteEvent::MidiNote(_, _, _, _, device_id) 
+            | ConcreteEvent::MidiControl(_, _, _, device_id) 
+            | ConcreteEvent::MidiProgram(_, _, device_id) 
+            | ConcreteEvent::MidiAftertouch(_, _, _, device_id) 
+            | ConcreteEvent::MidiChannelPressure(_, _, device_id) 
+            | ConcreteEvent::MidiSystemExclusive(_, device_id) 
+            | ConcreteEvent::MidiStart(device_id) 
+            | ConcreteEvent::MidiStop(device_id) 
+            | ConcreteEvent::MidiReset(device_id) 
+            | ConcreteEvent::MidiContinue(device_id) 
+            | ConcreteEvent::MidiClock(device_id) 
+            | ConcreteEvent::Dirt { args: _, device_id } 
+            | ConcreteEvent::Osc { message: _, device_id } 
+                => *device_id,
+            ConcreteEvent::Nop 
+            | ConcreteEvent::StartProgram(_) 
+                => usize::MAX,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -67,11 +87,6 @@ pub enum Event {
         args: Vec<Variable>,
         device_id: Variable,
     },
-    AudioEngine {
-        source: Variable,
-        params: HashMap<String, Variable>,
-        device_id: Variable,
-    },
     StartProgram(Variable)
 }
 
@@ -80,72 +95,72 @@ impl Event {
         match &self {
             Event::Nop => ConcreteEvent::Nop,
             Event::MidiNote(note, vel, chan, time, dev) => {
-                let note = ctx.evaluate(note).as_integer(ctx.clock, ctx.frame_len()) as u64;
+                let note = ctx.evaluate(note).as_integer(ctx.clock, ctx.frame_len) as u64;
                 let time = ctx
                     .evaluate(time)
                     .as_dur()
-                    .as_micros(ctx.clock, ctx.frame_len());
-                let chan = ctx.evaluate(chan).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let vel = ctx.evaluate(vel).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                    .as_micros(ctx.clock, ctx.frame_len);
+                let chan = ctx.evaluate(chan).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let vel = ctx.evaluate(vel).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiNote(note, vel, chan, time, dev_id)
             }
             Event::MidiControl(control, value, channel, dev) => {
-                let control = ctx.evaluate(control).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let value = ctx.evaluate(value).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let control = ctx.evaluate(control).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let value = ctx.evaluate(value).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiControl(control, value, channel, dev_id)
             }
             Event::MidiProgram(program, channel, dev) => {
-                let program = ctx.evaluate(program).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let program = ctx.evaluate(program).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiProgram(program, channel, dev_id)
             }
             Event::MidiAftertouch(note, pressure, channel, dev) => {
-                let note = ctx.evaluate(note).as_integer(ctx.clock, ctx.frame_len()) as u64;
+                let note = ctx.evaluate(note).as_integer(ctx.clock, ctx.frame_len) as u64;
                 let pressure = ctx
                     .evaluate(pressure)
-                    .as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                    .as_integer(ctx.clock, ctx.frame_len) as u64;
+                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len) as u64;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiAftertouch(note, pressure, channel, dev_id)
             }
             Event::MidiChannelPressure(pressure, channel, dev) => {
-                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len()) as u64;
+                let channel = ctx.evaluate(channel).as_integer(ctx.clock, ctx.frame_len) as u64;
                 let pressure = ctx
                     .evaluate(pressure)
-                    .as_integer(ctx.clock, ctx.frame_len()) as u64;
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                    .as_integer(ctx.clock, ctx.frame_len) as u64;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiChannelPressure(pressure, channel, dev_id)
             }
             Event::MidiSystemExclusive(data, dev) => {
                 let d: Vec<u64> = data
                     .iter()
-                    .map(|v| ctx.evaluate(v).as_integer(ctx.clock, ctx.frame_len()) as u64)
+                    .map(|v| ctx.evaluate(v).as_integer(ctx.clock, ctx.frame_len) as u64)
                     .collect();
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiSystemExclusive(d, dev_id)
             }
             Event::MidiStart(dev) => {
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiStart(dev_id)
             }
             Event::MidiStop(dev) => {
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiStop(dev_id)
             }
             Event::MidiReset(dev) => {
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiReset(dev_id)
             }
             Event::MidiContinue(dev) => {
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiContinue(dev_id)
             }
             Event::MidiClock(dev) => {
-                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len()) as usize;
+                let dev_id = ctx.evaluate(dev).as_integer(ctx.clock, ctx.frame_len) as usize;
                 ConcreteEvent::MidiClock(dev_id)
             }
             Event::Dirt {
@@ -156,7 +171,7 @@ impl Event {
                 // get device
                 let device_id =
                     ctx.evaluate(device_id)
-                        .as_integer(ctx.clock, ctx.frame_len()) as usize;
+                        .as_integer(ctx.clock, ctx.frame_len) as usize;
 
                 // get args
                 let mut args = Vec::new();
@@ -206,8 +221,8 @@ impl Event {
             } => {
                 let dev_id = ctx
                     .evaluate(device_id)
-                    .as_integer(ctx.clock, ctx.frame_len()) as usize;
-                let addr = ctx.evaluate(addr).as_str(ctx.clock, ctx.frame_len());
+                    .as_integer(ctx.clock, ctx.frame_len) as usize;
+                let addr = ctx.evaluate(addr).as_str(ctx.clock, ctx.frame_len);
                 let mut osc_args = Vec::new();
                 for arg in args.iter() {
                     let arg = ctx.evaluate(arg);
@@ -222,63 +237,12 @@ impl Event {
                     };
                     osc_args.push(arg);
                 }
-                let message = OSCMessage {
-                    addr,
-                    args: osc_args,
-                };
+                let message = OSCMessage::new(addr, osc_args);
                 ConcreteEvent::Osc {
                     message,
                     device_id: dev_id,
                 }
             }
-            Event::AudioEngine {
-                source,
-                params,
-                device_id,
-            } => {
-                let device_id =
-                    ctx.evaluate(device_id)
-                        .as_integer(ctx.clock, ctx.frame_len()) as usize;
-                let mut args = Vec::new();
-
-                // Add source as first argument (like Dirt)
-                args.push(Argument::String("s".to_string()));
-                let source = ctx.evaluate(source);
-                let source = match source {
-                    VariableValue::Integer(i) => Argument::Int(i as i32),
-                    VariableValue::Float(f) => Argument::Float(f as f32),
-                    VariableValue::Decimal(sig, num, den) => {
-                        Argument::Float(float64_from_decimal(sig, num, den) as f32)
-                    }
-                    VariableValue::Str(s) => Argument::String(s),
-                    _ => Argument::String("unknown".to_string()),
-                };
-                args.push(source);
-
-                // Add all parameters generically (like Dirt)
-                for (key, value) in params {
-                    args.push(Argument::String(key.clone()));
-                    let param_arg = match ctx.evaluate(value) {
-                        VariableValue::Integer(i) => Argument::Int(i as i32),
-                        VariableValue::Float(f) => Argument::Float(f as f32),
-                        VariableValue::Decimal(sig, num, den) => {
-                            Argument::Float(float64_from_decimal(sig, num, den) as f32)
-                        }
-                        VariableValue::Str(s) => Argument::String(s),
-                        VariableValue::Bool(b) => Argument::Int(if b { 1 } else { 0 }),
-                        _ => {
-                            log_eprintln!(
-                                "[WARN] AudioEngine to Args: Unsupported param type {:?} for key '{}'. Sending Int 0.",
-                                value, key
-                            );
-                            Argument::Int(0)
-                        }
-                    };
-                    args.push(param_arg);
-                }
-
-                ConcreteEvent::AudioEngine { args, device_id }
-            },
             Event::StartProgram(var) => {
                 if let VariableValue::Func(fun) = ctx.evaluate(var) {
                     ConcreteEvent::StartProgram(fun)

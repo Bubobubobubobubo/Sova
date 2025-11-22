@@ -8,7 +8,7 @@ use sovalib::protocol::midi::{MidiInterface, MidiOut};
 use sovalib::scene::{Scene, line::Line};
 use sovalib::schedule::{
     Scheduler, action_timing::ActionTiming, message::SchedulerMessage,
-    notification::SchedulerNotification,
+    notification::SovaNotification,
 };
 use sovalib::server::{
     SovaCoreServer, ServerState,
@@ -64,7 +64,7 @@ async fn main() {
         shared_atomic_is_playing.clone(),
     );
 
-    let (updater, update_notifier) = watch::channel(SchedulerNotification::default());
+    let (updater, update_notifier) = watch::channel(SovaNotification::default());
     let initial_scene = Scene::new(vec![Line::new(vec![4.0])]);
     let scene_image: Arc<Mutex<Scene>> = Arc::new(Mutex::new(initial_scene.clone()));
     let scene_image_maintainer = Arc::clone(&scene_image);
@@ -88,33 +88,33 @@ async fn main() {
                 Ok(p) => {
                     let mut guard = scene_image_maintainer.blocking_lock();
                     match &p {
-                        SchedulerNotification::UpdatedScene(scene) => {
+                        SovaNotification::UpdatedScene(scene) => {
                             *guard = scene.clone();
                         }
-                        SchedulerNotification::UpdatedLine(i, line) => {
+                        SovaNotification::UpdatedLine(i, line) => {
                             *guard.line_mut(*i) = line.clone()
                         }
-                        SchedulerNotification::FramePositionChanged(_positions) => {
+                        SovaNotification::FramePositionChanged(_positions) => {
                             // No update to scene_image needed for this notification
                         }
-                        SchedulerNotification::EnableFrames(line_index, frame_indices) => {
+                        SovaNotification::EnableFrames(line_index, frame_indices) => {
                             guard.line_mut(*line_index).enable_frames(frame_indices);
                         }
-                        SchedulerNotification::DisableFrames(line_index, frame_indices) => {
+                        SovaNotification::DisableFrames(line_index, frame_indices) => {
                             guard.line_mut(*line_index).disable_frames(frame_indices);
                         }
-                        SchedulerNotification::UploadedScript(_, _, _script) => { /* guard.line_mut...set_script...? */
+                        SovaNotification::UploadedScript(_, _, _script) => { /* guard.line_mut...set_script...? */
                         }
-                        SchedulerNotification::UpdatedLineFrames(line_index, items) => {
+                        SovaNotification::UpdatedLineFrames(line_index, items) => {
                             guard.line_mut(*line_index).set_frames(items.clone());
                         }
-                        SchedulerNotification::AddedLine(line) => {
+                        SovaNotification::AddedLine(line) => {
                             guard.add_line(line.clone());
                         }
-                        SchedulerNotification::RemovedLine(index) => {
+                        SovaNotification::RemovedLine(index) => {
                             guard.remove_line(*index);
                         }
-                        SchedulerNotification::SceneLengthChanged(length) => {
+                        SovaNotification::SceneLengthChanged(length) => {
                             guard.set_length(*length);
                         }
                         _ => (),

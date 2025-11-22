@@ -1,3 +1,9 @@
 [workspace]
-members = ["core", "engine", "relay", "gui/src-tauri"]
+members = [
+    "core",
+    "engine",
+    "relay",
+    "gui/src-tauri",
+    "solo-tui",
+]
 resolver = "3"

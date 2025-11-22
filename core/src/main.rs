@@ -1,9 +1,13 @@
 use crate::clock::ClockServer;
+use crate::compiler::ExternalCompiler;
 use crate::compiler::{bali::BaliCompiler, dummylang::DummyCompiler};
+use crate::lang::interpreter::boinx::BoinxInterpreterFactory;
+use crate::lang::interpreter::external::ExternalInterpreterFactory;
 use crate::lang::interpreter::InterpreterDirectory;
-use crate::scene::script::Script;
-use crate::schedule::notification::SchedulerNotification;
-use crate::server::client::ClientMessage;
+use crate::lang::LanguageCenter;
+use crate::logger::get_logger;
+use crate::protocol::audio_engine_proxy::AudioEngineProxy;
+use crate::schedule::ActionTiming;
 // TimingConfig import removed for now
 use sova_engine::{
     engine::AudioEngine,
@@ -17,14 +21,13 @@ use crossbeam_channel::bounded;
 use device_map::DeviceMap;
 use scene::Scene;
 use scene::Line;
-use schedule::{Scheduler, message::SchedulerMessage};
+use schedule::SchedulerMessage;
 use server::{SovaCoreServer, ServerState};
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::{sync::Arc, thread};
 use tokio::sync::Mutex;
-use transcoder::Transcoder;
-use world::World;
+use lang::Transcoder;
 
 // Déclaration des modules
 pub mod clock;
@@ -33,14 +36,14 @@ pub mod device_map;
 pub mod lang;
 pub mod logger;
 pub mod protocol;
-pub mod relay_client;
 pub mod scene;
 pub mod schedule;
 pub mod server;
-pub mod shared_types;
-pub mod transcoder;
 pub mod util;
 pub mod world;
+pub mod init;
+
+pub use protocol::log::{LogMessage, Severity};
 
 pub const DEFAULT_MIDI_OUTPUT: &str = "Sova";
 pub const DEFAULT_TEMPO: f64 = 120.0;
@@ -245,18 +248,6 @@ struct Cli {
     /// List available audio output devices and exit
     #[arg(long)]
     list_devices: bool,
-
-    /// Connect to relay server for remote collaboration
-    #[arg(long, value_name = "RELAY_ADDRESS:PORT")]
-    relay: Option<String>,
-
-    /// Instance name for relay identification
-    #[arg(long, value_name = "INSTANCE_NAME", default_value = "local")]
-    instance_name: String,
-
-    /// Authentication token for relay server (optional)
-    #[arg(long, value_name = "TOKEN")]
-    relay_token: Option<String>,
 }
 
 #[tokio::main]
@@ -271,10 +262,10 @@ async fn main() {
 
     // Set up notification channel and switch to full mode IMMEDIATELY
     // This ensures ALL logs (including startup) reach file, terminal, and clients
-    let (updater, update_notifier) = tokio::sync::watch::channel(
-        crate::schedule::notification::SchedulerNotification::default(),
+    let (update_sender, update_receiver) = tokio::sync::watch::channel(
+        crate::schedule::SovaNotification::default(),
     );
-    crate::logger::set_full_mode(updater.clone());
+    crate::logger::set_full_mode(update_sender.clone());
 
     // Test log to verify full mode works
     log_info!("Logger initialized in full mode - all logs will reach file, terminal, and clients");
@@ -342,327 +333,80 @@ async fn main() {
     }
 
     // ======================================================================
-    // Create module registry for both audio engine and world
-    let mut registry = ModuleRegistry::new();
-    registry.register_default_modules();
-
+    
     // Conditionally initialize audio engine (Sova)
-    let (audio_engine_components, registry_for_world, osc_shutdown_flag, engine_log_rx) =
+    let (audio_engine_components, osc_shutdown_flag) =
         if cli.audio_engine {
+            let mut registry = ModuleRegistry::new();
+            registry.register_default_modules();
             let osc_shutdown = Arc::new(AtomicBool::new(false));
             let (tx, thread_handle, registry_clone, log_rx) =
                 initialize_sova_engine(&cli, registry, osc_shutdown.clone());
+            let mut proxy = AudioEngineProxy::new(tx.clone(), registry_clone);
+            proxy.log_callback(log_rx, |msg| {
+                get_logger().log_message(msg);
+            });
+            let _ = devices.connect_audio_engine("SovaEngine", proxy);
             (
                 Some((tx, thread_handle)),
-                registry_clone,
                 Some(osc_shutdown),
-                Some(log_rx),
             )
         } else {
-            (None, registry, None, None)
+            (None, None)
         };
-
-    // ======================================================================
-    // Notification channels already created early for immediate dual mode logging
-
-    // ======================================================================
-    // Initialize the world (side effect performer)
-    let audio_engine_tx = audio_engine_components.as_ref().map(|(tx, _)| tx.clone());
-    let (world_handle, world_iface) = World::create(
-        clock_server.clone(),
-        audio_engine_tx,
-        registry_for_world,
-        engine_log_rx,
-        Some(updater.clone()),
-    );
-
-    // ======================================================================
-    // Extract status receiver and start monitoring thread if audio engine is enabled
-    let audio_engine_components = if let Some((tx, thread_handle)) = audio_engine_components {
-        Some((tx, thread_handle))
-    } else {
-        None
-    };
 
     // ======================================================================
     // Initialize the transcoder (list of available compilers) and interpreter directory
     let mut transcoder = Transcoder::default();
     transcoder.add_compiler(BaliCompiler);
     transcoder.add_compiler(DummyCompiler);
-    let _ = transcoder.set_active_compiler("bali");
-    let transcoder = Arc::new(transcoder);
+    transcoder.add_compiler(ExternalCompiler);
 
-    let interpreter_directory = Arc::new(InterpreterDirectory::new());
+    let mut interpreters = InterpreterDirectory::new();
+    interpreters.add_factory(BoinxInterpreterFactory);
+    interpreters.add_factory(ExternalInterpreterFactory);
 
-    // Shared flag for transport state (playing/stopped)
-    let shared_atomic_is_playing = Arc::new(AtomicBool::new(false));
+    let languages = Arc::new(LanguageCenter { transcoder, interpreters });
 
     // ======================================================================
     // Initialize the scheduler (scene manager)
-    let (sched_handle, sched_iface, sched_update) = Scheduler::create(
+    let (world_handle, sched_handle, sched_iface, sched_update) = init::start_scheduler_and_world(
         clock_server.clone(),
         devices.clone(),
-        interpreter_directory.clone(),
-        transcoder.clone(),
-        world_iface.clone(),
-        shared_atomic_is_playing.clone(),
+        languages.clone(),
     );
 
     // ======================================================================
     // Initialize the default scene loaded when the server starts
     let initial_scene = Scene::new(vec![Line::new(vec![1.0])]);
-    let scene_image: Arc<Mutex<Scene>> = Arc::new(Mutex::new(initial_scene.clone()));
-    let scene_image_maintainer = Arc::clone(&scene_image);
-    let updater_clone = updater.clone();
+    let scene_image = Arc::new(Mutex::new(initial_scene.clone()));
 
-    thread::spawn(move || {
-        loop {
-            match sched_update.recv() {
-                Ok(p) => {
-                    let mut guard = scene_image_maintainer.blocking_lock();
-                    match &p {
-                        SchedulerNotification::UpdatedScene(scene) => {
-                            *guard = scene.clone();
-                        }
-                        SchedulerNotification::UpdatedLine(i, line) => {
-                            guard.set_line(*i, line.clone());
-                        }
-                        SchedulerNotification::FramePositionChanged(_positions) => {
-                            // No update to scene needed for this notification
-                        }
-                        SchedulerNotification::EnableFrames(line_index, frame_indices) => {
-                            guard
-                                .line_mut(*line_index)
-                                .map(|l| l.enable_frames(frame_indices));
-                        }
-                        SchedulerNotification::DisableFrames(line_index, frame_indices) => {
-                            guard
-                                .line_mut(*line_index)
-                                .map(|l| l.disable_frames(frame_indices));
-                        }
-                        SchedulerNotification::UploadedScript(_, _, _script) => {}
-                        SchedulerNotification::UpdatedLineFrames(frame_index, items) => {
-                            guard
-                                .line_mut(*frame_index)
-                                .map(|l| l.set_frames(items.clone()));
-                        }
-                        SchedulerNotification::AddedLine(line) => {
-                            guard.add_line(line.clone());
-                        }
-                        SchedulerNotification::RemovedLine(index) => {
-                            guard.remove_line(*index);
-                        }
-                        _ => (),
-                    };
-                    drop(guard);
-                    let _ = updater_clone.send(p);
-                }
-                Err(_) => break,
-            }
-        }
-    });
-
-    if let Err(e) = sched_iface.send(SchedulerMessage::UploadScene(initial_scene)) {
+    if let Err(e) = sched_iface.send(SchedulerMessage::SetScene(initial_scene, ActionTiming::Immediate)) {
         log_eprintln!("[!] Failed to send initial scene to scheduler: {}", e);
         std::process::exit(1);
     }
-
-    // ======================================================================
-    // Initialize relay client if requested
-    let relay_client = if let Some(relay_addr) = cli.relay {
-        log_println!("[+] Initializing relay client...");
-
-        let config = relay_client::RelayConfig {
-            relay_address: relay_addr.clone(),
-            instance_name: cli.instance_name.clone(),
-            session_token: cli.relay_token.clone(),
-        };
-
-        let mut client = relay_client::RelayClient::new(config);
-
-        match client.connect().await {
-            Ok(_) => {
-                log_println!("[+] Connected to relay server at {}", relay_addr);
-                log_println!("[+] Relay client instance ID: {:?}", client.instance_id());
-                Some(Arc::new(Mutex::new(client)))
-            }
-            Err(e) => {
-                log_eprintln!("[!] Failed to connect to relay server: {}", e);
-                log_eprintln!("    Continuing in local mode...");
-                None
-            }
-        }
-    } else {
-        None
-    };
 
     let server_state = ServerState::new(
         scene_image,
         clock_server,
         devices.clone(),
-        world_iface,
         sched_iface.clone(),
-        updater.clone(),
-        update_notifier,
-        transcoder,
-        interpreter_directory,
-        shared_atomic_is_playing.clone(),
-    )
-    .with_relay(relay_client.clone());
-
-    // Start relay message handler if connected
-    if let Some(relay) = relay_client {
-        let sched_iface_relay = sched_iface.clone();
-        let _updater_relay = updater.clone();
-
-        tokio::spawn(async move {
-            log_println!("[RELAY] Starting relay message handler task");
-            loop {
-                let (relay_msg, is_connected) = {
-                    let mut client = relay.lock().await;
-                    let msg = client.recv().await;
-                    let connected = client.is_connected();
-                    (msg, connected)
-                };
-
-                if !is_connected {
-                    log_eprintln!("[RELAY] Connection lost, relay handler exiting");
-                    break;
-                }
-
-                if let Some(relay_msg) = relay_msg {
-                    use relay_client::RelayMessage;
-
-                    match relay_msg {
-                        RelayMessage::StateBroadcast {
-                            source_instance_name,
-                            timestamp: _,
-                            update_data,
-                        } => {
-                            // Deserialize the client message
-                            match rmp_serde::from_slice::<ClientMessage>(&update_data) {
-                                Ok(client_msg) => {
-                                    log_println!(
-                                        "[RELAY] Received update from instance '{}': {:?}",
-                                        source_instance_name,
-                                        client_msg
-                                    );
-
-                                    // Process the message through the scheduler
-                                    // This will update local state to match remote changes
-                                    match client_msg {
-                                        ClientMessage::SetScript(
-                                            line_id,
-                                            frame_id,
-                                            content,
-                                            timing,
-                                        ) => {
-                                            // For now, we'll compile with the default language
-                                            // In the future, this should be included in the relay message
-                                            if let Err(e) = sched_iface_relay.send(
-                                                SchedulerMessage::UploadScript(
-                                                    line_id,
-                                                    frame_id,
-                                                    Script::new(content, "bali".to_string()),
-                                                    timing,
-                                                ),
-                                            ) {
-                                                log_eprintln!(
-                                                    "[RELAY] Failed to apply SetScript: {}",
-                                                    e
-                                                );
-                                            }
-                                        }
-                                        ClientMessage::EnableFrames(line_id, frames, timing) => {
-                                            let _ = sched_iface_relay.send(
-                                                SchedulerMessage::EnableFrames(
-                                                    line_id, frames, timing,
-                                                ),
-                                            );
-                                        }
-                                        ClientMessage::DisableFrames(line_id, frames, timing) => {
-                                            let _ = sched_iface_relay.send(
-                                                SchedulerMessage::DisableFrames(
-                                                    line_id, frames, timing,
-                                                ),
-                                            );
-                                        }
-                                        ClientMessage::UpdateLineFrames(
-                                            line_id,
-                                            frames,
-                                            timing,
-                                        ) => {
-                                            let _ = sched_iface_relay.send(
-                                                SchedulerMessage::UpdateLineFrames(
-                                                    line_id, frames, timing,
-                                                ),
-                                            );
-                                        }
-                                        ClientMessage::SetScene(scene, timing) => {
-                                            let _ = sched_iface_relay
-                                                .send(SchedulerMessage::SetScene(scene, timing));
-                                        }
-                                        // Add more message handlers as needed
-                                        _ => {
-                                            log_println!(
-                                                "[RELAY] Unhandled message type from remote instance"
-                                            );
-                                        }
-                                    }
-                                }
-                                Err(e) => {
-                                    log_eprintln!(
-                                        "[RELAY] Failed to deserialize client message: {}",
-                                        e
-                                    );
-                                }
-                            }
-                        }
-                        RelayMessage::InstanceDisconnected {
-                            instance_id: _,
-                            instance_name,
-                        } => {
-                            log_println!("[RELAY] Instance '{}' disconnected", instance_name);
-                            // Could update UI to show disconnected instance
-                        }
-                        _ => {
-                            // Handle other relay messages if needed
-                        }
-                    }
-                } else {
-                    // recv() returned None, channel is closed
-                    log_eprintln!("[RELAY] Relay message channel closed, handler exiting");
-                    break;
-                }
-            }
-        });
-    }
+        update_sender.clone(),
+        update_receiver,
+        languages
+    );
 
     // Use parsed arguments
-    let server = SovaCoreServer::new(cli.ip, cli.port);
+    let server = SovaCoreServer::new(cli.ip, cli.port, server_state);
     log_println!(
         "[+] Starting Sova server on {}:{}...",
         server.ip,
         server.port
     );
     // Handle potential errors during server start
-    match server.start(server_state).await {
+    match server.start(sched_update).await {
         Ok(_) => {
             log_println!("[+] Server listening on {}:{}", server.ip, server.port);
-
-            // Send a test log every 10 seconds to verify client log reception
-            tokio::spawn(async move {
-                let mut interval = tokio::time::interval(tokio::time::Duration::from_secs(10));
-                let mut counter = 1;
-                loop {
-                    interval.tick().await;
-                    log_println!(
-                        "[TEST] Periodic log message #{} - if you see this in GUI, logs are working!",
-                        counter
-                    );
-                    counter += 1;
-                }
-            });
         }
         Err(e) => {
             if e.kind() == ErrorKind::AddrInUse {
@@ -687,11 +431,13 @@ async fn main() {
 
     // Clean up audio engine if it was initialized
     if let Some((engine_tx, audio_thread)) = audio_engine_components {
+        log_println!("[~] Exiting audio engine...");
         let _ = engine_tx.send(ScheduledEngineMessage::Immediate(EngineMessage::Stop));
         if let Some(osc_flag) = osc_shutdown_flag {
             osc_flag.store(true, Ordering::Relaxed);
         }
         let _ = audio_thread.join();
+        log_println!("[+] Audio engine quitted...");
     }
 
     // Clean shutdown for scheduler and world threads

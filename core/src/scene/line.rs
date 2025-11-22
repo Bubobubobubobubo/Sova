@@ -1,21 +1,25 @@
-use crate::scene::{default_speed_factor, script::Script, Frame};
-use std::sync::Arc;
+use crate::{clock::NEVER, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory}, scene::{Frame, script::Script}, util::decimal_operations::precise_division};
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
     clock::{Clock, SyncTime},
     lang::variable::VariableStore,
-    log_eprintln, log_println,
-    scene::script,
+    log_eprintln,
 };
+
+/// Default speed factor for lines if not specified.
+/// Returns `1.0`. Used for serde default.
+pub fn default_speed_factor() -> f64 {
+    1.0f64
+}
 
 /// Represents a sequence of timed frames within a scene, each with associated scripts and properties.
 ///
 /// A `Line` defines a linear progression of events, where each event (frame) has a duration
 /// specified in musical beats. Lines can have their playback speed adjusted, contain variables,
 /// and support looping, repetition of individual frames, and enabling/disabling specific frames.
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Line {
     /// Frames of the line
     pub frames: Vec<Frame>,
@@ -23,11 +27,8 @@ pub struct Line {
     #[serde(default = "default_speed_factor")]
     pub speed_factor: f64,
     /// A store for variables specific to this line's execution context.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if="VariableStore::is_empty")]
     pub vars: VariableStore,
-    /// The index of this line within its parent container (e.g., a `Scene`). Should be managed externally.
-    #[serde(default)]
-    pub index: usize,
     /// If set, playback starts at this frame index (inclusive). Overrides the default start at index 0.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub start_frame: Option<usize>,
@@ -37,13 +38,11 @@ pub struct Line {
     /// If set, defines a custom total loop duration in beats for this line, overriding the calculated sum of its frames.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub custom_length: Option<f64>,
+
     // --- Runtime State (Not Serialized) ---
     /// The index of the currently active frame during playback.
     #[serde(skip)]
     pub current_frame: usize,
-    /// The index where the first *actual* playback iteration started (considering `start_frame` and enabled frames).
-    #[serde(skip)]
-    pub first_iteration_index: usize,
     /// The current loop iteration number for the line.
     #[serde(skip)]
     pub current_iteration: usize,
@@ -56,9 +55,10 @@ pub struct Line {
     /// Total number of *unique* frames whose duration has fully elapsed during playback.
     #[serde(skip)]
     pub frames_passed: usize,
-    /// The absolute time (`SyncTime`) when this line started its current playback loop.
     #[serde(skip)]
-    pub start_date: SyncTime,
+    pub last_trigger: SyncTime,
+    #[serde(skip)]
+    pub end_flag: bool
 }
 
 impl Line {
@@ -70,19 +70,7 @@ impl Line {
     pub fn new(frames_dur: Vec<f64>) -> Self {
         let mut line = Line {
             frames: frames_dur.into_iter().map(|d| d.into()).collect(),
-            index: usize::MAX,
-            vars: VariableStore::new(),
-            speed_factor: 1.0f64,
-            current_frame: 0,
-            frames_executed: 0,
-            frames_passed: 0,
-            start_date: SyncTime::MAX,
-            first_iteration_index: usize::MAX,
-            current_iteration: usize::MAX,
-            current_repetition: 0,
-            start_frame: None,
-            end_frame: None,
-            custom_length: None,
+            ..Default::default()
         };
         line.make_consistent();
         line
@@ -102,15 +90,8 @@ impl Line {
     pub fn make_consistent(&mut self) {
         let n_frames = self.n_frames();
 
-        for (i,frame) in self.frames.iter_mut().enumerate() {
-            if frame.repetitions == 0 {
-                frame.repetitions = 1;
-            }
-            if frame.script.index != i || frame.script.line_index != self.index {
-                let new_script = Arc::make_mut(&mut frame.script);
-                new_script.index = i;
-                new_script.line_index = self.index;
-            }
+        for frame in self.frames.iter_mut() {
+            frame.make_consistent();
         }
 
         if let Some(start) = self.start_frame {
@@ -135,15 +116,27 @@ impl Line {
         }
     }
 
-    /// Calculates the expected absolute end time of the line's current playback cycle.
-    ///
-    /// This is based on the `start_date` and the total duration of *all* frames in beats
-    /// (as returned by `beats_len`), converted to microseconds using the provided `clock`.
-    /// Note: This does *not* account for `speed_factor`, `custom_length`, frame repetitions,
-    /// or the effective start/end frames. It represents the theoretical end time if played
-    /// sequentially from start to finish once at normal speed.
-    pub fn expected_end_date(&self, clock: &Clock) -> SyncTime {
-        self.start_date + clock.beats_to_micros(self.length())
+    pub fn reset(&mut self) {
+        self.current_iteration = 0;
+        self.current_frame = 0;
+        self.current_repetition = 0;
+        self.frames_passed = 0;
+        self.frames_executed = 0;
+        self.last_trigger = NEVER;
+    }
+
+    pub fn configure(&mut self, other: &Line) {
+        self.speed_factor = other.speed_factor;
+        self.start_frame = other.start_frame;
+        self.end_frame = other.end_frame;
+        self.custom_length = other.custom_length;
+    }
+
+    /// Returns light version without frames
+    pub fn configuration(&self) -> Line {
+        let mut res = Line::default();
+        res.configure(self);
+        res
     }
 
     pub fn length(&self) -> f64 {
@@ -153,8 +146,8 @@ impl Line {
         let start = self.start_frame.unwrap_or(0);
         let end = self.start_frame.unwrap_or(self.n_frames() - 1);
         let mut len = 0.0;
-        for i in start..=end {
-            len += self.frame(i).effective_duration();
+        for frame in self.frames[start..=end].iter() {
+            len += frame.effective_duration();
         }
         len
     }
@@ -178,16 +171,39 @@ impl Line {
     }
 
     /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
-    #[inline]
-    pub fn frame(&self, index: usize) -> &Frame {
-        &self.frames[index % self.n_frames()]
+    pub fn frame(&self, index: usize) -> Option<&Frame> {
+        if index >= self.n_frames() {
+            return None;
+        }
+        Some(&self.frames[index % self.n_frames()])
+    }
+
+    pub fn get_current_frame(&self) -> Option<&Frame> {
+        self.frame(self.current_frame)
+    }
+
+    pub fn get_current_frame_mut(&mut self) -> Option<&mut Frame> {
+        if self.current_frame >= self.n_frames() { 
+            return None;
+        }
+        Some(self.frame_mut(self.current_frame))
     }
 
     /// Returns the frame at given index. Handles overflow by rotating back to vector beginning.
-    #[inline]
     pub fn frame_mut(&mut self, index: usize) -> &mut Frame {
-        let index = index % self.n_frames();
+        if index >= self.n_frames() {
+            self.frames.resize(index + 1, Frame::default());
+            self.make_consistent();
+        }
         &mut self.frames[index]
+    }
+
+    pub fn set_frame(&mut self, index: usize, frame: Frame) {
+        if index >= self.n_frames() {
+            self.frames.resize(index + 1, Frame::default());
+        }
+        self.frames[index].change(frame);
+        self.make_consistent();
     }
 
     /// Calculates the total duration of the line in beats by summing the durations of *all* frames.
@@ -202,28 +218,15 @@ impl Line {
     //     precise_sum(self.frames.iter().copied())
     // }
 
-    /// Returns an iterator over the durations (`f64`) of all frames in the line.
     #[inline]
-    pub fn frames_iter(&self) -> impl Iterator<Item = &Frame> {
-        self.frames.iter()
-    }
-
-    /// Returns a mutable iterator over the durations (`f64`) of all frames in the line.
-    #[inline]
-    pub fn frames_iter_mut(&mut self) -> impl Iterator<Item = &mut Frame> {
-        self.frames.iter_mut()
+    pub fn structure(&self) -> Vec<f64> {
+        self.frames.iter().map(|f| f.duration).collect()
     }
 
     /// Returns an iterator over the scripts of all frames in the line.
     #[inline]
     pub fn scripts_iter(&self) -> impl Iterator<Item = &Script> {
-        self.frames_iter().map(|f| &*f.script)
-    }
-
-    /// Returns a mutable iterator over the arc of scripts of all frames in the line.
-    #[inline]
-    pub fn scripts_iter_mut(&mut self) -> impl Iterator<Item = &mut Arc<Script>> {
-        self.frames_iter_mut().map(|f| &mut f.script)
+        self.frames.iter().map(|f| f.script())
     }
 
     /// Returns a slice containing the durations of all frames.
@@ -232,21 +235,9 @@ impl Line {
         &self.frames
     }
 
-    /// Replaces the entire set of frame durations with `new_frames`.
-    ///
-    /// This also adjusts the lengths of `enabled_frames`, `scripts`, `frame_names`, and `frame_repetitions`
-    /// to match the new number of frames, potentially adding defaults or truncating.
-    /// Finally, it calls `make_consistent` to ensure internal state integrity.
-    pub fn set_frames(&mut self, new_frames: Vec<f64>) {
-        let n_frames = self.n_frames();
-        for (i, duration) in new_frames.into_iter().enumerate() {
-            if i < n_frames {
-                self.frame_mut(i).duration = duration;
-            } else {
-                self.frames.push(duration.into());
-            }
-        }
-        self.make_consistent();
+    #[inline]
+    pub fn frames_mut(&mut self) -> &mut [Frame] {
+        &mut self.frames
     }
 
     /// Inserts a new frame with the given duration (`value`) at the specified `position`.
@@ -286,136 +277,9 @@ impl Line {
             log_eprintln!("[!] Frame::remove_frame: Invalid position {}", position);
             return;
         }
-
-        // Remove from vectors
-        log_println!(
-            "[LINE DEBUG] remove_frame({}): BEFORE - frames={}",
-            position,
-            self.frames.len()
-        );
         self.frames.remove(position);
-        log_println!(
-            "[LINE DEBUG] remove_frame({}): AFTER - frames={}",
-            position,
-            self.frames.len()
-        );
-
         // Ensure consistency (updates indices, bounds, etc.)
         self.make_consistent();
-    }
-
-    /// Changes the duration of the frame at the specified `index` to `value`.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn change_frame(&mut self, index: usize, value: f64) {
-        if self.frames.is_empty() {
-            return;
-        }
-        self.frame_mut(index).duration = value;
-    }
-
-    /// Associates the given `script` with the frame at the specified `index`.
-    ///
-    /// Takes ownership of the `script` and wraps it in an `Arc`.
-    /// Sets the `script.index` field to the provided `index`.
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn set_script(&mut self, index: usize, mut script: script::Script) {
-        if self.frames.is_empty() {
-            return;
-        }
-        script.index = index;
-        script.line_index = self.index;
-        self.frame_mut(index).script = Arc::new(script);
-    }
-
-    /// Returns a reference to the frame's script at a given index.
-    /// If the line contains no frame, then the function returns None.
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    pub fn script(&self, index: usize) -> Option<&Script> {
-        if self.frames.is_empty() {
-            return None;
-        }
-        return Some(&self.frame(index).script)
-    }
-
-    /// Returns the frame absolute duration, without repetitions of enabledness
-    pub fn frame_len(&self, index: usize) -> f64 {
-        if self.frames.is_empty() {
-            return f64::INFINITY;
-        }
-        self.frame(index).duration
-    }
-
-    /// Returns the effective duration of the frame
-    pub fn effective_frame_len(&self, index: usize) -> f64 {
-        if self.frames.is_empty() {
-            return f64::INFINITY;
-        }
-        self.frame(index).effective_duration()
-    }
-
-    /// Enables the frame at the specified `frame` index for playback.
-    ///
-    /// Handles wrapping: if `frame` index is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn enable_frame(&mut self, frame: usize) {
-        if self.frames.is_empty() {
-            return;
-        }
-        self.frame_mut(frame).enabled = true;
-    }
-
-    /// Disables the frame at the specified `frame` index for playback.
-    ///
-    /// Disabled frames are skipped during iteration.
-    /// Handles wrapping: if `frame` index is out of bounds, it wraps around using the modulo operator.
-    /// Does nothing if the line has no frames.
-    pub fn disable_frame(&mut self, frame: usize) {
-        if self.frames.is_empty() {
-            return;
-        }
-        self.frame_mut(frame).enabled = false;
-    }
-
-    /// Enables multiple frames specified by their indices in the `frames` slice.
-    ///
-    /// Handles wrapping for each index in the slice.
-    /// Does nothing if the line has no frames. Skips indices that are out of bounds after wrapping
-    /// (though wrapping ensures they map to a valid index if `n_frames > 0`).
-    pub fn enable_frames(&mut self, frames: &[usize]) {
-        if self.frames.is_empty() {
-            return;
-        }
-        for &frame_index in frames {
-            self.enable_frame(frame_index);
-        }
-    }
-
-    /// Disables multiple frames specified by their indices in the `frames` slice.
-    ///
-    /// Handles wrapping for each index in the slice.
-    /// Does nothing if the line has no frames. Skips indices that are out of bounds after wrapping
-    /// (though wrapping ensures they map to a valid index if `n_frames > 0`).
-    pub fn disable_frames(&mut self, frames: &[usize]) {
-        if self.frames.is_empty() {
-            return;
-        }
-        for &frame_index in frames {
-            self.disable_frame(frame_index);
-        }
-    }
-
-    /// Checks if the frame at the specified `index` is currently enabled.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    /// Returns `false` if the line has no frames.
-    pub fn is_frame_enabled(&self, index: usize) -> bool {
-        if self.frames.is_empty() {
-            return false;
-        }
-        self.frame(index).enabled
     }
 
     /// Gets the effective start frame index for playback.
@@ -449,11 +313,23 @@ impl Line {
     /// Returns an empty slice if the line has no frames.
     pub fn get_effective_frames(&self) -> &[Frame] {
         if self.n_frames() == 0 {
-            return &[];
+            return &self.frames;
         }
         let start = self.get_effective_start_frame();
         let end = self.get_effective_end_frame();
         &self.frames[start..=end]
+    }
+
+    /// Returns a slice representing the frame durations within the effective playback range.
+    /// Uses the indices determined by `get_effective_start_frame` and `get_effective_end_frame`.
+    /// Returns an empty slice if the line has no frames.
+    pub fn get_effective_frames_mut(&mut self) -> &mut [Frame] {
+        if self.n_frames() == 0 {
+            return &mut self.frames;
+        }
+        let start = self.get_effective_start_frame();
+        let end = self.get_effective_end_frame();
+        &mut self.frames[start..=end]
     }
 
     /// Calculates the total beat length of the frames within the effective playback range.
@@ -465,114 +341,191 @@ impl Line {
         precise_sum(self.get_effective_frames().iter().map(|f| f.duration))
     }
 
-    /// Sets the optional name for the frame at the specified `frame_index`.
-    ///
-    /// If `frame_index` is out of bounds, an error is printed to stderr and no change is made.
-    pub fn set_frame_name(&mut self, frame_index: usize, name: Option<String>) {
-        if !self.frames.is_empty() {
-            self.frame_mut(frame_index).name = name;
+    pub fn kill_executions(&mut self) {
+        self.frames.iter_mut().for_each(Frame::kill_executions);
+    }
+
+    pub fn update_executions<'a>(&'a mut self, date: SyncTime, mut partial: PartialContext<'a>) 
+        -> (Vec<ConcreteEvent>, Option<SyncTime>)
+    {
+        partial.line_vars = Some(&mut self.vars);
+        let mut events = Vec::new();
+        let mut next_wait = Some(NEVER);
+        for (index, frame) in self.frames.iter_mut().enumerate() {
+            let mut partial_child = partial.child();
+            partial_child.frame_index = Some(index);
+            let (mut new_events, wait) = frame.update_executions(date, partial_child);
+            events.append(&mut new_events);
+            if let Some(wait) = wait {
+                next_wait
+                    .as_mut()
+                    .map(|value| *value = std::cmp::min(*value, wait));
+            }
+        }
+        (events, next_wait)
+    }
+
+    pub fn before_next_update(&self, date: SyncTime) -> SyncTime {
+        self.frames
+            .iter()
+            .map(|frame| frame.before_next_update(date))
+            .min()
+            .unwrap_or(NEVER)
+    }
+
+    pub fn before_next_trigger(&self, clock: &Clock, date: SyncTime) -> SyncTime {
+        let frame = self.get_current_frame();
+        if frame.is_none() || self.last_trigger == NEVER {
+            return if self.is_empty() {
+                NEVER
+            } else {
+                0
+            };
+        }
+        let frame = frame.unwrap();
+        let relative_date = date.saturating_sub(self.last_trigger);
+        let frame_len = clock.beats_to_micros(
+            precise_division(frame.duration, self.speed_factor)
+        );
+        frame_len.saturating_sub(relative_date)
+    }
+
+    pub fn before_next_frame(&self, clock: &Clock, date: SyncTime) -> SyncTime {
+        let frame = self.get_current_frame();
+        if frame.is_none() || self.last_trigger == NEVER {
+            return if self.is_empty() {
+                NEVER
+            } else {
+                0
+            };
+        }
+        let frame = frame.unwrap();
+        let frame_dur = clock.beats_to_micros(frame.duration);
+        let relative_date = date.saturating_sub(self.last_trigger);
+        let frame_len = clock.beats_to_micros(
+            precise_division(frame.duration, self.speed_factor)
+        );
+        let rem_repet = frame.repetitions - (self.current_repetition + 1);
+        let frame_len = frame_len + (rem_repet as SyncTime) * frame_dur;
+        frame_len.saturating_sub(relative_date)
+    }
+
+    pub fn before_end(&self, clock: &Clock, date: SyncTime) -> SyncTime {
+        let mut remaining = self.before_next_frame(clock, date);
+        if remaining == NEVER {
+            return NEVER;
+        }
+        let end_frame = self.get_effective_end_frame();
+        for i in (self.current_frame + 1)..end_frame {
+            let frame = &self.frames[i];
+            remaining += clock.beats_to_micros(frame.effective_duration());
+        }
+        remaining
+    }
+
+    pub fn expected_end_date(&self, clock: &Clock) -> SyncTime {
+        let date = clock.micros();
+        let remaining = self.before_end(clock, date);
+        if remaining == NEVER {
+            return NEVER;
+        }
+        date + remaining
+    }
+
+    pub fn step(&mut self, clock: &Clock, mut date: SyncTime, interpreters: &InterpreterDirectory) -> bool {
+        self.end_flag = false;
+        if self.before_next_trigger(clock, date) > 0 {
+            return false;
+        }
+        if let Some(frame) = self.get_current_frame() {
+            if self.last_trigger != NEVER {
+                // Precise date correction if the exact time has been stepped over
+                let frame_len = clock.beats_to_micros(
+                    precise_division(frame.duration, self.speed_factor)
+                );
+                date = self.last_trigger + frame_len;
+
+                if self.current_repetition < (frame.repetitions - 1) {
+                    self.current_repetition += 1;
+                } else {
+                    self.current_frame += 1;
+                    self.current_repetition = 0;
+                    self.frames_passed += 1;
+                    if self.current_frame > self.get_effective_end_frame() {
+                        self.current_frame = self.get_effective_start_frame();
+                        self.current_iteration += 1;
+                        self.end_flag = true;
+                    }
+                }
+            }
         } else {
-            log_eprintln!("[!] Line::set_frame_name: No frame in line");
+            self.current_frame = self.get_effective_start_frame();
+        }
+        let frame = self.get_current_frame_mut().unwrap();
+        frame.trigger(date, interpreters);
+        self.frames_executed += 1;
+        self.last_trigger = date;
+        true
+    }
+
+    pub fn go_to_frame(&mut self, frame: usize, repetition: usize) {
+        self.current_frame = frame;
+        self.current_repetition = repetition;
+        self.last_trigger = NEVER;
+    }
+
+    pub fn go_to_date(&mut self, clock: &Clock, date: SyncTime) {
+        if self.is_empty() {
+            return;
+        }
+        let len = self.length();
+        let len = clock.beats_to_micros(len);
+        let mut date = date % len;
+        let mut frame_id = self.get_effective_start_frame();
+        let mut repetition = 0;
+        while frame_id <= self.get_effective_end_frame() {
+            let frame = self.frame(frame_id).unwrap();
+            let dur = clock.beats_to_micros(frame.duration);
+            date = date.saturating_sub(dur);
+            if date == 0 {
+                self.go_to_frame(frame_id, repetition);
+                return;
+            }
+            if repetition < (frame.repetitions - 1) {
+                repetition += 1;
+            } else {
+                repetition = 0;
+                frame_id += 1;
+            }
         }
     }
 
-    pub fn calculate_frame_index(
-        &self,
-        clock: &Clock,
-        date: SyncTime,
-    ) -> (usize, usize, usize, SyncTime, SyncTime) {
-        // TODO: FAIRE MIEUX
-        let effective_loop_length_beats = self.length();
+    pub fn go_to_beat(&mut self, clock: &Clock, beat: f64) {
+        self.go_to_date(clock, clock.beats_to_micros(beat));
+    }
 
-        if effective_loop_length_beats <= 0.0 {
-            return (usize::MAX, usize::MAX, 0, SyncTime::MAX, SyncTime::MAX);
+    pub fn position(&self) -> (usize, usize) {
+        (self.current_frame, self.current_repetition)
+    }
+
+}
+
+impl Default for Line {
+    fn default() -> Self {
+        Line {
+            frames: vec![Frame::default()],
+            speed_factor: default_speed_factor(),
+            vars: Default::default(),
+            start_frame: Default::default(),
+            end_frame: Default::default(),
+            custom_length: Default::default(),
+            current_frame: Default::default(),
+            current_iteration: Default::default(),
+            current_repetition: Default::default(),
+            frames_executed: Default::default(),
+            frames_passed: Default::default(),
+            last_trigger: NEVER,
+            end_flag: false,
         }
-
-        let current_absolute_beat = clock.beat_at_date(date);
-        if current_absolute_beat < 0.0 {
-            return (usize::MAX, usize::MAX, 0, SyncTime::MAX, SyncTime::MAX);
-        }
-
-        use crate::util::decimal_operations::precise_beat_modulo;
-
-        let beat_in_effective_loop =
-            precise_beat_modulo(current_absolute_beat, effective_loop_length_beats);
-        let loop_iteration = (current_absolute_beat / effective_loop_length_beats).floor() as usize;
-
-        let effective_start_frame = self.get_effective_start_frame();
-        let effective_num_frames = self.get_effective_num_frames();
-
-        if effective_num_frames == 0 {
-            return (usize::MAX, loop_iteration, 0, SyncTime::MAX, SyncTime::MAX);
-        }
-
-        let mut cumulative_beats_in_line = 0.0;
-        for frame_idx_in_range in 0..effective_num_frames {
-            let absolute_frame_index = effective_start_frame + frame_idx_in_range;
-
-            let speed_factor = if self.speed_factor == 0.0 {
-                1.0
-            } else {
-                self.speed_factor
-            };
-            use crate::util::decimal_operations::precise_beat_division;
-            let single_rep_len_beats =
-                precise_beat_division(self.frame_len(absolute_frame_index), speed_factor);
-            let total_repetitions = self.frame(absolute_frame_index).repetitions;
-
-            let total_frame_len_beats = single_rep_len_beats * total_repetitions as f64;
-
-            if single_rep_len_beats <= 0.0 {
-                continue;
-            }
-
-            let frame_end_beat_in_line = cumulative_beats_in_line + total_frame_len_beats;
-
-            if beat_in_effective_loop >= cumulative_beats_in_line
-                && beat_in_effective_loop < frame_end_beat_in_line
-            {
-                let beat_within_frame = beat_in_effective_loop - cumulative_beats_in_line;
-                let current_repetition_index =
-                    (beat_within_frame / single_rep_len_beats).floor().max(0.0) as usize;
-                let current_repetition_index = current_repetition_index.min(total_repetitions - 1);
-
-                let absolute_beat_at_loop_start = loop_iteration as f64 * effective_loop_length_beats;
-                let frame_first_rep_start_beat_absolute =
-                    absolute_beat_at_loop_start + cumulative_beats_in_line;
-                let current_rep_start_beat_absolute = frame_first_rep_start_beat_absolute
-                    + (current_repetition_index as f64 * single_rep_len_beats);
-                let current_repetition_start_date = clock.date_at_beat(current_rep_start_beat_absolute);
-
-                let current_rep_end_beat_in_line = cumulative_beats_in_line
-                    + (single_rep_len_beats * (current_repetition_index + 1) as f64);
-                let remaining_beats_in_rep = current_rep_end_beat_in_line - beat_in_effective_loop;
-                let remaining_micros_in_rep = clock.beats_to_micros(remaining_beats_in_rep);
-
-                let remaining_beats_in_loop = effective_loop_length_beats - beat_in_effective_loop;
-                let remaining_micros_in_loop = clock.beats_to_micros(remaining_beats_in_loop);
-
-                let next_event_delay = remaining_micros_in_rep.min(remaining_micros_in_loop);
-
-                return (
-                    absolute_frame_index,
-                    loop_iteration,
-                    current_repetition_index,
-                    current_repetition_start_date,
-                    next_event_delay,
-                );
-            }
-
-            cumulative_beats_in_line += total_frame_len_beats;
-        }
-
-        let remaining_beats_in_loop = effective_loop_length_beats - beat_in_effective_loop;
-        let remaining_micros_in_loop = clock.beats_to_micros(remaining_beats_in_loop);
-        (
-            usize::MAX,
-            loop_iteration,
-            0,
-            SyncTime::MAX,
-            remaining_micros_in_loop,
-        )
     }
 }

@@ -1,6 +1,6 @@
 //! Represents a musical or timed sequence composed of multiple concurrent lines.
 
-use crate::log_eprintln;
+use crate::{clock::{Clock, SyncTime, NEVER}, lang::{evaluation_context::PartialContext, event::ConcreteEvent}, log_eprintln};
 use serde::{Deserialize, Serialize};
 use std::usize;
 mod line;
@@ -9,12 +9,6 @@ mod frame;
 
 pub use line::Line;
 pub use frame::Frame;
-
-/// Default speed factor for lines if not specified.
-/// Returns `1.0`. Used for serde default.
-pub fn default_speed_factor() -> f64 {
-    1.0f64
-}
 
 /// Represents a scene, which is a collection of [`Line`]s that can play concurrently.
 ///
@@ -33,10 +27,7 @@ impl Scene {
     ///
     /// Initializes the `index` field of each provided `Line` according to its position
     /// in the input vector. Sets a default `length` (currently hardcoded to 4).
-    pub fn new(mut lines: Vec<Line>) -> Self {
-        for (i, s) in lines.iter_mut().enumerate() {
-            s.index = i;
-        }
+    pub fn new(lines: Vec<Line>) -> Self {
         Scene { lines }
     }
 
@@ -46,30 +37,25 @@ impl Scene {
     /// and calling the `make_consistent` method on each line to synchronize its internal state
     /// (e.g., frame counts, script indices, vector lengths).
     pub fn make_consistent(&mut self) {
-        for (i, s) in self.lines.iter_mut().enumerate() {
-            s.index = i;
-            s.make_consistent();
+        for line in self.lines.iter_mut() {
+            line.make_consistent();
         }
+    }
+
+    pub fn reset(&mut self) {
+        self.lines.iter_mut().for_each(Line::reset);
+    }
+
+    pub fn has_frame(&self, line_id: usize, frame_id: usize) -> bool {
+        self.line(line_id).map(|l| l.n_frames() > frame_id).unwrap_or(false)
     }
 
     pub fn get_frame(&self, line_id: usize, frame_id: usize) -> Option<&Frame> {
-        let Some(line) = self.line(line_id) else {
-            return None;
-        };
-        if line.is_empty() {
-            return None;
-        }
-        Some(line.frame(frame_id))
+        self.line(line_id).and_then(|line| line.frame(frame_id))
     }
 
-    pub fn get_frame_mut(&mut self, line_id: usize, frame_id: usize) -> Option<&mut Frame> {
-        let Some(line) = self.line_mut(line_id) else {
-            return None;
-        };
-        if line.is_empty() {
-            return None;
-        }
-        Some(line.frame_mut(frame_id))
+    pub fn get_frame_mut(&mut self, line_id: usize, frame_id: usize) -> &mut Frame {
+        self.line_mut(line_id).frame_mut(frame_id)
     }
 
     /// Returns the number of lines currently in the scene.
@@ -78,24 +64,8 @@ impl Scene {
         self.lines.len()
     }
 
-    /// Returns an iterator over immutable references to the lines in the scene.
-    pub fn lines_iter(&self) -> impl Iterator<Item = &Line> {
-        self.lines.iter()
-    }
-
-    /// Returns an iterator over mutable references to the lines in the scene.
-    pub fn lines_iter_mut(&mut self) -> impl Iterator<Item = &mut Line> {
-        self.lines.iter_mut()
-    }
-
-    /// Returns an immutable slice containing all lines in the scene.
-    pub fn lines(&self) -> &[Line] {
-        &self.lines
-    }
-
-    /// Returns a mutable slice containing all lines in the scene.
-    pub fn line_muts(&mut self) -> &mut [Line] {
-        &mut self.lines
+    pub fn structure(&self) -> Vec<Vec<f64>> {
+        self.lines.iter().map(Line::structure).collect()
     }
 
     /// Adds a new line to the end of the scene.
@@ -103,92 +73,122 @@ impl Scene {
     /// Sets the `index` of the provided `line` to the next available index (current number of lines),
     /// ensures the line is internally consistent via `make_consistent`, and then appends it to the `lines` vector.
     pub fn add_line(&mut self, mut line: Line) {
-        line.index = self.n_lines();
         line.make_consistent();
         self.lines.push(line);
     }
 
+    /// Inserts a new line to the end of the scene.
+    ///
+    /// Sets the `index` of the provided `line` to the next available index (current number of lines),
+    /// ensures the line is internally consistent via `make_consistent`, and then appends it to the `lines` vector.
+    pub fn insert_line(&mut self, at: usize, line: Line) {
+        self.ensure_min_size(at);
+        self.lines.insert(at, line);
+        self.make_consistent();
+    }
+
     /// Replaces the line at the specified `index` with the provided `line`.
     ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator based on the current number of lines.
+    /// Handles wrapping: if `index` is out of bounds, it creates intermediary lines with default value.
     /// Sets the `index` field of the new `line` correctly, calls `make_consistent` on it, and places it at the target index.
     /// Prints a warning and does nothing if the scene is empty.
-    pub fn set_line(&mut self, index: usize, mut line: Line) {
-        if self.lines.is_empty() {
-            log_eprintln!(
-                "Warning: Attempted to set line with index {} in an empty Scene. Ignoring.",
-                index
-            );
-            return;
+    pub fn set_line(&mut self, index: usize, line: Line) {
+        if self.n_lines() <= index {
+            self.lines.resize(index + 1, Line::default());
         }
-        let index = index % self.lines.len();
-        line.index = index;
-        line.make_consistent();
         self.lines[index] = line;
+        self.make_consistent();
     }
 
     /// Removes the line at the specified `index` from the scene.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
+    /// 
     /// After removing the line, it updates the `index` field of all subsequent lines to maintain correct sequential indices.
     /// Prints a warning and does nothing if the scene is empty.
     pub fn remove_line(&mut self, index: usize) {
-        if self.lines.is_empty() {
+        if index >= self.n_lines() {
             log_eprintln!(
-                "Warning: Attempted to remove line with index {} from an empty Scene. Ignoring.",
+                "Warning: Attempted to remove line with invalid index {}. Ignoring.",
                 index
             );
             return;
         }
-        let index = index % self.lines.len();
         self.lines.remove(index);
-        for (i, line) in self.lines[index..].iter_mut().enumerate() {
-            line.index = index + i;
-        }
     }
 
-    /// Returns an immutable reference to the line at the specified `index`.
-    ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    ///
-    /// # Panics
-    /// Panics if the scene is empty.
+    /// Returns an immutable reference to the line at the specified `index`,
+    /// or None if it doesn't exist.
     pub fn line(&self, index: usize) -> Option<&Line> {
-        if self.lines.is_empty() {
+        if index >= self.n_lines() {
+            log_eprintln!(
+                "Warning: Attempted to get line with invalid index {}. Ignoring.",
+                index
+            );
             return None;
         }
-        let index = index % self.lines.len();
         Some(&self.lines[index])
     }
 
     /// Returns a mutable reference to the line at the specified `index`.
     ///
-    /// Handles wrapping: if `index` is out of bounds, it wraps around using the modulo operator.
-    ///
-    /// # Panics
-    /// Panics if the scene is empty.
-    pub fn line_mut(&mut self, index: usize) -> Option<&mut Line> {
-        if self.lines.is_empty() {
-            return None;
+    /// Handles wrapping: if `index` is out of bounds, it creates intermediary lines.
+    pub fn line_mut(&mut self, index: usize) -> &mut Line {
+        if index >= self.n_lines() {
+            self.lines.resize(index + 1, Line::default());
+            self.make_consistent();
         }
-        let index = index % self.lines.len();
-        Some(&mut self.lines[index])
+        &mut self.lines[index]
     }
 
     pub fn is_empty(&self) -> bool {
         self.lines.is_empty()
     }
 
-    pub fn add_line_if_empty(&mut self) {
-        if self.is_empty() {
-            self.add_line(Default::default());
+    pub fn ensure_min_size(&mut self, size: usize) {
+        if self.n_lines() < size {
+            self.lines.resize(size, Line::default());
         }
     }
 
-    /// Collects the `current_frame` index from each line in the scene.
+    /// Collects the `current_frame` and `current_repetition` index from each line in the scene.
     ///
     /// Useful for getting a snapshot of the playback position of all lines.
-    pub fn get_frames_positions(&self) -> Vec<usize> {
-        self.lines_iter().map(|s| s.current_frame).collect()
+    pub fn positions(&self) -> impl Iterator<Item = (usize, usize)> {
+        self.lines.iter().map(Line::position)
     }
+
+    pub fn kill_executions(&mut self) {
+        self.lines.iter_mut().for_each(Line::kill_executions);
+    }
+
+    pub fn update_executions<'a>(&'a mut self, date: SyncTime, mut partial: PartialContext<'a>) 
+        -> (Vec<ConcreteEvent>, Option<SyncTime>)
+    {
+        let mut events = Vec::new();
+        let mut next_wait = Some(NEVER);
+        for (index, line) in self.lines.iter_mut().enumerate() {
+            let mut partial_child = partial.child();
+            partial_child.line_index = Some(index);
+            let (mut new_events, wait) = line.update_executions(date, partial_child);
+            events.append(&mut new_events);
+            if let Some(wait) = wait {
+                next_wait
+                    .as_mut()
+                    .map(|value| *value = std::cmp::min(*value, wait));
+            }
+        }
+        (events, next_wait)
+    }
+
+    pub fn go_to_date(&mut self, clock: &Clock, date: SyncTime) {
+        for line in self.lines.iter_mut() {
+            line.go_to_date(clock, date);
+        }
+    }
+
+    pub fn go_to_beat(&mut self, clock: &Clock, beat: f64) {
+        for line in self.lines.iter_mut() {
+            line.go_to_beat(clock, beat);
+        }
+    }
+
 }

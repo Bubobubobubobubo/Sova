@@ -23,17 +23,9 @@ use std::{
 };
 
 use crate::{
-    clock::{Clock, SyncTime},
-    lang::event::ConcreteEvent,
-    log_println, log_eprintln,
-    protocol::{
-        device::ProtocolDevice,
-        log::{LOG_NAME, LogMessage, Severity},
-        message::{ProtocolMessage, TimedMessage},
-        midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut},
-        osc::{Argument as OscArgument, OSCMessage},
-    },
-    shared_types::{DeviceInfo, DeviceKind},
+    clock::{Clock, SyncTime}, lang::event::ConcreteEvent, log_eprintln, log_println, protocol::{
+        audio_engine_proxy::AudioEngineProxy, log::{LogMessage, Severity, LOG_NAME}, midi::{MIDIMessage, MIDIMessageType, MidiIn, MidiInterface, MidiOut}, osc::OSCOut, DeviceInfo, DeviceKind, ProtocolDevice, ProtocolMessage, TimedMessage
+    }
 };
 
 use midir::{Ignore, MidiInput, MidiOutput};
@@ -59,6 +51,8 @@ pub struct DeviceMap {
     /// Maps user-assigned Slot IDs (1-N) to the system or virtual device name assigned to it.
     /// Slot 0 is implicitly the Log device and is not stored here.
     pub slot_assignments: Mutex<[Option<String> ; MAX_DEVICE_SLOTS]>,
+    /// Log device
+    pub log_device: Arc<ProtocolDevice>,
     /// Optional handle to the system's MIDI input interface, managed by `midir`.
     midi_in: Option<Arc<Mutex<MidiInput>>>,
     /// Optional handle to the system's MIDI output interface, managed by `midir`.
@@ -96,6 +90,7 @@ impl DeviceMap {
             input_connections: Default::default(),
             output_connections: Default::default(),
             slot_assignments: Default::default(),
+            log_device: Arc::new(ProtocolDevice::Log),
             midi_in,
             midi_out,
         }
@@ -117,7 +112,7 @@ impl DeviceMap {
     /// `output_connections` map, keyed by the device's address.
     /// Note: This only registers the connection; slot assignment is separate.
     pub fn register_output_connection(&self, name: String, device: ProtocolDevice) {
-        let address = device.address().to_owned();
+        let address = device.address();
         let item = (name, Arc::new(device));
         self.output_connections
             .lock()
@@ -243,230 +238,25 @@ impl DeviceMap {
         None
     }
 
-    /// Generates `TimedMessage`s containing `MIDIMessage` payloads from a `ConcreteEvent`.
-    ///
-    /// Handles mapping various `ConcreteEvent::Midi*` variants to their corresponding
-    /// MIDI message types (NoteOn/Off, CC, ProgramChange, etc.).
-    /// Note durations are handled by scheduling a corresponding NoteOff message.
-    /// MIDI channels are converted from 1-based (in `ConcreteEvent`) to 0-based (in `MIDIMessage`).
-    /// System messages (Start, Stop, etc.) are sent on channel 0.
-    fn generate_midi_message(
-        &self,
-        payload: ConcreteEvent,
-        date: SyncTime,
-        device: Arc<ProtocolDevice>,
-    ) -> Vec<TimedMessage> {
-        match payload {
-            ConcreteEvent::MidiNote(note, vel, chan, dur, _device_id) => {
-                let midi_chan = (chan.saturating_sub(1) % 16) as u8; // Convert to 0-based MIDI channel
-                vec![
-                    // NoteOff
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::NoteOff {
-                                note: note as u8,
-                                velocity: 0,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                    // NoteOn
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::NoteOn {
-                                note: note as u8,
-                                velocity: vel as u8,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date + 1),
-                    // NoteOff
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::NoteOff {
-                                note: note as u8,
-                                velocity: 0,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date + dur),
-                ]
-            }
-            ConcreteEvent::MidiControl(control, value, chan, _device_id) => {
-                let midi_chan = (chan.saturating_sub(1) % 16) as u8;
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::ControlChange {
-                                control: control as u8,
-                                value: value as u8,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiProgram(program, chan, _device_id) => {
-                let midi_chan = (chan.saturating_sub(1) % 16) as u8;
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::ProgramChange {
-                                program: program as u8,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiAftertouch(note, pressure, chan, _device_id) => {
-                let midi_chan = (chan.saturating_sub(1) % 16) as u8;
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Aftertouch {
-                                note: note as u8,
-                                value: pressure as u8,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiChannelPressure(pressure, chan, _device_id) => {
-                let midi_chan = (chan.saturating_sub(1) % 16) as u8;
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::ChannelPressure {
-                                value: pressure as u8,
-                            },
-                            channel: midi_chan,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiStart(_device_id) => {
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Start {},
-                            channel: 0, // System messages use channel 0
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiStop(_device_id) => {
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Stop {},
-                            channel: 0,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiContinue(_device_id) => {
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Continue {},
-                            channel: 0,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiClock(_device_id) => {
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Clock {},
-                            channel: 0,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiReset(_device_id) => {
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::Reset {},
-                            channel: 0,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            ConcreteEvent::MidiSystemExclusive(data, _device_id) => {
-                let data = data.iter().map(|x| *x as u8).collect();
-                vec![
-                    ProtocolMessage {
-                        payload: MIDIMessage {
-                            payload: MIDIMessageType::SystemExclusive { data },
-                            channel: 0,
-                        }
-                        .into(),
-                        device: Arc::clone(&device),
-                    }
-                    .timed(date),
-                ]
-            }
-            _ => Vec::new(), // Ignore Nop or other non-MIDI events
-        }
+    pub fn get_out_device_at_slot(&self, slot_id: usize) -> Option<Arc<ProtocolDevice>> {
+        self.get_name_for_slot(slot_id)
+            .and_then(|name| {
+                let outputs = self.output_connections.lock().unwrap();
+                let dev_item = outputs.get(&name);
+                dev_item.map(|(_, dev)| Arc::clone(dev))
+            })
     }
 
-    /// Generates a `TimedMessage` containing a `LogMessage` payload from a `ConcreteEvent`.
-    ///
-    /// Wraps the original event within the `LogMessage` for context.
-    fn generate_log_message(
-        &self,
-        payload: ConcreteEvent,
-        date: SyncTime,
-        device: Arc<ProtocolDevice>, // Expects ProtocolDevice::Log
-    ) -> Vec<TimedMessage> {
-        vec![
+    fn map_event_to_device(device: &Arc<ProtocolDevice>, event: ConcreteEvent, date: SyncTime, clock: &Clock) 
+        -> Vec<TimedMessage>
+    {
+        let timed = device.translate_event(event, date, clock);
+        timed.into_iter().map(|(payload, time)| {
             ProtocolMessage {
-                // Use the LogMessage constructor to store the event directly
-                payload: LogMessage::from_event(Severity::Info, payload).into(),
-                device: Arc::clone(&device),
-            }
-            .timed(date),
-        ]
+                device: Arc::clone(device),
+                payload,
+            }.timed(time)
+        }).collect()
     }
 
     /// Maps a `ConcreteEvent` to `TimedMessage`s for a target device specified by its `target_device_name`.
@@ -485,7 +275,7 @@ impl DeviceMap {
     /// - Otherwise, it looks up the device in `output_connections`.
     /// - If the device is not found, it generates an error `LogMessage`.
     /// - If the device is found, it dispatches based on the `ProtocolDevice` type:
-    ///   - `OSCOutputDevice`: Maps the event to an `OSCMessage`. Handles `ConcreteEvent::Osc` directly
+    ///   - `OSCOutDevice`: Maps the event to an `OSCMessage`. Handles `ConcreteEvent::Osc` directly
     ///     and maps `ConcreteEvent::Dirt` to a SuperDirt `/dirt/play` message, calculating
     ///     context parameters (cps, cycle, delta, orbit) using the provided `clock`. Also includes
     ///     legacy mappings for some MIDI events to generic OSC paths (e.g., `/midi/noteon`).
@@ -506,12 +296,11 @@ impl DeviceMap {
         // Handle Log Device implicitly first
         if target_device_name == LOG_NAME {
             // generate_log_message now stores the event.
-            return self.generate_log_message(event, date, Arc::new(ProtocolDevice::Log));
+            return Self::map_event_to_device(&self.log_device, event, date, clock);
         }
 
         // Look up the device in connected outputs
-        let device_opt = self
-            .output_connections
+        let device_opt = self.output_connections
             .lock()
             .unwrap()
             .values()
@@ -527,111 +316,13 @@ impl DeviceMap {
                         target_device_name
                     ))
                     .into(),
-                    device: Arc::new(ProtocolDevice::Log), // Send error to the log device
+                    device: Arc::clone(&self.log_device), // Send error to the log device
                 }
                 .timed(date),
             ];
         };
 
-        // Dispatch based on the found device type
-        match &*device {
-            ProtocolDevice::OSCOutputDevice { .. } => {
-                let osc_payload_opt: Option<OSCMessage> = match event {
-                    // Handle Generic OSC Event (pass-through)
-                    ConcreteEvent::Osc {
-                        message,
-                        device_id: _,
-                    } => Some(message),
-                    // Handle Dirt Event (map to /dirt/play with context)
-                    ConcreteEvent::Dirt { args, device_id: _ } => {
-                        // Calculate SuperDirt context using the clock
-                        let tempo_bpm = clock.tempo();
-                        let cps_val = tempo_bpm / 60.0;
-                        let cycle_val = clock.beat_at_date(date); // Beat at the event's specific time
-                        let delta_micros = clock.beats_to_micros(1.0); // Use 1 beat for delta
-                        let delta_val = delta_micros as f64 / 1_000_000.0;
-                        let orbit_val = 0i32; // Default orbit
-
-                        let capacity = 4 * 2 + 2 + args.len();
-                        let mut full_args: Vec<OscArgument> = Vec::with_capacity(capacity);
-
-                        // Add context parameters
-                        full_args.push(OscArgument::String("cps".to_string()));
-                        full_args.push(OscArgument::Float(cps_val as f32));
-                        full_args.push(OscArgument::String("cycle".to_string()));
-                        full_args.push(OscArgument::Float(cycle_val as f32));
-                        full_args.push(OscArgument::String("delta".to_string()));
-                        full_args.push(OscArgument::Float(delta_val as f32));
-                        full_args.push(OscArgument::String("orbit".to_string()));
-                        full_args.push(OscArgument::Int(orbit_val));
-
-                        // Add other parameters
-                        full_args.extend(args);
-
-                        Some(OSCMessage {
-                            addr: "/dirt/play".to_string(),
-                            args: full_args,
-                        })
-                    }
-                    // Legacy MIDI-to-OSC mappings (consider removal/refinement)
-                    ConcreteEvent::MidiNote(note, vel, chan, _dur, _device_id) => {
-                        Some(OSCMessage {
-                            addr: "/midi/noteon".to_string(),
-                            args: vec![
-                                OscArgument::Int(note as i32),
-                                OscArgument::Int(vel as i32),
-                                OscArgument::Int(chan as i32),
-                            ],
-                        })
-                    }
-                    ConcreteEvent::MidiControl(control, value, chan, _device_id) => {
-                        Some(OSCMessage {
-                            addr: "/midi/cc".to_string(),
-                            args: vec![
-                                OscArgument::Int(control as i32),
-                                OscArgument::Int(value as i32),
-                                OscArgument::Int(chan as i32),
-                            ],
-                        })
-                    }
-                    ConcreteEvent::MidiProgram(program, chan, _device_id) => Some(OSCMessage {
-                        addr: "/midi/program".to_string(),
-                        args: vec![
-                            OscArgument::Int(program as i32),
-                            OscArgument::Int(chan as i32),
-                        ],
-                    }),
-                    _ => None, // Ignore other events for OSC for now
-                };
-
-                if let Some(osc_payload) = osc_payload_opt {
-                    vec![
-                        ProtocolMessage {
-                            payload: osc_payload.into(),
-                            device: Arc::clone(&device),
-                        }
-                        .timed(date),
-                    ]
-                } else {
-                    vec![] // No mapping found for this event to OSC
-                }
-            }
-            ProtocolDevice::MIDIOutDevice(_) | ProtocolDevice::VirtualMIDIOutDevice { .. } => {
-                // Generate MIDI messages using the helper function
-                self.generate_midi_message(event, date, device)
-            }
-            ProtocolDevice::Log => {
-                // Should be unreachable due to the initial check, but kept defensively.
-                self.generate_log_message(event, date, device)
-            }
-            _ => {
-                log_eprintln!(
-                    "[!] map_event_for_device_name: Unhandled ProtocolDevice type for {}",
-                    target_device_name
-                );
-                vec![] // Or generate an error log message
-            }
-        }
+        Self::map_event_to_device(&device, event, date, clock)
     }
 
     /// Maps a `ConcreteEvent` to `TimedMessage`s for a target device specified by its `target_slot_id`.
@@ -663,13 +354,10 @@ impl DeviceMap {
         clock: &Clock, // Pass clock through
     ) -> Vec<TimedMessage> {
         if target_slot_id == 0 {
-            // Slot 0 always targets the Log device
-            self.map_event_for_device_name(LOG_NAME, event, date, clock)
+            return Self::map_event_to_device(&self.log_device, event, date, clock);
         } else {
             // Look up the device name assigned to the slot ID (1-N)
-            let device_name_opt = self.get_name_for_slot(target_slot_id);
-
-            match device_name_opt {
+            match self.get_name_for_slot(target_slot_id) {
                 Some(device_name) => {
                     // Found an assigned device, map using its name
                     self.map_event_for_device_name(&device_name, event, date, clock)
@@ -684,13 +372,22 @@ impl DeviceMap {
                                 msg: format!("Slot {} is not assigned", target_slot_id),
                             }
                             .into(),
-                            device: Arc::new(ProtocolDevice::Log), // Send warning to log
+                            device: Arc::clone(&self.log_device), // Send warning to log
                         }
                         .timed(date),
                     ]
                 }
             }
         }
+    }
+
+    pub fn map_event(
+        &self,
+        event: ConcreteEvent,
+        date: SyncTime,
+        clock: &Clock, // Pass clock through
+    ) -> Vec<TimedMessage> {
+        self.map_event_for_slot_id(event.device_id(), event, date, clock)
     }
 
     /// Generates a list of discoverable and currently connected devices.
@@ -729,7 +426,7 @@ impl DeviceMap {
             // Extract address specifically for OSC devices using the provided reference
             let address = if kind == DeviceKind::Osc {
                 device_ref_opt.and_then(|device| match device {
-                    ProtocolDevice::OSCOutputDevice { address, .. } => Some(address.to_string()),
+                    ProtocolDevice::OSCOutDevice(osc_out) => Some(osc_out.address.to_string()),
                     _ => None,
                 })
             } else {
@@ -785,10 +482,7 @@ impl DeviceMap {
             // Determine kind and get device reference
             let (kind, device_ref) = match &**device_arc {
                 ProtocolDevice::MIDIOutDevice { .. } => (DeviceKind::Midi, Some(&**device_arc)),
-                ProtocolDevice::VirtualMIDIOutDevice { .. } => {
-                    (DeviceKind::Midi, Some(&**device_arc))
-                } // Treat virtual as MIDI
-                ProtocolDevice::OSCOutputDevice { .. } => (DeviceKind::Osc, Some(&**device_arc)),
+                ProtocolDevice::OSCOutDevice { .. } => (DeviceKind::Osc, Some(&**device_arc)),
                 _ => (DeviceKind::Other, None), // Skip Log, In, etc.
             };
 
@@ -854,18 +548,18 @@ impl DeviceMap {
             .map_err(|e| format!("Failed to create MidiOut handler: {:?}", e))?;
 
         // Attempt to connect Input first
-        match midi_in_handler.connect_to_port_by_name(device_name) {
+        match midi_in_handler.connect() {
             Ok(_) => {
                 log_println!("[✅] Connected MIDI Input: {}", device_name);
                 // Input succeeded, now try Output
-                match midi_out_handler.connect_to_port_by_name(device_name) {
+                match midi_out_handler.connect() {
                     Ok(_) => {
                         log_println!("[✅] Connected MIDI Output: {}", device_name);
                         // Both connected successfully, register them
                         let in_device =
-                            ProtocolDevice::MIDIInDevice(Arc::new(Mutex::new(midi_in_handler)));
+                            ProtocolDevice::MIDIInDevice(midi_in_handler);
                         let out_device =
-                            ProtocolDevice::MIDIOutDevice(Arc::new(Mutex::new(midi_out_handler)));
+                            ProtocolDevice::MIDIOutDevice(midi_out_handler);
                         self.register_input_connection(device_name.to_string(), in_device);
                         self.register_output_connection(device_name.to_string(), out_device);
                         log_println!("[✅] Registered MIDI device: {}", device_name);
@@ -1035,11 +729,11 @@ impl DeviceMap {
 
                         // Both endpoints created, register them
                         let in_device =
-                            ProtocolDevice::MIDIInDevice(Arc::new(Mutex::new(midi_in_handler)));
+                            ProtocolDevice::MIDIInDevice(midi_in_handler);
                         // Use VirtualMIDIOutDevice variant? Or stick to MIDIOutDevice?
                         // Sticking to MIDIOutDevice simplifies matching later. The underlying handler is correct.
                         let out_device =
-                            ProtocolDevice::MIDIOutDevice(Arc::new(Mutex::new(midi_out_handler)));
+                            ProtocolDevice::MIDIOutDevice(midi_out_handler);
                         // Let's use a specific VirtualMIDIOutDevice type for clarity if needed elsewhere
                         // let out_device = ProtocolDevice::VirtualMIDIOutDevice { name: desired_name.to_string(), handler: Arc::new(Mutex::new(midi_out_handler))};
 
@@ -1117,12 +811,9 @@ impl DeviceMap {
                     return Err(err_msg);
                 }
                 // Check specifically for OSC address collision
-                if let ProtocolDevice::OSCOutputDevice {
-                    address: existing_addr,
-                    ..
-                } = &**device_arc
+                if let ProtocolDevice::OSCOutDevice(osc_out) = &**device_arc
                 {
-                    if *existing_addr == target_socket_addr {
+                    if osc_out.address == target_socket_addr {
                         let err_msg = format!(
                             "Cannot create OSC device '{}': Another OSC device already targets address '{}'.",
                             name, target_socket_addr
@@ -1134,8 +825,8 @@ impl DeviceMap {
             }
         } // Lock released here
 
-        // Create the OSCOutputDevice instance
-        let mut osc_device = ProtocolDevice::OSCOutputDevice {
+        // Create the OSCOutDevice instance
+        let mut osc_device = OSCOut {
             name: name.to_string(),
             address: target_socket_addr,
             latency: 0.02, // Default latency
@@ -1150,7 +841,7 @@ impl DeviceMap {
                     name
                 );
                 // Register the now-connected device
-                self.register_output_connection(name.to_string(), osc_device);
+                self.register_output_connection(name.to_string(), ProtocolDevice::OSCOutDevice(osc_device));
                 log_println!("[✅] Registered OSC Output device: '{}'", name);
                 Ok(())
             }
@@ -1168,7 +859,7 @@ impl DeviceMap {
     /// Removes an OSC Output device by its name.
     ///
     /// Removes the device registration from `output_connections`. The underlying socket
-    /// will be closed when the `ProtocolDevice::OSCOutputDevice` is dropped.
+    /// will be closed when the `ProtocolDevice::OSCOutDevice` is dropped.
     /// Also unassigns the device from any slot it might occupy.
     ///
     /// # Arguments
@@ -1185,7 +876,7 @@ impl DeviceMap {
         let key_to_remove = output_connections
             .iter()
             .find(|(_address, (n, device))| {
-                n == name && matches!(**device, ProtocolDevice::OSCOutputDevice { .. })
+                n == name && matches!(**device, ProtocolDevice::OSCOutDevice { .. })
             })
             .map(|(address, _item)| address.clone());
 
@@ -1216,6 +907,24 @@ impl DeviceMap {
         }
     }
 
+    pub fn connect_audio_engine(
+        &self,
+        name: &str,
+        proxy: AudioEngineProxy
+    ) -> Result<(), String> {
+        log_println!(
+            "[✨] Registering Audio Engine device: '{}'",
+            name
+        );
+        let device = ProtocolDevice::AudioEngine(proxy);
+        self.register_output_connection(name.to_owned(), device);
+        log_println!(
+            "[✅] Audio engine device '{}' registered successfully.",
+            name
+        );
+        Ok(())
+    }
+
     /// Sends the MIDI "All Notes Off" message (Control Change 123, Value 0)
     /// to all connected MIDI output devices (physical and virtual) on all 16 channels.
     ///
@@ -1226,39 +935,35 @@ impl DeviceMap {
 
         for (_device_addr, (name, device_arc)) in connections.iter() {
             // Target MIDIOutDevice (covers both physical and virtual)
-            if let ProtocolDevice::MIDIOutDevice(midi_out_mutex) = &**device_arc {
+            if let ProtocolDevice::MIDIOutDevice(midi_out) = &**device_arc {
                 log_println!("[!] Sending Panic to MIDI device: {}", name);
-                if let Ok(midi_out) = midi_out_mutex.lock() {
-                    for chan in 0..16 {
-                        // Send on all 16 channels (0-15)
-                        let msg = MIDIMessage {
-                            payload: MIDIMessageType::ControlChange {
-                                control: 123,
-                                value: 0,
-                            },
-                            channel: chan,
-                        };
-                        // Attempt to send, log errors but continue
-                        if let Err(e) = midi_out.send(msg) {
-                            log_eprintln!(
-                                "[!] Error sending panic CC 123 chan {} to {}: {:?}",
-                                chan, name, e
-                            );
-                        }
+                for chan in 0..16 {
+                    // Send on all 16 channels (0-15)
+                    let msg = MIDIMessage {
+                        payload: MIDIMessageType::ControlChange {
+                            control: 123,
+                            value: 0,
+                        },
+                        channel: chan,
+                    };
+                    // Attempt to send, log errors but continue
+                    if let Err(e) = midi_out.send(msg) {
+                        log_eprintln!(
+                            "[!] Error sending panic CC 123 chan {} to {}: {:?}",
+                            chan, name, e
+                        );
                     }
-                    // Optionally send "All Sound Off" (CC 120) as well?
-                    // for chan in 0..16 {
-                    //     let msg = MIDIMessage {
-                    //         payload: MIDIMessageType::ControlChange { control: 120, value: 0 },
-                    //         channel: chan,
-                    //     };
-                    //     if let Err(e) = midi_out.send(msg) {
-                    //         eprintln!("[!] Error sending panic CC 120 chan {} to {}: {:?}", chan, name, e);
-                    //     }
-                    // }
-                } else {
-                    log_eprintln!("[!] Could not lock Mutex for MIDI device: {}", name);
                 }
+                // Optionally send "All Sound Off" (CC 120) as well?
+                // for chan in 0..16 {
+                //     let msg = MIDIMessage {
+                //         payload: MIDIMessageType::ControlChange { control: 120, value: 0 },
+                //         channel: chan,
+                //     };
+                //     if let Err(e) = midi_out.send(msg) {
+                //         eprintln!("[!] Error sending panic CC 120 chan {} to {}: {:?}", chan, name, e);
+                //     }
+                // }
             }
         }
         log_println!("[!] MIDI Panic finished.");
