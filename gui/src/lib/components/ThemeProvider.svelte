@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentTheme, currentTransparency } from '$lib/stores/themeStore';
+  import { currentTheme, currentTransparency } from '$lib/stores/config';
   import { hexToRgba } from '$lib/utils/colorUtils';
   import type { Snippet } from 'svelte';
 

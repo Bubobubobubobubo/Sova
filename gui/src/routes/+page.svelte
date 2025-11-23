@@ -1,11 +1,14 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
+  import { invoke } from '@tauri-apps/api/core';
   import ThemeProvider from '$lib/components/ThemeProvider.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
   import Editor from '$lib/components/Editor.svelte';
   import ConfigEditor from '$lib/components/ConfigEditor.svelte';
+  import Login from '$lib/components/Login.svelte';
   import { viewState } from '$lib/stores/viewState';
-  import { initializeConfig, cleanupConfigLoader } from '$lib/stores/configLoader';
+  import { initializeApp, cleanupApp } from '$lib/stores/config';
+  import { isConnected } from '$lib/stores/connectionState';
 
   let currentView = $state($viewState);
 
@@ -14,11 +17,18 @@
   });
 
   onMount(async () => {
-    await initializeConfig();
+    await initializeApp();
+
+    const connected = await invoke<boolean>('is_client_connected');
+    if (!connected) {
+      viewState.set('LOGIN');
+    } else {
+      isConnected.set(true);
+    }
   });
 
   onDestroy(() => {
-    cleanupConfigLoader();
+    cleanupApp();
   });
 </script>
 
@@ -26,7 +36,9 @@
   <div class="app">
     <TopBar {currentView} />
     <div class="content">
-      {#if currentView === 'EDITOR'}
+      {#if currentView === 'LOGIN'}
+        <Login />
+      {:else if currentView === 'EDITOR'}
         <Editor />
       {:else}
         <ConfigEditor />

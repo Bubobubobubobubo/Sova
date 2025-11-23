@@ -106,6 +106,27 @@ async fn is_client_connected(
     Ok(client_manager.lock().await.is_connected())
 }
 
+#[tauri::command]
+fn save_client_config(ip: String, port: u16, nickname: String) -> Result<(), String> {
+    let loader = ConfigLoader::new()
+        .map_err(|e| e.to_string())?;
+
+    let mut config = loader.load_or_create()
+        .map_err(|e| e.to_string())?;
+
+    config.client.ip = ip;
+    config.client.port = port;
+    config.client.nickname = nickname;
+
+    let toml_content = toml::to_string_pretty(&config)
+        .map_err(|e| format!("Failed to serialize config: {}", e))?;
+
+    std::fs::write(loader.config_path(), toml_content)
+        .map_err(|e| format!("Failed to write config file: {}", e))?;
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -117,7 +138,7 @@ pub fn run() {
             app.manage(server_manager.clone());
 
             let client_manager = Arc::new(Mutex::new(
-                ClientManager::new()
+                ClientManager::new(app.handle().clone())
             ));
             app.manage(client_manager);
 
@@ -139,6 +160,7 @@ pub fn run() {
                         editor: config.editor,
                         appearance: config.appearance,
                         server: config.server,
+                        client: config.client,
                     };
                     let _ = app.emit("config-update", &event);
                 }
@@ -148,6 +170,7 @@ pub fn run() {
                         editor: config::types::EditorConfig::default(),
                         appearance: config::types::AppearanceConfig::default(),
                         server: config::types::ServerConfig::default(),
+                        client: config::types::ClientConfig::default(),
                     });
                 }
             }
@@ -166,7 +189,8 @@ pub fn run() {
             is_server_running,
             connect_client,
             disconnect_client,
-            is_client_connected
+            is_client_connected,
+            save_client_config
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

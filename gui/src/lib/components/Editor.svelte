@@ -1,8 +1,7 @@
 <script lang="ts">
   import { onMount, onDestroy } from 'svelte';
   import { javascript } from '@codemirror/lang-javascript';
-  import { editorConfig } from '$lib/stores/editorConfig';
-  import { currentTheme } from '$lib/stores/themeStore';
+  import { editorConfig, currentTheme } from '$lib/stores/config';
   import { createEditor, createEditorSubscriptions } from '$lib/editor/editorFactory';
   import type { EditorView } from '@codemirror/view';
 

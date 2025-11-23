@@ -1,5 +1,7 @@
 <script lang="ts">
   import { viewState, type ViewType } from '$lib/stores/viewState';
+  import { isConnected } from '$lib/stores/connectionState';
+  import { invoke } from '@tauri-apps/api/core';
 
   interface Props {
     currentView: ViewType;
@@ -10,16 +12,35 @@
   function switchView(view: ViewType) {
     viewState.set(view);
   }
+
+  async function handleDisconnect() {
+    try {
+      await invoke('disconnect_client');
+      isConnected.set(false);
+      viewState.set('LOGIN');
+    } catch (error) {
+      console.error('Failed to disconnect:', error);
+    }
+  }
 </script>
 
 <div class="topbar">
   <div class="tabs">
-    <button
-      class="tab"
-      class:active={currentView === 'EDITOR'}
-      onclick={() => switchView('EDITOR')}>
-      EDITOR
-    </button>
+    {#if $isConnected}
+      <button
+        class="tab"
+        class:active={currentView === 'EDITOR'}
+        onclick={() => switchView('EDITOR')}>
+        EDITOR
+      </button>
+    {:else}
+      <button
+        class="tab"
+        class:active={currentView === 'LOGIN'}
+        onclick={() => switchView('LOGIN')}>
+        LOGIN
+      </button>
+    {/if}
     <button
       class="tab"
       class:active={currentView === 'CONFIG'}
@@ -27,6 +48,14 @@
       CONFIG
     </button>
   </div>
+
+  {#if $isConnected}
+    <div class="actions">
+      <button class="disconnect-button" onclick={handleDisconnect}>
+        Disconnect
+      </button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -37,6 +66,7 @@
     border-bottom: 1px solid var(--colors-border, #333);
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 0 16px;
   }
 
@@ -65,5 +95,25 @@
   .tab.active {
     color: var(--colors-text, #fff);
     background-color: var(--colors-surface, #2d2d2d);
+  }
+
+  .actions {
+    display: flex;
+    gap: 8px;
+  }
+
+  .disconnect-button {
+    background: none;
+    border: 1px solid var(--colors-border, #333);
+    color: var(--colors-text-secondary, #888);
+    font-family: monospace;
+    font-size: 12px;
+    padding: 4px 12px;
+    cursor: pointer;
+  }
+
+  .disconnect-button:hover {
+    border-color: var(--colors-accent, #0e639c);
+    color: var(--colors-text, #fff);
   }
 </style>

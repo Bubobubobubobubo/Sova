@@ -36,7 +36,11 @@ fn watch_config_file(app_handle: AppHandle, server_manager: ServerManagerState) 
 
     println!("Watching config file: {:?}", config_path);
 
-    let mut previous_server_config: Option<ServerConfig> = None;
+    // Load initial config to establish baseline for comparison
+    // This ensures the first detected change is properly handled
+    let initial_config = loader.load().ok();
+    let mut previous_server_config: Option<ServerConfig> =
+        initial_config.as_ref().map(|c| c.server.clone());
 
     for res in rx {
         match res {
@@ -59,6 +63,7 @@ fn watch_config_file(app_handle: AppHandle, server_manager: ServerManagerState) 
                             editor: config.editor,
                             appearance: config.appearance,
                             server: config.server,
+                            client: config.client,
                         };
 
                         if let Err(e) = app_handle.emit("config-update", &event) {

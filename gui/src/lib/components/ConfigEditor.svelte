@@ -5,8 +5,7 @@
   import { keymap } from '@codemirror/view';
   import { autocompletion } from '@codemirror/autocomplete';
   import { invoke } from '@tauri-apps/api/core';
-  import { editorConfig } from '$lib/stores/editorConfig';
-  import { currentTheme } from '$lib/stores/themeStore';
+  import { editorConfig, currentTheme } from '$lib/stores/config';
   import { createEditor, createEditorSubscriptions } from '$lib/editor/editorFactory';
   import { tomlThemeCompletion } from '$lib/editor/tomlThemeCompletion';
   import type { EditorView } from '@codemirror/view';

@@ -1,24 +1,26 @@
 use anyhow::Result;
 use sova_core::server::client::{ClientMessage, SovaClient};
 use sova_core::server::ServerMessage;
+use tauri::{AppHandle, Emitter};
 use tokio::sync::mpsc;
 
+#[derive(Clone, serde::Serialize)]
+struct ClientDisconnectEvent {
+    reason: String,
+}
+
 pub struct ClientManager {
+    app_handle: AppHandle,
     client: Option<SovaClient>,
     message_sender: Option<mpsc::UnboundedSender<ClientMessage>>,
     message_receiver: Option<mpsc::UnboundedReceiver<ServerMessage>>,
     disconnect_sender: Option<mpsc::UnboundedSender<()>>,
 }
 
-impl Default for ClientManager {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl ClientManager {
-    pub fn new() -> Self {
+    pub fn new(app_handle: AppHandle) -> Self {
         ClientManager {
+            app_handle,
             client: None,
             message_sender: None,
             message_receiver: None,
@@ -34,7 +36,7 @@ impl ClientManager {
         let (server_tx, server_rx) = mpsc::unbounded_channel();
         let (disconnect_tx, disconnect_rx) = mpsc::unbounded_channel();
 
-        self.spawn_client_task(client, msg_rx, server_tx, disconnect_rx).await;
+        self.spawn_client_task(client, msg_rx, server_tx, disconnect_rx, self.app_handle.clone()).await;
 
         self.message_sender = Some(msg_tx);
         self.message_receiver = Some(server_rx);
@@ -49,6 +51,7 @@ impl ClientManager {
         mut message_receiver: mpsc::UnboundedReceiver<ClientMessage>,
         server_sender: mpsc::UnboundedSender<ServerMessage>,
         mut disconnect_receiver: mpsc::UnboundedReceiver<()>,
+        app_handle: AppHandle,
     ) {
         tauri::async_runtime::spawn(async move {
             let mut consecutive_failures = 0;
@@ -57,6 +60,9 @@ impl ClientManager {
                     Some(message) = message_receiver.recv() => {
                         if let Err(e) = client.send(message).await {
                             eprintln!("Failed to send message: {}", e);
+                            let _ = app_handle.emit("client-disconnected", ClientDisconnectEvent {
+                                reason: "send_error".to_string(),
+                            });
                             return;
                         }
                     }
@@ -65,30 +71,72 @@ impl ClientManager {
                         if let Err(e) = client.disconnect().await {
                             eprintln!("Failed to disconnect client: {}", e);
                         }
+                        let _ = app_handle.emit("client-disconnected", ClientDisconnectEvent {
+                            reason: "manual_disconnect".to_string(),
+                        });
                         return;
                     }
                     read_result = async {
-                        if client.ready().await {
-                            client.read().await
-                        } else {
-                            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-                            Err(std::io::Error::new(std::io::ErrorKind::ConnectionRefused, "Client cannot start"))
+                        // Timeout ready() check to prevent blocking forever on dead connections
+                        match tokio::time::timeout(
+                            tokio::time::Duration::from_millis(100),
+                            client.ready()
+                        ).await {
+                            Ok(true) => {
+                                // Data is available - read it with timeout
+                                match tokio::time::timeout(
+                                    tokio::time::Duration::from_secs(1),
+                                    client.read()
+                                ).await {
+                                    Ok(result) => result,
+                                    Err(_) => Err(std::io::Error::new(
+                                        std::io::ErrorKind::TimedOut,
+                                        "Read timeout after ready"
+                                    ))
+                                }
+                            }
+                            Ok(false) => {
+                                // ready() returned false - connection closed by peer
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::ConnectionReset,
+                                    "Connection closed"
+                                ))
+                            }
+                            Err(_) => {
+                                // ready() timed out - no data available yet (NORMAL during idle)
+                                tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+                                Err(std::io::Error::new(
+                                    std::io::ErrorKind::WouldBlock,
+                                    "No data available"
+                                ))
+                            }
                         }
                     } => {
                         match read_result {
                             Ok(message) => {
                                 consecutive_failures = 0;
                                 if server_sender.send(message).is_err() {
+                                    let _ = app_handle.emit("client-disconnected", ClientDisconnectEvent {
+                                        reason: "internal_channel_closed".to_string(),
+                                    });
                                     return;
                                 }
                             }
+                            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
+                                // No data available - NOT a failure, this is normal during idle
+                                // Don't increment consecutive_failures
+                            }
                             Err(_) => {
+                                // Real error - increment failures
                                 consecutive_failures += 1;
-                                if consecutive_failures > 500 { // ~5 seconds of failures
-                                    eprintln!("Connection appears to be dead, task exiting");
+                                if consecutive_failures > 100 {  // 100 failures × 10ms = ~1 second
+                                    eprintln!("Connection dead after {} failures, disconnecting", consecutive_failures);
                                     if let Err(e) = client.disconnect().await {
                                         eprintln!("Failed to disconnect client: {}", e);
                                     }
+                                    let _ = app_handle.emit("client-disconnected", ClientDisconnectEvent {
+                                        reason: "connection_lost".to_string(),
+                                    });
                                     return;
                                 }
                                 tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;

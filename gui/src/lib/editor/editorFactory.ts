@@ -8,8 +8,7 @@ import { lintKeymap } from '@codemirror/lint';
 import { vim } from '@replit/codemirror-vim';
 import { emacs } from '@replit/codemirror-emacs';
 import { get } from 'svelte/store';
-import { editorConfig } from '$lib/stores/editorConfig';
-import { currentTheme, currentTransparency } from '$lib/stores/themeStore';
+import { editorConfig, currentTheme, currentTransparency } from '$lib/stores/config';
 import { createHighlightStyle } from '$lib/themes';
 import { hexToRgba } from '$lib/utils/colorUtils';
 import type { Theme } from '$lib/themes';
@@ -136,12 +135,12 @@ export function createEditor(
 }
 
 export function createEditorSubscriptions(view: EditorView): () => void {
-  let config: EditorConfig = get(editorConfig);
+  let config: EditorConfig | null = get(editorConfig);
   let theme: Theme = get(currentTheme);
   let transparency: number = get(currentTransparency);
 
   const unsubscribeConfig = editorConfig.subscribe((newConfig) => {
-    if (!view) return;
+    if (!view || !newConfig) return;
     config = newConfig;
 
     view.dispatch({
@@ -164,7 +163,7 @@ export function createEditorSubscriptions(view: EditorView): () => void {
   });
 
   const unsubscribeTheme = currentTheme.subscribe((newTheme) => {
-    if (!view) return;
+    if (!view || !config) return;
     theme = newTheme;
 
     view.dispatch({
@@ -176,7 +175,7 @@ export function createEditorSubscriptions(view: EditorView): () => void {
   });
 
   const unsubscribeTransparency = currentTransparency.subscribe((newTransparency) => {
-    if (!view) return;
+    if (!view || !config) return;
     transparency = newTransparency;
 
     view.dispatch({
