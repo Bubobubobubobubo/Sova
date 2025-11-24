@@ -35,6 +35,9 @@ importers:
       '@codemirror/view':
         specifier: ^6.38.8
         version: 6.38.8
+      '@humanspeak/svelte-virtual-list':
+        specifier: ^0.3.6
+        version: 0.3.6(svelte@5.43.14)
       '@lezer/highlight':
         specifier: ^1.2.3
         version: 1.2.3
@@ -266,6 +269,11 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@humanspeak/svelte-virtual-list@0.3.6':
+    resolution: {integrity: sha512-ls5FicD5b8nXi87GG7mj9nIoTkIl0M/JkmmE21KWnTabtDRnqEjZ7kOsU3ZEAWc0/HW8PlRwF50yqKwpaLeBMw==}
+    peerDependencies:
+      svelte: ^5.0.0
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -915,6 +923,11 @@ snapshots:
 
   '@esbuild/win32-x64@0.25.12':
     optional: true
+
+  '@humanspeak/svelte-virtual-list@0.3.6(svelte@5.43.14)':
+    dependencies:
+      esm-env: 1.2.2
+      svelte: 5.43.14
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:

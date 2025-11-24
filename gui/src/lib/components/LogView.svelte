@@ -9,8 +9,10 @@
     showDebug
   } from '$lib/stores/logs';
   import type { Severity } from '$lib/types/protocol';
+  import SvelteVirtualList from '@humanspeak/svelte-virtual-list';
 
   let scrollContainer: HTMLDivElement;
+  let virtualListComponent: any;
   let autoScroll = $state(true);
 
   function formatTimestamp(timestamp: number): string {
@@ -36,8 +38,12 @@
   }
 
   function scrollToBottom() {
-    if (autoScroll && scrollContainer) {
-      scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    if (autoScroll && virtualListComponent && $filteredLogs.length > 0) {
+      virtualListComponent.scroll({
+        index: $filteredLogs.length - 1,
+        align: 'auto',
+        smoothScroll: false
+      });
     }
   }
 
@@ -90,15 +96,19 @@
         {$logs.length === 0 ? 'No logs yet' : 'No logs match current filters'}
       </div>
     {:else}
-      <div class="logs-list">
-        {#each $filteredLogs as log}
-          <div class="log-entry {getSeverityClass(log.level)}">
-            <span class="log-level">[{getLogLevel(log)}]</span>
-            <span class="log-timestamp">{formatTimestamp(log.timestamp)}</span>
-            <span class="log-message">{log.message}</span>
+      <SvelteVirtualList
+        bind:this={virtualListComponent}
+        items={$filteredLogs}
+        defaultEstimatedItemHeight={30}
+      >
+        {#snippet renderItem(item)}
+          <div class="log-entry {getSeverityClass(item.level)}">
+            <span class="log-level">[{getLogLevel(item)}]</span>
+            <span class="log-timestamp">{formatTimestamp(item.timestamp)}</span>
+            <span class="log-message">{item.message}</span>
           </div>
-        {/each}
-      </div>
+        {/snippet}
+      </SvelteVirtualList>
     {/if}
   </div>
 </div>
@@ -198,7 +208,6 @@
     flex: 1;
     overflow-y: auto;
     overflow-x: hidden;
-    padding: 16px;
   }
 
   .empty-state {
@@ -209,19 +218,14 @@
     padding: 32px;
   }
 
-  .logs-list {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-
   .log-entry {
     display: flex;
     gap: 12px;
     font-family: monospace;
     font-size: 13px;
-    padding: 4px 8px;
+    padding: 4px 16px;
     border-bottom: 1px solid var(--colors-border, #333);
+    box-sizing: border-box;
   }
 
   .log-entry:hover {
@@ -249,22 +253,22 @@
 
   /* Severity color coding */
   .severity-fatal .log-level {
-    color: #ff3366;
+    color: var(--ansi-bright-red, #ff3366);
   }
 
   .severity-error .log-level {
-    color: #ff6b6b;
+    color: var(--ansi-red, #ff6b6b);
   }
 
   .severity-warn .log-level {
-    color: #ffa500;
+    color: var(--ansi-yellow, #ffa500);
   }
 
   .severity-info .log-level {
-    color: #4ecdc4;
+    color: var(--ansi-cyan, #4ecdc4);
   }
 
   .severity-debug .log-level {
-    color: #95a5a6;
+    color: var(--ansi-bright-black, #95a5a6);
   }
 </style>

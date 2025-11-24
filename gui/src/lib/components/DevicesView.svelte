@@ -334,10 +334,10 @@
 <style>
   .devices-view {
     --grid-columns: 60px 120px 1fr 150px 60px;
-    --color-success: #4ade80;
-    --color-danger: #f87171;
-    --color-info: #60a5fa;
-    --color-inactive: #666;
+    --color-success: var(--ansi-green, #4ade80);
+    --color-danger: var(--colors-danger, #f87171);
+    --color-info: var(--ansi-blue, #60a5fa);
+    --color-inactive: var(--colors-text-secondary, #666);
 
     width: 100%;
     height: 100%;

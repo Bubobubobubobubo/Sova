@@ -281,7 +281,7 @@
 	}
 
 	.frame {
-		background-color: #1a1a1a;
+		background-color: var(--colors-background, #1a1a1a);
 		border: 1px solid var(--colors-border);
 		color: var(--colors-text-secondary);
 		padding: 10px;
