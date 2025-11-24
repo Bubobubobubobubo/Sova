@@ -89,7 +89,7 @@ impl ServerManager {
                 if log_receiver.changed().await.is_ok() {
                     let notification = log_receiver.borrow().clone();
                     if let sova_core::schedule::SovaNotification::Log(log_msg) = notification {
-                        let _ = app_handle_clone.emit("server:log", log_msg.to_string());
+                        let _ = app_handle_clone.emit("server:log", log_msg);
                     }
                 }
             }

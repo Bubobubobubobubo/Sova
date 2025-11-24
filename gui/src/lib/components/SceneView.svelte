@@ -1,11 +1,11 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
 	import { ArrowLeftRight, ArrowUpDown } from 'lucide-svelte';
+	import { javascript } from '@codemirror/lang-javascript';
 	import { scene, framePositions, isPlaying } from '$lib/stores';
 	import { editorConfig, currentTheme } from '$lib/stores/config';
 	import { selection, selectFrame } from '$lib/stores/selection';
 	import { createEditor, createEditorSubscriptions } from '$lib/editor/editorFactory';
-	import { javascript } from '@codemirror/lang-javascript';
 	import type { Frame } from '$lib/types/protocol';
 	import type { EditorView } from '@codemirror/view';
 	import SplitPane from './SplitPane.svelte';

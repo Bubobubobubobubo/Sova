@@ -2,6 +2,16 @@
 
 export type SyncTime = number; // u64 microseconds in Rust
 
+// Log severity levels (matches Rust Severity enum)
+export type Severity = 'Fatal' | 'Error' | 'Warn' | 'Info' | 'Debug';
+
+// Structured log message (matches Rust LogMessage struct)
+export interface LogMessage {
+	level: Severity;
+	event: unknown | null; // ConcreteEvent - simplified as unknown for now
+	msg: string;
+}
+
 // ActionTiming for scheduling changes (matches Rust enum serialization)
 export type ActionTiming =
 	| 'Immediate'

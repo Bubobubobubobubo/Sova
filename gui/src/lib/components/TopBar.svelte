@@ -1,6 +1,9 @@
 <script lang="ts">
+  import { Play, Pause } from 'lucide-svelte';
   import { viewState, type ViewType } from '$lib/stores/viewState';
   import { isConnected } from '$lib/stores/connectionState';
+  import { isPlaying, clockState } from '$lib/stores/transport';
+  import { startTransport, stopTransport } from '$lib/api/client';
   import { invoke } from '@tauri-apps/api/core';
 
   interface Props {
@@ -63,6 +66,28 @@
 
   {#if $isConnected}
     <div class="actions">
+      <span class="transport-info">
+        {#if $clockState !== null}
+          {$clockState.beat.toFixed(1)} ({Math.floor($clockState.beat % $clockState.quantum) + 1}/{Math.floor($clockState.quantum)})
+        {:else}
+          -- (- / -)
+        {/if}
+      </span>
+
+      <span class="transport-info">
+        {$clockState !== null ? `${Math.round($clockState.tempo)} BPM` : '-- BPM'}
+      </span>
+
+      <button
+        class="transport-button"
+        onclick={() => $isPlaying ? stopTransport() : startTransport()}>
+        {#if $isPlaying}
+          <Pause size={16} />
+        {:else}
+          <Play size={16} />
+        {/if}
+      </button>
+
       <button class="disconnect-button" onclick={handleDisconnect}>
         Disconnect
       </button>
@@ -112,6 +137,32 @@
   .actions {
     display: flex;
     gap: 8px;
+    align-items: center;
+  }
+
+  .transport-info {
+    font-family: monospace;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--colors-text-secondary, #888);
+    padding: 4px 8px;
+  }
+
+  .transport-button {
+    background: none;
+    border: 1px solid var(--colors-border, #333);
+    color: var(--colors-text, #fff);
+    padding: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+  }
+
+  .transport-button:hover {
+    border-color: var(--colors-accent, #0e639c);
+    color: var(--colors-accent, #0e639c);
   }
 
   .disconnect-button {
