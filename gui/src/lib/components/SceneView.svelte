@@ -13,7 +13,7 @@
 
 	// Base dimensions (fixed)
 	const BASE_PIXELS_PER_BEAT = 60;
-	const BASE_TRACK_SIZE = 56;
+	const BASE_TRACK_SIZE = 72;
 	const TRACK_HEADER_SIZE = 60;
 	const RULER_SIZE = 28;
 	const CLIP_PADDING = 4;
@@ -23,7 +23,7 @@
 	// Zoom constraints
 	const MIN_ZOOM = 0.25;
 	const MAX_ZOOM = 4.0;
-	const ZOOM_STEP = 0.1;
+	const ZOOM_FACTOR = 1.1; // 10% per tick - exponential scaling for natural feel
 
 	// Viewport state
 	let viewport = $state({ zoom: 1.0, orientation: 'horizontal' as 'horizontal' | 'vertical' });
@@ -224,13 +224,30 @@
 	}
 
 	// Zoom handler
+	// Normalize wheel delta across browsers/OS
+	function getZoomDirection(event: WheelEvent): number {
+		let delta = event.deltaY;
+
+		// Handle deltaMode (Firefox uses LINE mode, others use PIXEL)
+		if (event.deltaMode === 1) delta *= 40; // DOM_DELTA_LINE
+		else if (event.deltaMode === 2) delta *= 800; // DOM_DELTA_PAGE
+
+		// Threshold to prevent micro-zooms from trackpad noise
+		if (Math.abs(delta) < 4) return 0;
+		return Math.sign(delta);
+	}
+
 	function handleWheel(event: WheelEvent) {
 		if (!event.ctrlKey && !event.metaKey) return;
 
 		event.preventDefault();
 
-		const delta = event.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
-		const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom + delta));
+		const direction = getZoomDirection(event);
+		if (direction === 0) return;
+
+		// Exponential zoom: multiply or divide by factor for consistent percentage change
+		const factor = direction > 0 ? 1 / ZOOM_FACTOR : ZOOM_FACTOR;
+		const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, viewport.zoom * factor));
 
 		if (newZoom !== viewport.zoom) {
 			const rect = timelineContainer.getBoundingClientRect();
@@ -565,7 +582,7 @@
 			<div class="zoom-controls">
 				<button
 					class="toolbar-btn"
-					onclick={() => { viewport.zoom = Math.max(MIN_ZOOM, viewport.zoom - ZOOM_STEP); }}
+					onclick={() => { viewport.zoom = Math.max(MIN_ZOOM, viewport.zoom / ZOOM_FACTOR); }}
 					title="Zoom out"
 					disabled={viewport.zoom <= MIN_ZOOM}
 				>
@@ -574,7 +591,7 @@
 				<span class="zoom-level">{Math.round(viewport.zoom * 100)}%</span>
 				<button
 					class="toolbar-btn"
-					onclick={() => { viewport.zoom = Math.min(MAX_ZOOM, viewport.zoom + ZOOM_STEP); }}
+					onclick={() => { viewport.zoom = Math.min(MAX_ZOOM, viewport.zoom * ZOOM_FACTOR); }}
 					title="Zoom in"
 					disabled={viewport.zoom >= MAX_ZOOM}
 				>
@@ -1247,6 +1264,25 @@
 		opacity: 1;
 		color: var(--colors-accent);
 		border-color: var(--colors-accent);
+	}
+
+	.timeline.vertical .add-track-row {
+		height: auto;
+		width: 40px;
+		min-height: 100%;
+	}
+
+	.timeline.vertical .add-track {
+		width: 100%;
+		height: 100%;
+		min-height: 100%;
+		writing-mode: vertical-rl;
+		border-bottom: none;
+		border-left: 1px dashed var(--colors-border);
+	}
+
+	.timeline.vertical .add-track:hover {
+		border-left-color: var(--colors-accent);
 	}
 
 	/* Editor pane */
