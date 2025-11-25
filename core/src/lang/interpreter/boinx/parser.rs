@@ -112,6 +112,11 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 let f = primary.as_str().parse().unwrap_or_default();
                 BoinxItem::Number(f).into()
             }
+            Rule::str => {
+                let s = primary.as_str();
+                let sub = &s[1..(s.len() - 1)];
+                BoinxItem::Str(sub.to_owned()).into()
+            }
             Rule::ident => 
                 BoinxItem::Identity(parse_ident(primary.into_inner())).into(),
             Rule::micros => {

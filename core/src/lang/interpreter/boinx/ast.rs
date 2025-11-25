@@ -253,6 +253,7 @@ pub enum BoinxItem {
     WithDuration(Box<BoinxItem>, TimeSpan),
     External(Program),
     Negative(Box<BoinxItem>),
+    Str(String)
 }
 
 impl BoinxItem {
@@ -491,6 +492,7 @@ impl BoinxItem {
             BoinxItem::WithDuration(_, _) => 13,
             BoinxItem::External(_) => 14,
             BoinxItem::Negative(_) => 15,
+            BoinxItem::Str(_) => 16
         }
     }
 
@@ -510,6 +512,7 @@ impl From<BoinxItem> for VariableValue {
             }
             BoinxItem::Note(i) => i.into(),
             BoinxItem::Number(f) => f.into(),
+            BoinxItem::Str(s) => s.into(),
             BoinxItem::Sequence(items) | BoinxItem::Simultaneous(items) => {
                 map.insert("_len".to_owned(), (items.len() as i64).into());
                 for (i, item) in items.into_iter().enumerate() {
@@ -527,7 +530,10 @@ impl From<BoinxItem> for VariableValue {
                 map.insert("_else".to_owned(), (*p2).into());
                 map.into()
             }
-            BoinxItem::Identity(ident) => format!("{}", ident).into(),
+            BoinxItem::Identity(ident) => {
+                map.insert("_var".to_owned(), format!("{}", ident).into());
+                map.into()
+            }
             BoinxItem::SubProg(prog) => {
                 map.insert("_prog".to_owned(), (*prog).into());
                 map.into()
@@ -562,7 +568,7 @@ impl From<VariableValue> for BoinxItem {
                 BoinxItem::Number((s as f64) * (p as f64) / (q as f64))
             }
             VariableValue::Bool(b) => BoinxItem::Note(b as i64),
-            VariableValue::Str(s) => BoinxItem::Identity(s.into()),
+            VariableValue::Str(s) => BoinxItem::Str(s),
             VariableValue::Dur(time_span) => BoinxItem::Duration(time_span),
             VariableValue::Func(instructions) => BoinxItem::External(instructions),
             VariableValue::Map(mut map) => {
@@ -608,6 +614,12 @@ impl From<VariableValue> for BoinxItem {
                             Box::new(i2.into()),
                         );
                         BoinxItem::Condition(condition, Box::new(p1.into()), Box::new(p2.into()))
+                    }
+                    10 => {
+                        let Some(VariableValue::Str(s)) = map.remove("_var") else {
+                            return BoinxItem::Mute;
+                        };
+                        BoinxItem::Identity(s.into())
                     }
                     11 => {
                         let Some(prog) = map.remove("_prog") else {

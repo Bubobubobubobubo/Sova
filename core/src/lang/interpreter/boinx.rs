@@ -66,7 +66,10 @@ impl BoinxLine {
             }
             BoinxItem::Number(_) => {
                 todo!()
-            },
+            }
+            BoinxItem::Str(_) => {
+                todo!()
+            }
             BoinxItem::External(prog) => vec![ConcreteEvent::StartProgram(prog)],
             _ => Vec::new(),
         }
