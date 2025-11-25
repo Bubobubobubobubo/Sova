@@ -72,7 +72,8 @@
     display: flex;
     flex-direction: column;
     background-color: var(--colors-background);
-    color: var(--colors-text, #ffffff);
+    color: var(--colors-text);
+    font-family: var(--appearance-font-family);
   }
 
   .content {

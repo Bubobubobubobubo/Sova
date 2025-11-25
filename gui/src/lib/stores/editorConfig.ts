@@ -1,6 +1,7 @@
 export interface EditorConfig {
   mode: 'vim' | 'normal' | 'emacs';
   font_size: number;
+  font_family?: string;
   show_line_numbers: boolean;
   line_wrapping: boolean;
   highlight_active_line: boolean;

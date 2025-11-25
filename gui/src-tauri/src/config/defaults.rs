@@ -5,6 +5,7 @@ impl Default for EditorConfig {
         Self {
             mode: EditorMode::Normal,
             font_size: 14.0,
+            font_family: None,
             show_line_numbers: true,
             line_wrapping: false,
             highlight_active_line: true,
@@ -27,6 +28,7 @@ impl Default for AppearanceConfig {
         Self {
             theme: "monokai".to_string(),
             transparency: 100,
+            font_family: "monospace".to_string(),
         }
     }
 }

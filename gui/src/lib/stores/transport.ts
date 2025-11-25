@@ -2,7 +2,7 @@ import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import type { LinkState, ClockState, FramePosition } from '$lib/types/protocol';
 import { ticker } from './ticker';
-import { getClock } from '$lib/api/client';
+import { getClock, getScene } from '$lib/api/client';
 
 // Transport state
 export const isPlaying: Writable<boolean> = writable(false);
@@ -57,6 +57,7 @@ export function getCurrentFrameForLine(lineId: number): Readable<number | null> 
 
 let unlistenFunctions: UnlistenFn[] = [];
 let unsubscribeTicker: (() => void) | null = null;
+let tickCount = 0;
 
 export async function initializeTransportStore(): Promise<void> {
 	// Listen for transport started
@@ -87,9 +88,16 @@ export async function initializeTransportStore(): Promise<void> {
 		})
 	);
 
-	// Subscribe to ticker for periodic clock updates
+	// Subscribe to ticker for periodic updates
+	// Clock updates every tick (50ms), scene updates every 5 ticks (250ms)
 	unsubscribeTicker = ticker.subscribe(() => {
 		getClock();
+
+		tickCount++;
+		if (tickCount >= 5) {
+			getScene();
+			tickCount = 0;
+		}
 	});
 }
 
@@ -104,6 +112,7 @@ export function cleanupTransportStore(): void {
 		unsubscribeTicker = null;
 	}
 
+	tickCount = 0;
 	isPlaying.set(false);
 	clockState.set(null);
 	linkState.set(null);

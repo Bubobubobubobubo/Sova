@@ -25,6 +25,9 @@ pub struct EditorConfig {
     #[serde(default = "default_font_size")]
     pub font_size: f32,
 
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub font_family: Option<String>,
+
     #[serde(default = "default_show_line_numbers")]
     pub show_line_numbers: bool,
 
@@ -81,6 +84,9 @@ pub struct AppearanceConfig {
 
     #[serde(default = "default_transparency")]
     pub transparency: u8,
+
+    #[serde(default = "default_font_family")]
+    pub font_family: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -207,4 +213,8 @@ fn default_client_port() -> u16 {
 
 fn default_client_nickname() -> String {
     String::new()
+}
+
+fn default_font_family() -> String {
+    "monospace".to_string()
 }

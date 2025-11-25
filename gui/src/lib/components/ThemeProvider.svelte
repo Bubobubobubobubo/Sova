@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { currentTheme, currentTransparency } from '$lib/stores/config';
+  import { currentTheme, currentTransparency, config } from '$lib/stores/config';
   import { hexToRgba } from '$lib/utils/colorUtils';
   import type { Snippet } from 'svelte';
 
@@ -37,9 +37,12 @@
 
   const themeVars = $derived(flattenTheme($currentTheme, $currentTransparency));
 
+  const appearanceFont = $derived($config?.appearance?.font_family || 'monospace');
+
   const styleString = $derived(
     Object.entries(themeVars)
       .map(([key, value]) => `${key}: ${value}`)
+      .concat(`--appearance-font-family: ${appearanceFont}`)
       .join('; ')
   );
 </script>

@@ -136,6 +136,16 @@ async fn send_client_message(
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn create_default_frame() -> sova_core::scene::Frame {
+    sova_core::scene::Frame::default()
+}
+
+#[tauri::command]
+fn create_default_line() -> sova_core::scene::Line {
+    sova_core::scene::Line::default()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -200,7 +210,9 @@ pub fn run() {
             disconnect_client,
             is_client_connected,
             save_client_config,
-            send_client_message
+            send_client_message,
+            create_default_frame,
+            create_default_line
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

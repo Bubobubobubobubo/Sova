@@ -17,6 +17,7 @@ export interface Config {
 	appearance: {
 		theme: string;
 		transparency: number;
+		font_family: string;
 	};
 	client: ClientConfig;
 }
