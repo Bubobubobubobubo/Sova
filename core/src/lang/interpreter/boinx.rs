@@ -83,7 +83,7 @@ impl BoinxLine {
         self.next_date += next_wait;
         let old_pos = mem::replace(&mut self.position, pos);
         let delta = old_pos.diff(&self.position);
-        let items = item.at(delta, self.time_span);
+        let items = item.at(ctx, delta, len);
         let mut new_lines = Vec::new();
         for (item, dur) in items {
             if let BoinxItem::SubProg(prog) = item {
