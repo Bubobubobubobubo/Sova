@@ -1,6 +1,5 @@
 <script lang="ts">
-	import { ArrowLeftRight, ArrowUpDown, ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
-	import { selection } from '$lib/stores/selection';
+	import { Rows3, Columns3, ArrowLeftRight, ArrowUpDown, ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
 
 	interface Props {
 		zoom: number;
@@ -42,9 +41,6 @@
 <div class="toolbar">
 	<div class="toolbar-left">
 		<span class="title">SCENE</span>
-		{#if $selection}
-			<span class="selection-info">L{$selection.lineId} F{$selection.frameId}</span>
-		{/if}
 	</div>
 	<div class="toolbar-right">
 		<div class="zoom-controls">
@@ -81,9 +77,9 @@
 			title="Toggle timeline orientation"
 		>
 			{#if orientation === 'horizontal'}
-				<ArrowLeftRight size={14} />
+				<Columns3 size={14} />
 			{:else}
-				<ArrowUpDown size={14} />
+				<Rows3 size={14} />
 			{/if}
 		</button>
 		<button
@@ -123,11 +119,6 @@
 		font-size: 11px;
 		font-weight: 700;
 		letter-spacing: 0.5px;
-	}
-
-	.selection-info {
-		color: var(--colors-text-secondary);
-		font-size: 10px;
 	}
 
 	.toolbar-right {

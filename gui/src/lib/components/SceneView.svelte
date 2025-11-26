@@ -1,7 +1,10 @@
 <script lang="ts">
+	import { onMount, onDestroy } from 'svelte';
+	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { scene } from '$lib/stores';
 	import { selection } from '$lib/stores/selection';
-	import type { Frame } from '$lib/types/protocol';
+	import { SERVER_EVENTS } from '$lib/events';
+	import type { Frame, RemoveFramePayload } from '$lib/types/protocol';
 	import SplitPane from './SplitPane.svelte';
 	import SceneToolbar from './scene/SceneToolbar.svelte';
 	import Timeline from './scene/Timeline.svelte';
@@ -48,6 +51,38 @@
 	function handleOpenEditor(lineIdx: number, frameIdx: number) {
 		editingFrame = { lineIdx, frameIdx };
 	}
+
+	// Listen for frame/line removal to update editingFrame
+	let unlistenFns: UnlistenFn[] = [];
+
+	onMount(async () => {
+		unlistenFns.push(
+			await listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
+				if (!editingFrame) return;
+				const { lineId, frameId } = event.payload;
+				if (editingFrame.lineIdx === lineId) {
+					if (editingFrame.frameIdx === frameId) {
+						editingFrame = null; // Deleted the frame we were editing
+					} else if (editingFrame.frameIdx > frameId) {
+						editingFrame = { lineIdx: lineId, frameIdx: editingFrame.frameIdx - 1 };
+					}
+				}
+			}),
+			await listen<number>(SERVER_EVENTS.REMOVE_LINE, (event) => {
+				if (!editingFrame) return;
+				const removedLineId = event.payload;
+				if (editingFrame.lineIdx === removedLineId) {
+					editingFrame = null; // Deleted the line we were editing
+				} else if (editingFrame.lineIdx > removedLineId) {
+					editingFrame = { ...editingFrame, lineIdx: editingFrame.lineIdx - 1 };
+				}
+			})
+		);
+	});
+
+	onDestroy(() => {
+		unlistenFns.forEach((fn) => fn());
+	});
 </script>
 
 <div class="scene-container">
@@ -80,6 +115,8 @@
 				<FrameEditor
 					frame={currentFrame()}
 					{frameKey}
+					lineIdx={editingFrame?.lineIdx ?? null}
+					frameIdx={editingFrame?.frameIdx ?? null}
 				/>
 			{/snippet}
 		</SplitPane>

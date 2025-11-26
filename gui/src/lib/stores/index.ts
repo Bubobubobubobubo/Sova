@@ -16,6 +16,8 @@ export * from './logs';
 export * from './notifications';
 export * from './config';
 export * from './connectionState';
+export * from './languages';
+export * from './localEdits';
 
 // Import initialization functions
 import {
@@ -58,6 +60,16 @@ import {
 	cleanupNotificationsStore
 } from './notifications';
 
+import {
+	setAvailableLanguages,
+	cleanupLanguagesStore
+} from './languages';
+
+import {
+	initializeLocalEditsStore,
+	cleanupLocalEditsStore
+} from './localEdits';
+
 let helloUnlisten: UnlistenFn | null = null;
 
 // Initialize all Sova-related stores
@@ -78,6 +90,9 @@ export async function initializeSovaStores(): Promise<void> {
 
 		// Initialize collaboration
 		peers.set(data.peers);
+
+		// Initialize available languages
+		setAvailableLanguages(data.availableLanguages);
 	});
 
 	// Initialize event listeners for updates
@@ -88,7 +103,8 @@ export async function initializeSovaStores(): Promise<void> {
 		initializeCollaborationStore(),
 		initializeGlobalVariablesStore(),
 		initializeCompilationStore(),
-		initializeNotificationsStore()
+		initializeNotificationsStore(),
+		initializeLocalEditsStore()
 	]);
 
 	// Start the central event loop
@@ -112,4 +128,6 @@ export function cleanupSovaStores(): void {
 	cleanupGlobalVariablesStore();
 	cleanupCompilationStore();
 	cleanupNotificationsStore();
+	cleanupLanguagesStore();
+	cleanupLocalEditsStore();
 }

@@ -29,12 +29,20 @@ export interface VariableStore {
 	[key: string]: VariableValue;
 }
 
+// Compilation error (matches Rust CompilationError struct)
+export interface CompilationError {
+	lang: string;
+	info: string;
+	from: number;
+	to: number;
+}
+
 // Compilation state (matches Rust enum serialization)
 export type CompilationState =
 	| 'NotCompiled'
 	| 'Compiling'
-	| 'Compiled'
-	| { Error: string };
+	| { Compiled: null }
+	| { Error: CompilationError };
 
 // Script
 export interface Script {
@@ -148,7 +156,7 @@ export interface RemoveFramePayload {
 export interface CompilationUpdatePayload {
 	lineId: number;
 	frameId: number;
-	scriptId: number;
+	scriptId: string;  // String to avoid JS precision loss for u64
 	state: CompilationState;
 }
 

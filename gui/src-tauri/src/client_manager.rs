@@ -300,10 +300,11 @@ impl ClientManager {
             }
 
             CompilationUpdate(line_id, frame_id, script_id, state) => {
+                sova_core::log_info!("[CompilationUpdate] Received: line={}, frame={}, scriptId={}, state={:?}", line_id, frame_id, script_id, state);
                 app_handle.emit("server:compilation-update", serde_json::json!({
                     "lineId": line_id,
                     "frameId": frame_id,
-                    "scriptId": script_id,
+                    "scriptId": script_id.to_string(),  // Serialize as string to avoid JS precision loss
                     "state": state,
                 }))?;
             }

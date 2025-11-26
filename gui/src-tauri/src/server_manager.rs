@@ -48,6 +48,10 @@ impl ServerManager {
 
         let devices = Arc::new(DeviceMap::new());
         let _ = devices.create_virtual_midi_port("Sova");
+        let _ = devices.assign_slot(1, "Sova");
+
+        let _ = devices.create_osc_output_device("SuperDirt", "127.0.0.1", 57120);
+        let _ = devices.assign_slot(2, "SuperDirt");
 
         let mut transcoder = Transcoder::default();
         transcoder.add_compiler(BaliCompiler);
