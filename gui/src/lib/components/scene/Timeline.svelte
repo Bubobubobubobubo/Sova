@@ -49,9 +49,51 @@
 	let timelineContainer: HTMLDivElement;
 	let resizing: { lineIdx: number; frameIdx: number; startPos: number; startDuration: number; previewDuration: number } | null = $state(null);
 	let editingDuration: { lineIdx: number; frameIdx: number; value: string } | null = $state(null);
+	let editingReps: { lineIdx: number; frameIdx: number; value: string } | null = $state(null);
 	let editingName: { lineIdx: number; frameIdx: number; value: string } | null = $state(null);
 	let scrollPos = $state(0);
 	let viewportSize = $state(1000);
+
+	// Line width multipliers for resizable tracks (local UI state only)
+	let lineWidthMultipliers: Map<number, number> = $state(new Map());
+	let lineResizing: { lineIdx: number; startPos: number; startMultiplier: number } | null = $state(null);
+
+	const LINE_WIDTH_MIN = 0.5;
+	const LINE_WIDTH_MAX = 3.0;
+
+	function getLineWidth(lineIdx: number): number {
+		const multiplier = lineWidthMultipliers.get(lineIdx) ?? 1.0;
+		return BASE_TRACK_SIZE * viewport.zoom * multiplier;
+	}
+
+	function handleLineResizeStart(lineIdx: number, event: MouseEvent) {
+		event.stopPropagation();
+		event.preventDefault();
+		const multiplier = lineWidthMultipliers.get(lineIdx) ?? 1.0;
+		lineResizing = {
+			lineIdx,
+			startPos: isVertical ? event.clientX : event.clientY,
+			startMultiplier: multiplier
+		};
+		window.addEventListener('mousemove', handleLineResizeMove);
+		window.addEventListener('mouseup', handleLineResizeEnd);
+	}
+
+	function handleLineResizeMove(event: MouseEvent) {
+		if (!lineResizing) return;
+		const currentPos = isVertical ? event.clientX : event.clientY;
+		const delta = currentPos - lineResizing.startPos;
+		const baseSize = BASE_TRACK_SIZE * viewport.zoom;
+		const deltaMultiplier = delta / baseSize;
+		const newMultiplier = Math.max(LINE_WIDTH_MIN, Math.min(LINE_WIDTH_MAX, lineResizing.startMultiplier + deltaMultiplier));
+		lineWidthMultipliers = new Map(lineWidthMultipliers).set(lineResizing.lineIdx, newMultiplier);
+	}
+
+	function handleLineResizeEnd() {
+		window.removeEventListener('mousemove', handleLineResizeMove);
+		window.removeEventListener('mouseup', handleLineResizeEnd);
+		lineResizing = null;
+	}
 
 	// Visible beat markers based on scroll position (every 4 beats)
 	const visibleBeatMarkers = $derived.by(() => {
@@ -418,6 +460,47 @@
 		editingDuration = null;
 	}
 
+	// Reps editing handlers
+	function startRepsEdit(lineIdx: number, frameIdx: number, event: MouseEvent) {
+		event.stopPropagation();
+		if (!$scene) return;
+		const frame = $scene.lines[lineIdx]?.frames[frameIdx];
+		if (!frame) return;
+		editingReps = { lineIdx, frameIdx, value: getReps(frame).toString() };
+	}
+
+	function handleRepsInput(event: Event) {
+		if (!editingReps) return;
+		editingReps.value = (event.target as HTMLInputElement).value;
+	}
+
+	async function handleRepsKeydown(event: KeyboardEvent) {
+		if (!editingReps || !$scene) return;
+
+		if (event.key === 'Enter') {
+			event.preventDefault();
+			const parsed = parseInt(editingReps.value, 10);
+			if (!isNaN(parsed) && parsed >= 1) {
+				const frame = $scene.lines[editingReps.lineIdx]?.frames[editingReps.frameIdx];
+				if (frame) {
+					const updatedFrame = { ...frame, repetitions: parsed };
+					try {
+						await setFrames([[editingReps.lineIdx, editingReps.frameIdx, updatedFrame]], ActionTiming.immediate());
+					} catch (error) {
+						console.error('Failed to update repetitions:', error);
+					}
+				}
+			}
+			editingReps = null;
+		} else if (event.key === 'Escape') {
+			editingReps = null;
+		}
+	}
+
+	function handleRepsBlur() {
+		editingReps = null;
+	}
+
 	// Name editing handlers
 	function startNameEdit(lineIdx: number, frameIdx: number, event: MouseEvent) {
 		event.stopPropagation();
@@ -495,6 +578,13 @@
 		}
 		return null;
 	}
+
+	function getEditingRepsForTrack(lineIdx: number): { frameIdx: number; value: string } | null {
+		if (editingReps && editingReps.lineIdx === lineIdx) {
+			return { frameIdx: editingReps.frameIdx, value: editingReps.value };
+		}
+		return null;
+	}
 </script>
 
 <div
@@ -537,6 +627,7 @@
 					{line}
 					{lineIdx}
 					{visibleBeatMarkers}
+					trackWidth={getLineWidth(lineIdx)}
 					previewDuration={getPreviewDuration(lineIdx, resizing?.frameIdx ?? -1)}
 					previewFrameIdx={resizing?.lineIdx === lineIdx ? resizing.frameIdx : null}
 					onRemoveTrack={(e) => handleRemoveLine(lineIdx, e)}
@@ -545,11 +636,17 @@
 					onClipDoubleClick={(frameIdx) => handleClipDoubleClick(lineIdx, frameIdx)}
 					onClipRemove={(frameIdx, e) => handleRemoveFrame(lineIdx, frameIdx, e)}
 					onResizeStart={(frameIdx, e) => startResize(lineIdx, frameIdx, e)}
+					onLineResizeStart={(e) => handleLineResizeStart(lineIdx, e)}
 					onDurationEditStart={(frameIdx, e) => startDurationEdit(lineIdx, frameIdx, e)}
 					editingDuration={getEditingDurationForTrack(lineIdx)}
 					onDurationInput={handleDurationInput}
 					onDurationKeydown={handleDurationKeydown}
 					onDurationBlur={handleDurationBlur}
+					onRepsEditStart={(frameIdx, e) => startRepsEdit(lineIdx, frameIdx, e)}
+					editingReps={getEditingRepsForTrack(lineIdx)}
+					onRepsInput={handleRepsInput}
+					onRepsKeydown={handleRepsKeydown}
+					onRepsBlur={handleRepsBlur}
 					onNameEditStart={(frameIdx, e) => startNameEdit(lineIdx, frameIdx, e)}
 					editingName={getEditingNameForTrack(lineIdx)}
 					onNameInput={handleNameInput}

@@ -9,6 +9,7 @@
 		frameIdx: number;
 		offset: number;
 		extent: number;
+		trackWidth: number;
 		selected: boolean;
 		playing: boolean;
 		editingDuration: { value: string } | null;
@@ -20,6 +21,11 @@
 		onDurationInput: (e: Event) => void;
 		onDurationKeydown: (e: KeyboardEvent) => void;
 		onDurationBlur: () => void;
+		editingReps: { value: string } | null;
+		onRepsEditStart: (e: MouseEvent) => void;
+		onRepsInput: (e: Event) => void;
+		onRepsKeydown: (e: KeyboardEvent) => void;
+		onRepsBlur: () => void;
 		editingName: { value: string } | null;
 		onNameEditStart: (e: MouseEvent) => void;
 		onNameInput: (e: Event) => void;
@@ -33,6 +39,7 @@
 		frameIdx,
 		offset,
 		extent,
+		trackWidth,
 		selected,
 		playing,
 		editingDuration,
@@ -44,6 +51,11 @@
 		onDurationInput,
 		onDurationKeydown,
 		onDurationBlur,
+		editingReps,
+		onRepsEditStart,
+		onRepsInput,
+		onRepsKeydown,
+		onRepsBlur,
 		editingName,
 		onNameEditStart,
 		onNameInput,
@@ -68,11 +80,11 @@
 
 	const clipLabel = $derived(frame.name || `F${frameIdx}`);
 	const clipLang = $derived(frame.script?.lang || 'bali');
-	const formattedDuration = $derived(`${duration}b`);
-	const formattedReps = $derived(reps > 1 ? `×${reps}` : '');
+	const formattedDuration = $derived(`${duration}`);
+	const formattedReps = $derived(`×${reps}`);
 
 	const clipStyle = $derived.by(() => {
-		const clipSize = ctx.trackSize - 8;
+		const clipSize = trackWidth - 8;
 		if (ctx.isVertical) {
 			return `top: ${offset}px; height: ${extent}px; left: 4px; width: ${clipSize}px`;
 		} else {
@@ -128,7 +140,7 @@
 	<div class="clip-bottom">
 		{#if editingDuration}
 			<input
-				class="duration-input"
+				class="info-input"
 				type="text"
 				value={editingDuration.value}
 				oninput={onDurationInput}
@@ -138,12 +150,28 @@
 			/>
 		{:else}
 			<span
-				class="clip-duration"
+				class="clip-info"
 				ondblclick={onDurationEditStart}
-				title="Double-click to edit"
+				title="Duration (double-click to edit)"
 			>{formattedDuration}</span>
 		{/if}
-		<span class="clip-reps">{formattedReps}</span>
+		{#if editingReps}
+			<input
+				class="info-input"
+				type="text"
+				value={editingReps.value}
+				oninput={onRepsInput}
+				onkeydown={onRepsKeydown}
+				onblur={onRepsBlur}
+				use:focusOnMount
+			/>
+		{:else}
+			<span
+				class="clip-info"
+				ondblclick={onRepsEditStart}
+				title="Repetitions (double-click to edit)"
+			>{formattedReps}</span>
+		{/if}
 	</div>
 	<button
 		class="clip-remove"
@@ -192,10 +220,12 @@
 	}
 
 	.clip.playing .clip-name,
-	.clip.playing .clip-lang,
-	.clip.playing .clip-duration,
-	.clip.playing .clip-reps {
+	.clip.playing .clip-lang {
 		color: var(--colors-background);
+	}
+
+	.clip.playing .clip-info {
+		background-color: var(--colors-surface);
 	}
 
 	.clip.disabled {
@@ -260,29 +290,26 @@
 		text-transform: lowercase;
 	}
 
-	.clip-duration {
+	.clip-info {
 		font-size: 10px;
-		color: var(--colors-text-secondary);
+		color: var(--colors-text);
+		background-color: var(--colors-background);
+		padding: 1px 4px;
 		cursor: text;
 	}
 
-	.clip-duration:hover {
+	.clip-info:hover {
 		color: var(--colors-accent);
 	}
 
-	.duration-input {
+	.info-input {
 		width: 32px;
 		font-size: 10px;
-		padding: 0 2px;
+		padding: 1px 4px;
 		border: 1px solid var(--colors-accent);
 		background-color: var(--colors-background);
 		color: var(--colors-text);
 		outline: none;
-	}
-
-	.clip-reps {
-		font-size: 10px;
-		color: var(--colors-text-secondary);
 	}
 
 	.clip-remove {

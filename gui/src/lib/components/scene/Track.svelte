@@ -8,6 +8,7 @@
 		line: Line;
 		lineIdx: number;
 		visibleBeatMarkers: number[];
+		trackWidth: number;
 		previewDuration: number | null;
 		previewFrameIdx: number | null;
 		onRemoveTrack: (e: MouseEvent) => void;
@@ -16,11 +17,17 @@
 		onClipDoubleClick: (frameIdx: number) => void;
 		onClipRemove: (frameIdx: number, e: MouseEvent) => void;
 		onResizeStart: (frameIdx: number, e: MouseEvent) => void;
+		onLineResizeStart: (e: MouseEvent) => void;
 		onDurationEditStart: (frameIdx: number, e: MouseEvent) => void;
 		editingDuration: { frameIdx: number; value: string } | null;
 		onDurationInput: (e: Event) => void;
 		onDurationKeydown: (e: KeyboardEvent) => void;
 		onDurationBlur: () => void;
+		onRepsEditStart: (frameIdx: number, e: MouseEvent) => void;
+		editingReps: { frameIdx: number; value: string } | null;
+		onRepsInput: (e: Event) => void;
+		onRepsKeydown: (e: KeyboardEvent) => void;
+		onRepsBlur: () => void;
 		onNameEditStart: (frameIdx: number, e: MouseEvent) => void;
 		editingName: { frameIdx: number; value: string } | null;
 		onNameInput: (e: Event) => void;
@@ -34,6 +41,7 @@
 		line,
 		lineIdx,
 		visibleBeatMarkers,
+		trackWidth,
 		previewDuration,
 		previewFrameIdx,
 		onRemoveTrack,
@@ -42,11 +50,17 @@
 		onClipDoubleClick,
 		onClipRemove,
 		onResizeStart,
+		onLineResizeStart,
 		onDurationEditStart,
 		editingDuration,
 		onDurationInput,
 		onDurationKeydown,
 		onDurationBlur,
+		onRepsEditStart,
+		editingReps,
+		onRepsInput,
+		onRepsKeydown,
+		onRepsBlur,
 		onNameEditStart,
 		editingName,
 		onNameInput,
@@ -89,11 +103,11 @@
 	);
 
 	const trackStyle = $derived(
-		ctx.isVertical ? `width: ${ctx.trackSize}px` : `height: ${ctx.trackSize}px`
+		ctx.isVertical ? `width: ${trackWidth}px` : `height: ${trackWidth}px`
 	);
 
 	const addClipStyle = $derived.by(() => {
-		const clipSize = ctx.trackSize - 8;
+		const clipSize = trackWidth - 8;
 		return ctx.isVertical
 			? `top: ${totalLength}px; left: 4px; width: ${clipSize}px`
 			: `left: ${totalLength}px; top: 4px; height: ${clipSize}px`;
@@ -119,8 +133,19 @@
 		>
 			<X size={12} />
 		</button>
+		<div
+			class="line-resize-handle header-handle"
+			class:vertical={ctx.isVertical}
+			onmousedown={onLineResizeStart}
+		></div>
 	</div>
 	<div class="track-content">
+		<!-- Line resize handle -->
+		<div
+			class="line-resize-handle"
+			class:vertical={ctx.isVertical}
+			onmousedown={onLineResizeStart}
+		></div>
 		<div class="grid-lines">
 			{#each visibleBeatMarkers as beat}
 				<div class="grid-line" class:vertical={ctx.isVertical} style={getMarkerStyle(beat)}></div>
@@ -134,6 +159,7 @@
 				{frameIdx}
 				offset={pos.offset}
 				extent={pos.extent}
+				{trackWidth}
 				selected={selectedFrameIdx === frameIdx}
 				playing={playingFrameIdx === frameIdx}
 				editingDuration={editingDuration && editingDuration.frameIdx === frameIdx ? editingDuration : null}
@@ -145,6 +171,11 @@
 				{onDurationInput}
 				{onDurationKeydown}
 				{onDurationBlur}
+				editingReps={editingReps && editingReps.frameIdx === frameIdx ? editingReps : null}
+				onRepsEditStart={(e) => onRepsEditStart(frameIdx, e)}
+				{onRepsInput}
+				{onRepsKeydown}
+				{onRepsBlur}
 				editingName={editingName && editingName.frameIdx === frameIdx ? editingName : null}
 				onNameEditStart={(e) => onNameEditStart(frameIdx, e)}
 				{onNameInput}
@@ -178,6 +209,7 @@
 	}
 
 	.track-header {
+		position: relative;
 		width: 60px;
 		min-width: 60px;
 		background-color: var(--colors-surface);
@@ -286,5 +318,40 @@
 		opacity: 1;
 		border-color: var(--colors-accent);
 		color: var(--colors-accent);
+	}
+
+	.line-resize-handle {
+		position: absolute;
+		bottom: -1px;
+		left: 0;
+		right: 0;
+		height: 3px;
+		cursor: ns-resize;
+		z-index: 10;
+	}
+
+	.line-resize-handle.vertical {
+		right: -1px;
+		top: 0;
+		bottom: 0;
+		left: auto;
+		width: 3px;
+		height: auto;
+		cursor: ew-resize;
+	}
+
+	.line-resize-handle:hover {
+		background: var(--colors-accent);
+	}
+
+	.line-resize-handle.header-handle {
+		left: 0;
+		right: 0;
+	}
+
+	.line-resize-handle.header-handle.vertical {
+		top: 0;
+		bottom: 0;
+		left: auto;
 	}
 </style>
