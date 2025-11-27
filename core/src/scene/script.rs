@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     clock::SyncTime, compiler::{CompilationError, CompilationState}, lang::{
         Program, evaluation_context::PartialContext, event::ConcreteEvent, interpreter::asm_interpreter::ASMInterpreter, variable::{VariableStore, VariableValue}
-    }, log_println
+    }
 };
 use crate::lang::interpreter::Interpreter;
 

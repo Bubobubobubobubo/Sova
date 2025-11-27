@@ -2,7 +2,7 @@ use std::fmt;
 
 use serde::{Deserialize, Serialize};
 
-use crate::{clock::{NEVER, SyncTime}, compiler::CompilationState, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory, variable::VariableStore}, log_eprintln, log_println, scene::script::{Script, ScriptExecution}};
+use crate::{clock::{NEVER, SyncTime}, compiler::CompilationState, lang::{evaluation_context::PartialContext, event::ConcreteEvent, interpreter::InterpreterDirectory, variable::VariableStore}, log_eprintln, scene::script::{Script, ScriptExecution}};
 
 #[derive(Serialize, Deserialize)]
 pub struct Frame {
