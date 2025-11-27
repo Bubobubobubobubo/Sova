@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "gui",
+  "productName": "Sova",
   "version": "0.1.0",
-  "identifier": "sovagui",
+  "identifier": "com.sova.app",
   "build": {
     "beforeDevCommand": "pnpm dev",
     "devUrl": "http://localhost:1420",
@@ -13,7 +13,7 @@
     "macOSPrivateApi": true,
     "windows": [
       {
-        "title": "gui",
+        "title": "Sova",
         "width": 800,
         "height": 600,
         "transparent": true
