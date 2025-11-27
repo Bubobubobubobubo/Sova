@@ -441,7 +441,6 @@
     display: inline-block;
     width: 8px;
     height: 8px;
-    border-radius: 50%;
     background-color: var(--color-inactive);
     margin-right: 8px;
   }

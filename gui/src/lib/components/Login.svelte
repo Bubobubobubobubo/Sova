@@ -41,7 +41,7 @@
 
       isConnected.set(true);
       connectionError.set(null);
-      viewState.set('EDITOR');
+      viewState.set('SCENE');
     } catch (error) {
       errorMsg = String(error);
       isConnected.set(false);

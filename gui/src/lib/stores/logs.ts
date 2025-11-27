@@ -5,7 +5,7 @@ import type { LogMessage, Severity } from '$lib/types/protocol';
 
 export interface LogEntry {
 	message: string;
-	level?: Severity; // Optional for backward compatibility
+	level: Severity;
 	timestamp: number;
 }
 
@@ -26,9 +26,7 @@ export const filteredLogs: Readable<LogEntry[]> = derived(
 	[logs, showFatal, showError, showWarn, showInfo, showDebug],
 	([$logs, $showFatal, $showError, $showWarn, $showInfo, $showDebug]) => {
 		return $logs.filter((log) => {
-			// Default to Info level for logs without a level field (backward compatibility)
-			const level = log.level || 'Info';
-			switch (level) {
+			switch (log.level) {
 				case 'Fatal':
 					return $showFatal;
 				case 'Error':
