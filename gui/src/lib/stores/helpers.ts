@@ -35,21 +35,6 @@ export function createUpdateListener<T, P>(
 }
 
 /**
- * Creates an event listener with a side-effect only (no store update)
- * For actions like notifications
- */
-export function createActionListener<P>(
-	eventName: string,
-	action: (payload: P) => void
-): () => Promise<UnlistenFn> {
-	return async () => {
-		return await listen<P>(eventName, (event) => {
-			action(event.payload);
-		});
-	};
-}
-
-/**
  * Manages multiple listeners lifecycle
  */
 export class ListenerGroup {

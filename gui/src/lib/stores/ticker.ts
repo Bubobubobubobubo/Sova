@@ -30,10 +30,6 @@ class Ticker {
 		};
 	}
 
-	isRunning(): boolean {
-		return this.running;
-	}
-
 	private tick(): void {
 		this.callbacks.forEach((cb) => cb());
 	}

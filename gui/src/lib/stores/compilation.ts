@@ -56,12 +56,8 @@ export const failedCompilations: Readable<Array<{
 let unlistenFunctions: UnlistenFn[] = [];
 
 export async function initializeCompilationStore(): Promise<void> {
-	console.log('[CompilationStore] Initializing compilation store listener');
-
-	// Listen for compilation updates
 	unlistenFunctions.push(
 		await listen<CompilationUpdatePayload>(SERVER_EVENTS.COMPILATION_UPDATE, (event) => {
-			console.log('[CompilationStore] COMPILATION UPDATE RECEIVED:', event.payload);
 			const { lineId, frameId, scriptId, state } = event.payload;
 			compilationStates.update(($states) => {
 				const key = makeKey(lineId, frameId);
