@@ -42,6 +42,16 @@ impl BoinxLine {
         }
     }
 
+    // pub fn get_target(&self, ctx: &EvaluationContext) -> (u64, usize) {
+    //     let chan = match &self.output.channel {
+    //         Some(item) => {
+
+    //         }
+    //         None => 1
+    //     };
+    //     todo!()
+    // }
+
     pub fn execute_item(
         &mut self,
         ctx: &mut EvaluationContext,
@@ -55,6 +65,7 @@ impl BoinxLine {
             return Vec::new();
         };
         self.previous = Some(item.clone());
+        
         match item {
             BoinxItem::Stop => {
                 self.finished = true;
