@@ -26,6 +26,7 @@ pub mod page;
 pub mod ui;
 pub mod widgets;
 pub mod popup;
+pub mod notification;
 
 const DEFAULT_TEMPO: f64 = 120.0;
 const DEFAULT_QUANTUM: f64 = 4.0;
@@ -69,7 +70,7 @@ fn main() -> color_eyre::Result<()> {
     let result = App::new(
         sched_iface.clone(), 
         sched_updates, 
-        log_rx, clock_server
+        log_rx, clock_server, devices.clone()
     ).run(terminal);
     ratatui::restore();
 

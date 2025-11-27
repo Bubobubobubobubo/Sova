@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt};
 
-use crate::{lang::interpreter::{asm_interpreter::ASMInterpreterFactory, Interpreter, InterpreterFactory}, scene::script::Script};
+use crate::{lang::interpreter::{Interpreter, InterpreterFactory, asm_interpreter::ASMInterpreterFactory}, log_error, scene::script::Script};
 
 #[derive(Default)]
 pub struct InterpreterDirectory {
@@ -37,7 +37,13 @@ impl InterpreterDirectory {
         if script.is_compiled() {
             self.asm_factory.make_instance(script)
         } else if let Some(factory) = self.factories.get(script.lang()) {
-            Some(factory.make_instance(script))
+            match factory.make_instance(script) {
+                Ok(instance) => Some(instance),
+                Err(err) => {
+                    log_error!("Factory '{}' error: {err}", script.lang());
+                    None
+                }
+            }
         } else {
             None
         }

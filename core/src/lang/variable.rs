@@ -1,13 +1,13 @@
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    ops::{BitAnd, BitOr, BitXor, Not, Shl, Shr},
+    ops::{BitAnd, BitOr, BitXor, Neg, Not, Shl, Shr},
 };
 
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    clock::{Clock, TimeSpan},
+    clock::{Clock, SyncTime, TimeSpan},
     lang::Program,
 };
 
@@ -29,6 +29,7 @@ pub enum VariableValue {
     Dur(TimeSpan),
     Func(Program),
     Map(HashMap<String, VariableValue>),
+    Blob(Vec<u8>)
 }
 
 impl BitAnd for VariableValue {
@@ -105,6 +106,24 @@ impl Not for VariableValue {
         match self {
             VariableValue::Integer(i) => VariableValue::Integer(!i),
             VariableValue::Bool(b) => VariableValue::Bool(!b),
+            _ => panic!("Not or bitwise not with wrong types, this should never happen"),
+        }
+    }
+}
+
+impl Neg for VariableValue {
+    type Output = Self;
+    fn neg(self) -> Self::Output {
+        match self {
+            VariableValue::Integer(i) => VariableValue::Integer(-i),
+            VariableValue::Float(f) => VariableValue::Float(-f),
+            VariableValue::Decimal(s, p, q) => VariableValue::Decimal(-s, p, q),
+            VariableValue::Bool(b) => if b {
+                VariableValue::Integer(-1)
+            } else {
+                VariableValue::Bool(false)
+            },
+            VariableValue::Str(s) => VariableValue::Str(s.chars().rev().collect()),
             _ => panic!("Not or bitwise not with wrong types, this should never happen"),
         }
     }
@@ -237,6 +256,7 @@ impl VariableValue {
             VariableValue::Dur(_) => Self::Dur(TimeSpan::Micros(0)),
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => Self::Map(HashMap::new()),
+            VariableValue::Blob(_) => Self::Blob(Vec::new())
         }
     }
 
@@ -524,48 +544,32 @@ impl VariableValue {
     }
 
     pub fn cast_as_integer(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        match self {
-            VariableValue::Map(_) => VariableValue::Integer(0),
-            _ => VariableValue::Integer(self.as_integer(clock, frame_len)),
-        }
+        VariableValue::Integer(self.as_integer(clock, frame_len))
     }
 
     pub fn cast_as_float(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        match self {
-            VariableValue::Map(_) => VariableValue::Float(0.0),
-            _ => VariableValue::Float(self.as_float(clock, frame_len)),
-        }
+        VariableValue::Float(self.as_float(clock, frame_len))
     }
 
     pub fn cast_as_decimal(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        match self {
-            VariableValue::Map(_) => VariableValue::Decimal(1, 0, 1),
-            _ => {
-                let (sign, num, den) = self.as_decimal(clock, frame_len);
-                VariableValue::Decimal(sign, num, den)
-            }
-        }
+        let (sign, num, den) = self.as_decimal(clock, frame_len);
+        VariableValue::Decimal(sign, num, den)
     }
 
     pub fn cast_as_bool(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        match self {
-            VariableValue::Map(map) => VariableValue::Bool(!map.is_empty()),
-            _ => VariableValue::Bool(self.as_bool(clock, frame_len)),
-        }
+        VariableValue::Bool(self.as_bool(clock, frame_len))
     }
 
     pub fn cast_as_str(&self, clock: &Clock, frame_len: f64) -> VariableValue {
-        match self {
-            VariableValue::Map(_) => VariableValue::Str("[map]".to_string()),
-            _ => VariableValue::Str(self.as_str(clock, frame_len)),
-        }
+        VariableValue::Str(self.as_str(clock, frame_len))
     }
 
     pub fn cast_as_dur(&self) -> VariableValue {
-        match self {
-            VariableValue::Map(_) => VariableValue::Dur(TimeSpan::Micros(0)),
-            _ => VariableValue::Dur(self.as_dur()),
-        }
+        VariableValue::Dur(self.as_dur())
+    }
+
+    pub fn cast_as_blob(&self) -> VariableValue {
+        VariableValue::Blob(self.as_blob())
     }
 
     pub fn as_integer(&self, clock: &Clock, frame_len: f64) -> i64 {
@@ -590,6 +594,13 @@ impl VariableValue {
             VariableValue::Dur(d) => d.as_micros(clock, frame_len).try_into().unwrap(),
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => 0,
+            VariableValue::Blob(b) => {
+                let mut arr = [0u8 ; 8];
+                for i in 0..std::cmp::min(b.len(), 8) {
+                    arr[i] = b[i];
+                }
+                i64::from_le_bytes(arr)
+            }
         }
     }
 
@@ -609,6 +620,13 @@ impl VariableValue {
             VariableValue::Dur(d) => d.as_micros(clock, frame_len) as f64,
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => 0.0,
+            VariableValue::Blob(b) => {
+                let mut arr = [0u8 ; 8];
+                for i in 0..std::cmp::min(b.len(), 8) {
+                    arr[i] = b[i];
+                }
+                f64::from_le_bytes(arr)
+            }
         }
     }
 
@@ -634,7 +652,7 @@ impl VariableValue {
             },
             VariableValue::Dur(d) => (1, d.as_micros(clock, frame_len) as u128, 1),
             VariableValue::Func(_) => todo!(),
-            VariableValue::Map(_) => (1, 0, 1),
+            VariableValue::Map(_) | VariableValue::Blob(_) => (1, 0, 1),
         }
     }
 
@@ -648,6 +666,7 @@ impl VariableValue {
             VariableValue::Dur(d) => d.as_micros(clock, frame_len) != 0,
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(map) => !map.is_empty(),
+            VariableValue::Blob(b) => !b.is_empty(),
         }
     }
 
@@ -667,6 +686,7 @@ impl VariableValue {
             VariableValue::Dur(d) => d.as_micros(clock, frame_len).to_string(),
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => "[map]".to_string(),
+            VariableValue::Blob(b) => String::from_utf8(b.clone()).unwrap_or_default()
         }
     }
 
@@ -680,13 +700,38 @@ impl VariableValue {
             VariableValue::Dur(d) => *d,
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => TimeSpan::Micros(0),
+            VariableValue::Blob(b) => TimeSpan::Micros(b.len() as SyncTime)
         }
     }
 
-    pub fn as_map(&self) -> Option<&HashMap<String, VariableValue>> {
+    pub fn as_map(&self) -> HashMap<String, VariableValue> {
         match self {
-            VariableValue::Map(map) => Some(map),
-            _ => None,
+            VariableValue::Map(map) => map.clone(),
+            x => {
+                let mut map = HashMap::new();
+                map.insert("0".to_owned(), x.clone());
+                map
+            },
+        }
+    }
+
+    pub fn as_blob(&self) -> Vec<u8> {
+        match self {
+            VariableValue::Integer(i) => Vec::from(i.to_le_bytes()),
+            VariableValue::Float(f) => Vec::from(f.to_le_bytes()),
+            VariableValue::Decimal(_, _, _) => Vec::new(),
+            VariableValue::Bool(b) => { 
+                if *b {
+                    vec![1] 
+                } else {
+                    Vec::new()
+                }
+            },
+            VariableValue::Str(s) => Vec::from(s.as_bytes()),
+            VariableValue::Dur(_) => Vec::new(),
+            VariableValue::Func(_) => Vec::new(),
+            VariableValue::Map(_) => Vec::new(),
+            VariableValue::Blob(b) => b.clone()
         }
     }
 }
@@ -730,6 +775,7 @@ impl VariableStore {
                 VariableValue::Dur(_) => value = value.cast_as_dur(),
                 VariableValue::Func(_) => { /* Do nothing, allow overwrite */ }
                 VariableValue::Map(_) => { /* Do nothing, allow overwrite */ }
+                VariableValue::Blob(_) => { /* Do nothing, allow overwrite */ }
             }
         }
         self.content.insert(key, value)

@@ -48,5 +48,6 @@ impl Widget for &mut App {
         Footer::default().render(footer_area, buf, &mut self.state);
 
         self.popup.render(area, buf);
+        self.notification.render(area, buf);
     }
 }

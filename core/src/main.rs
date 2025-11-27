@@ -9,7 +9,7 @@ use crate::logger::get_logger;
 use crate::protocol::audio_engine_proxy::AudioEngineProxy;
 use crate::schedule::ActionTiming;
 // TimingConfig import removed for now
-use sova_engine::{
+use bubo_engine::{
     engine::AudioEngine,
     memory::{MemoryPool, SampleLibrary, VoiceMemory},
     registry::ModuleRegistry,
@@ -151,8 +151,8 @@ fn initialize_sova_engine(
     let _osc_thread = thread::Builder::new()
         .name("osc_server".to_string())
         .spawn(move || {
-            let logger = sova_engine::types::LoggerHandle::new_console();
-            let mut osc_server = match sova_engine::server::OscServer::new(
+            let logger = bubo_engine::types::LoggerHandle::new_console();
+            let mut osc_server = match bubo_engine::server::OscServer::new(
                 &osc_host,
                 osc_port,
                 registry_clone,
@@ -272,8 +272,8 @@ async fn main() {
 
     // Handle --list-devices flag before initialization
     if cli.list_devices {
-        let logger = sova_engine::types::LoggerHandle::new_console();
-        sova_engine::list_audio_devices(&logger);
+        let logger = bubo_engine::types::LoggerHandle::new_console();
+        bubo_engine::list_audio_devices(&logger);
         return;
     }
 

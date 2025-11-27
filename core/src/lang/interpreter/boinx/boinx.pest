@@ -26,9 +26,14 @@ note = ${ note_letter ~ (sharp | flat)* ~ int? ~ !letter }
 
 real = @{ int ~ "." ~ int }
 number = _{ real | int }
-micros = ${ number ~ "u" } 
+micros = ${ int ~ "u" } 
 semibeats = ${ number ~ "''" } 
 beats = ${ number ~ "'" } 
+
+str = @{ 
+	("\"" ~ (!"\"" ~ ANY)* ~ "\"") |
+    ("'" ~ (!"'" ~ ANY)* ~ "'") 
+}
 
 add = { "+" }
 sub = { "-" }
@@ -40,31 +45,47 @@ shr = { ">>" }
 pow = { "^" }
 
 bin_op = _{ add | sub | mul | div | rem | shl | shr | pow }
+
 minus = { "-" }
-comp_op = { "<" | "<=" | "==" | ">=" | ">" | "!=" }
+un_op = _{ minus }
+
+lt = { "<" }
+le = { "<=" }
+eq = { "==" }
+ge = { ">=" }
+gt = { ">" }
+neq = { "!=" }
+
+comp_op = _{ lt | le | eq | ge | gt | neq }
 
 name = { (letter | digit | "_")+ }
-ident = ${ !note ~ qualif? ~ name }
+ident = ${ !int ~ !note ~ qualif? ~ name }
 
-duration = { micros | semibeats | beats | real }
+duration = _{ micros | semibeats | beats }
 
 mute = { "_" }
 placeholder = { "." }
 
 sub_prog = { "{" ~ block ~ "}" }
-cond = { item ~ comp_op ~ item }
+
+ci = { item }
+cond = { ci ~ comp_op ~ ci }
+
 if_else = { cond_op ~ cond ~ sub_prog ~ else_op ~ sub_prog }
-el = _{ sub_prog | simul | seque | if_else | placeholder | stop | prev | note | duration | number | ident | mute }
-item = { minus? ~ el ~ (bin_op ~ item)? }
-seque = { "[" ~ item* ~ "]" }
+el = _{ sub_prog | simul | seque | if_else | placeholder | stop | prev | note | duration | number | ident | str | mute }
 
-simul = { "(" ~ item* ~ ")" }
-atomic_compo = _{ seque | simul | item }
-compo = _{ atomic_compo ~ ( (compo_op | iter_op | each_op) ~ atomic_compo )* }
+item = _{ un_op? ~ el ~ (bin_op ~ item)? }
 
-dev = { (!":" ~ ANY)+ }
+li = { item }
+
+seque = { "[" ~ li* ~ "]" }
+simul = { "(" ~ li* ~ ")" }
+
+compo = { item ~ ( (compo_op | iter_op | each_op) ~ item )* }
+
+dev = { !":" ~ (int | ident) }
 chan = { int | ident }
-target = _{ dev? ~ ":" ~ chan }
+target = _{ dev ~ (":" ~ chan)? }
 
 output = { compo ~ ("@" ~ target)? }
 assign = { ident ~ "=" ~ compo }
@@ -72,7 +93,7 @@ assign = { ident ~ "=" ~ compo }
 statement = _{ assign | output }
 block = _{ statement+ }
 
-prog = _{ SOI ~ block* ~ EOI }
+prog = _{ SOI ~ block? ~ EOI }
 
 /*
 Example track:
@@ -82,15 +103,15 @@ chords = [ C4 A3 F3 G5 ]
 maj = (. .+4 .+7)
 min = (. .+3 .+7)
 
-chords ° [ maj min maj maj ] ~ [[. .] . [. .] .] @: 1
+chords ° [ maj min maj maj ] ~ [[. .] . [. .] .] @ v : 1
 
-chords ~ (. - 12) ~ [....] ° [....] @: 2
+chords ~ (. - 12) ~ [....] ° [....] @ a: 2
 
-kick = 1 snare = 2 hh = 3  
+kick = 1u snare = 2 hh = 3  
 
-kick | [ . _ ] @: 3
-snare | [ _ . ] @: 3
-hh | [....] @: 3
+kick | [ . _ ] @ c: 3
+snare | [ _ . ] 
+hh | [....] @ c
 
 after = [_ .] ° [. 1.0]
 
@@ -99,5 +120,6 @@ after = [_ .] ° [. 1.0]
 [ (C E G) D [ E E ] F ]
 
 (kick snare) ~ (. hh) ° [ . hh . hh . hh .  hh]
+
 
 */

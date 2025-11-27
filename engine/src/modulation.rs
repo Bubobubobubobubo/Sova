@@ -42,6 +42,10 @@
 //! //  └─────────── Start value
 //! ```
 //!
+//! ## Ramp Modulation
+//! Similar to envelopes but with explicit curve control. Ideal for parameter automation
+//! and smooth transitions between states.
+//!
 //! **Curve Types:**
 //! - **Linear**: Constant rate of change
 //! - **Exp/Quad**: Accelerating change (slow start, fast finish)
@@ -142,6 +146,19 @@ pub enum Modulation {
         /// Time elapsed since start
         elapsed: f32,
     },
+    /// Linear or curved ramp between two values
+    Ramp {
+        /// Starting value
+        start: f32,
+        /// Ending value
+        end: f32,
+        /// Ramp duration
+        duration: f32,
+        /// Time elapsed since start
+        elapsed: f32,
+        /// Interpolation curve
+        curve: CurveType,
+    },
     /// Step sequencer cycling through predefined values
     Seq {
         /// Array of values to cycle through (max 8)
@@ -230,6 +247,24 @@ impl Modulation {
                 *start + (*end - *start) * curved_t
             }
 
+            Modulation::Ramp {
+                start,
+                end,
+                duration,
+                elapsed,
+                curve,
+            } => {
+                *elapsed += dt;
+                if *elapsed >= *duration {
+                    return *end;
+                }
+
+                let t = (*elapsed / *duration).clamp(0.0, 1.0);
+                let curved_t = apply_curve(t, curve);
+
+                *start + (*end - *start) * curved_t
+            }
+
             Modulation::Seq {
                 values,
                 len,
@@ -260,6 +295,7 @@ impl Modulation {
     /// - Static: "440.0"
     /// - Oscillator: "osc:base:depth:rate:shape:duration"
     /// - Envelope: "env:start:end:curve:duration"
+    /// - Ramp: "ramp:start:end:duration:curve"
     /// - Sequence: "seq:val1:val2:...:rate:duration"
     pub fn parse_with_pool(input: &str, _pool: &Arc<MemoryPool>) -> Self {
         let parts: Vec<&str> = input.split(':').collect();
@@ -298,6 +334,21 @@ impl Modulation {
                     curve,
                     duration,
                     elapsed: 0.0,
+                }
+            }
+
+            "ramp" if parts.len() >= 5 => {
+                let start = parse_f32(parts[1]);
+                let end = parse_f32_or_default(parts[2], 1.0);
+                let duration = parse_f32_or_default(parts[3], 1.0);
+                let curve = parse_curve_type(parts[4]);
+
+                Modulation::Ramp {
+                    start,
+                    end,
+                    duration,
+                    elapsed: 0.0,
+                    curve,
                 }
             }
 

@@ -1,4 +1,4 @@
-use std::{cmp, collections::VecDeque};
+use std::{cmp, collections::VecDeque, mem};
 
 use crate::{
     clock::{SyncTime, TimeSpan, NEVER},
@@ -10,15 +10,19 @@ use crate::{
     scene::script::Script,
 };
 
-mod boinx_ast;
+mod ast;
+mod parser;
 
-use boinx_ast::*;
+use ast::*;
+
+pub use parser::parse_boinx;
 
 pub struct BoinxLine {
     pub start_date: SyncTime,
     pub time_span: TimeSpan,
     pub output: BoinxOutput,
     pub finished: bool,
+    pub position: BoinxPosition,
     next_date: SyncTime,
     out_buffer: VecDeque<ConcreteEvent>,
     previous: Option<BoinxItem>,
@@ -31,6 +35,7 @@ impl BoinxLine {
             time_span,
             output,
             finished: false,
+            position: BoinxPosition::Undefined,
             next_date: 0,
             out_buffer: VecDeque::new(),
             previous: None,
@@ -61,7 +66,10 @@ impl BoinxLine {
             }
             BoinxItem::Number(_) => {
                 todo!()
-            },
+            }
+            BoinxItem::Str(_) => {
+                todo!()
+            }
             BoinxItem::External(prog) => vec![ConcreteEvent::StartProgram(prog)],
             _ => Vec::new(),
         }
@@ -71,10 +79,14 @@ impl BoinxLine {
         if !self.ready(ctx) {
             return Vec::new();
         }
-        let item = self.output.compo.yield_item(ctx);
+        let item = self.output.compo.yield_compiled(ctx);
         let date = ctx.clock.micros();
         let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len);
-        let items = item.at(ctx, len, date);
+        let (pos, next_wait) = item.position(ctx, len, date.saturating_sub(self.start_date));
+        self.next_date += next_wait;
+        let old_pos = mem::replace(&mut self.position, pos);
+        let delta = old_pos.diff(&self.position);
+        let items = item.at(ctx, delta, len);
         let mut new_lines = Vec::new();
         for (item, dur) in items {
             if let BoinxItem::SubProg(prog) = item {
@@ -100,6 +112,7 @@ impl BoinxLine {
 pub struct BoinxInterpreter {
     pub prog: BoinxProg,
     pub execution_lines: Vec<BoinxLine>,
+    pub started: bool
 }
 
 impl Interpreter for BoinxInterpreter {
@@ -107,6 +120,14 @@ impl Interpreter for BoinxInterpreter {
         &mut self,
         ctx: &mut EvaluationContext,
     ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+        if !self.started {
+            self.execution_lines = self.prog.start(
+                ctx.clock.micros(), 
+                TimeSpan::Beats(ctx.frame_len),
+                ctx
+            );
+            self.started = true;
+        }
         let mut new_lines = Vec::new();
         let mut event = None;
         let mut wait = NEVER;
@@ -132,6 +153,16 @@ impl Interpreter for BoinxInterpreter {
     }
 }
 
+impl From<BoinxProg> for BoinxInterpreter {
+    fn from(prog: BoinxProg) -> Self {
+        BoinxInterpreter {
+            prog,
+            execution_lines: Vec::new(),
+            started: false,
+        }
+    }
+}
+
 pub struct BoinxInterpreterFactory;
 
 impl InterpreterFactory for BoinxInterpreterFactory {
@@ -139,7 +170,12 @@ impl InterpreterFactory for BoinxInterpreterFactory {
         "boinx"
     }
 
-    fn make_instance(&self, script: &Script) -> Box<dyn Interpreter> {
-        todo!()
+    fn make_instance(&self, script: &Script) -> Result<Box<dyn Interpreter>, String> {
+        match parse_boinx(script.content()) {
+            Ok(prog) => {
+                Ok(Box::new(BoinxInterpreter::from(prog)))
+            }
+            Err(e) => Err(e.to_string())
+        }
     }
 }

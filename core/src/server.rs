@@ -444,7 +444,7 @@ async fn on_message(
             }
         }
         ClientMessage::RemoveOscDevice(name) => {
-            match state.devices.remove_osc_output_device(&name) {
+            match state.devices.remove_output_device(&name) {
                 Ok(_) => {
                     let updated_list = state.devices.device_list();
                     let _ = state

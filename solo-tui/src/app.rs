@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    event::{AppEvent, Event, EventHandler}, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
+    event::{AppEvent, Event, EventHandler}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
 };
 use crossbeam_channel::{Receiver, Sender};
 use ratatui::{
@@ -9,7 +9,7 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
 };
 use sova_core::{
-    LogMessage, Scene, clock::{Clock, ClockServer}, lang::variable::VariableValue, protocol::DeviceInfo, scene::Frame, schedule::{ActionTiming, SchedulerMessage, SovaNotification}
+    LogMessage, Scene, clock::{Clock, ClockServer}, device_map::DeviceMap, lang::variable::VariableValue, protocol::DeviceInfo, scene::Frame, schedule::{ActionTiming, SchedulerMessage, SovaNotification}
 };
 
 pub struct AppState {
@@ -23,6 +23,7 @@ pub struct AppState {
     pub page: Page,
     pub selected: (usize, usize),
     pub events: EventHandler,
+    pub device_map: Arc<DeviceMap>,
 }
 
 impl AppState {
@@ -38,7 +39,8 @@ pub struct App {
     pub scene_widget: SceneWidget,
     pub edit_widget: EditWidget,
     pub log_widget: LogWidget,
-    pub popup: Popup
+    pub popup: Popup,
+    pub notification: Notification
 }
 
 impl App {
@@ -48,6 +50,7 @@ impl App {
         sched_update: Receiver<SovaNotification>,
         log_rx: Receiver<LogMessage>,
         clock_server: Arc<ClockServer>,
+        device_map: Arc<DeviceMap>,
     ) -> Self {
         App {
             sched_iface,
@@ -62,11 +65,13 @@ impl App {
                 page: Default::default(),
                 selected: Default::default(),
                 events: EventHandler::new(sched_update, log_rx),
+                device_map,
             },
             scene_widget: SceneWidget::default(),
             edit_widget: EditWidget::default(),
             log_widget: LogWidget::default(),
-            popup: Popup::default()
+            popup: Popup::default(),
+            notification: Notification::new()
         }
     }
 
@@ -109,6 +114,10 @@ impl App {
             AppEvent::Down => self.state.page.down(),
             AppEvent::Popup(title, content, value, callback) => 
                 self.popup.open(title, content, value, callback),
+            AppEvent::ChangeScript => self.edit_widget.open(&self.state),
+            AppEvent::Info(text) => self.notification.info(text),
+            AppEvent::Positive(text) => self.notification.positive(text),
+            AppEvent::Negative(text) => self.notification.negative(text),
             AppEvent::Quit => self.quit(),
         }
         Ok(())
@@ -190,7 +199,7 @@ impl App {
                     "Are you sure you want to quit ?".to_owned(), 
                     PopupValue::Bool(false), 
                     Box::new(|state, x| {
-                        if x.bool() {
+                        if bool::from(x) {
                             state.events.send(AppEvent::Quit)
                         }
                     })

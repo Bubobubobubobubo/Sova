@@ -242,7 +242,7 @@ impl Scheduler {
                 let _ = self.world_iface.send(msg);
             }
         }
-        wait.unwrap_or(NEVER)
+        wait
     }
 
     pub fn do_your_thing(&mut self) {
@@ -311,7 +311,7 @@ impl Scheduler {
             }
         }
         log_println!("[-] Exiting scheduler...");
-        for (_, (_, device)) in self.devices.output_connections.lock().unwrap().iter() {
+        for (_, device) in self.devices.output_connections.lock().unwrap().iter() {
             device.flush();
         }
     }

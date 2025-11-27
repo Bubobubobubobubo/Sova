@@ -8,7 +8,7 @@ default-run = "sova_server"
 lalrpop = "0.22.1"
 
 [dependencies]
-sova_engine = { path = "../engine" }
+bubo_engine = { path = "../engine" }
 midir = "0.10.1"
 rosc = "0.10.1"
 rusty_link = "0.4.4"
@@ -25,6 +25,8 @@ zstd = "0.13"
 crossbeam-channel = "0.5.15"
 uuid = { version = "1.0", features = ["v4", "serde"] }
 dirs = "5.0"
+pest = "2.8.3"
+pest_derive = "2.8.3"
 
 # We don't need tokio when compiling the library
 [target.'cfg(not(target_option_pkg = "lib"))'.dependencies]

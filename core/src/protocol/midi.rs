@@ -2,7 +2,6 @@ use midir::os::unix::VirtualOutput;
 use midir::{MidiInput, MidiOutput, MidiOutputConnection};
 
 use control_memory::MidiInMemory;
-use midi_constants::*;
 use std::collections::{HashMap, HashSet};
 use std::fmt::{Debug, Display};
 use std::sync::{Arc, Mutex};
@@ -13,7 +12,8 @@ pub use message::*;
 
 use crate::protocol::error::ProtocolError;
 
-pub mod midi_constants;
+mod midi_constants;
+pub use midi_constants::*;
 
 /// A common interface trait for MIDI Input and Output devices.
 ///
