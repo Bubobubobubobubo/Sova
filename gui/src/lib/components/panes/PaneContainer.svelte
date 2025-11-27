@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { Columns2, Rows2, X, LayoutGrid } from 'lucide-svelte';
+	import { Columns2, Rows2, X, LayoutGrid, RotateCcw } from 'lucide-svelte';
 	import { paneLayout, type ViewType } from '$lib/stores/paneState';
 	import ViewSelector from './ViewSelector.svelte';
 	import ConfigEditor from '../ConfigEditor.svelte';
@@ -43,6 +43,10 @@
 		paneLayout.setView(paneId, null);
 	}
 
+	function handleToggleDirection() {
+		paneLayout.toggleParentDirection(paneId);
+	}
+
 	function handleViewSelect(view: ViewType) {
 		paneLayout.setView(paneId, view);
 	}
@@ -79,6 +83,9 @@
 					<Rows2 size={14} />
 				</button>
 				{#if !isOnlyPane}
+					<button class="action-btn" onclick={handleToggleDirection} title="Toggle Split Direction">
+						<RotateCcw size={14} />
+					</button>
 					<button class="action-btn close" onclick={handleClose} title="Close Pane">
 						<X size={14} />
 					</button>

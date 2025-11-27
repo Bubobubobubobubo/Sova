@@ -214,6 +214,22 @@ function collectOpenViews(node: PaneNode): Set<ViewType> {
 	return views;
 }
 
+function findParentSplit(root: PaneNode, targetId: string): SplitPane | null {
+	if (root.type === 'leaf') return null;
+
+	if (root.children[0].id === targetId || root.children[1].id === targetId) {
+		return root;
+	}
+
+	for (const child of root.children) {
+		if (child.type === 'split') {
+			const found = findParentSplit(child, targetId);
+			if (found) return found;
+		}
+	}
+	return null;
+}
+
 function createPaneStore() {
 	const { subscribe, set, update } = writable<PaneLayout>(loadLayout());
 
@@ -272,6 +288,17 @@ function createPaneStore() {
 			update((layout) => {
 				const newLayout = structuredClone(layout);
 				resetDisconnectedViews(newLayout.root);
+				return newLayout;
+			});
+		},
+
+		toggleParentDirection(paneId: string): void {
+			update((layout) => {
+				const newLayout = structuredClone(layout);
+				const parent = findParentSplit(newLayout.root, paneId);
+				if (parent) {
+					parent.direction = parent.direction === 'horizontal' ? 'vertical' : 'horizontal';
+				}
 				return newLayout;
 			});
 		}

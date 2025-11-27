@@ -24,6 +24,7 @@
 {:else}
 	<Splitpanes
 		horizontal={node.direction === 'horizontal'}
+		theme=""
 		on:resized={(e) => handleResize(node.id, e)}
 	>
 		<Pane minSize={10} size={node.sizes[0]}>
