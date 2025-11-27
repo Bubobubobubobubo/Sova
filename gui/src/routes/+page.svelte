@@ -3,30 +3,16 @@
   import { invoke } from '@tauri-apps/api/core';
   import ThemeProvider from '$lib/components/ThemeProvider.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
-  import ConfigEditor from '$lib/components/ConfigEditor.svelte';
-  import Login from '$lib/components/Login.svelte';
-  import DevicesView from '$lib/components/DevicesView.svelte';
-  import LogView from '$lib/components/LogView.svelte';
-  import SceneView from '$lib/components/SceneView.svelte';
-  import { viewState } from '$lib/stores/viewState';
+  import PaneLayout from '$lib/components/panes/PaneLayout.svelte';
   import { initializeApp, cleanupApp } from '$lib/stores/config';
   import { initializeSovaStores, cleanupSovaStores } from '$lib/stores';
   import { isConnected } from '$lib/stores/connectionState';
-
-  let currentView = $state($viewState);
-
-  $effect(() => {
-    currentView = $viewState;
-  });
 
   onMount(async () => {
     await initializeApp();
 
     const connected = await invoke<boolean>('is_client_connected');
-    if (!connected) {
-      viewState.set('LOGIN');
-    } else {
-      // Already connected - initialize Sova stores
+    if (connected) {
       await initializeSovaStores();
       isConnected.set(true);
     }
@@ -40,19 +26,9 @@
 
 <ThemeProvider>
   <div class="app">
-    <TopBar {currentView} />
+    <TopBar />
     <div class="content">
-      {#if currentView === 'LOGIN'}
-        <Login />
-      {:else if currentView === 'SCENE'}
-        <SceneView />
-      {:else if currentView === 'DEVICES'}
-        <DevicesView />
-      {:else if currentView === 'LOGS'}
-        <LogView />
-      {:else}
-        <ConfigEditor />
-      {/if}
+      <PaneLayout />
     </div>
   </div>
 </ThemeProvider>

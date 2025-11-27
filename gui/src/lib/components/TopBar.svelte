@@ -1,37 +1,29 @@
 <script lang="ts">
-  import { Play, Pause, LogOut } from 'lucide-svelte';
-  import { viewState, type ViewType } from '$lib/stores/viewState';
+  import { Play, Pause, LogOut, Plus } from 'lucide-svelte';
   import { isConnected } from '$lib/stores/connectionState';
   import { isPlaying, clockState } from '$lib/stores/transport';
   import { startTransport, stopTransport, setTempo } from '$lib/api/client';
   import { invoke } from '@tauri-apps/api/core';
-
-  interface Props {
-    currentView: ViewType;
-  }
-
-  let { currentView }: Props = $props();
+  import { paneLayout } from '$lib/stores/paneState';
 
   let isEditingTempo = $state(false);
   let tempTempoValue = $state('120');
   let tempoInputElement: HTMLInputElement;
 
-  // Calculate bar progress (0-100%)
   let barProgress = $derived(
     $clockState !== null
       ? (($clockState.beat % $clockState.quantum) / $clockState.quantum) * 100
       : 0
   );
 
-  function switchView(view: ViewType) {
-    viewState.set(view);
+  function handleAddPane() {
+    paneLayout.addPane();
   }
 
   async function handleDisconnect() {
     try {
       await invoke('disconnect_client');
       isConnected.set(false);
-      viewState.set('LOGIN');
     } catch (error) {
       // Disconnect failed - connection likely already closed
     }
@@ -132,45 +124,12 @@
     {/if}
   </div>
 
-  <div class="center-section">
-    <div class="tabs">
-      {#if $isConnected}
-        <button
-          class="tab"
-          class:active={currentView === 'SCENE'}
-          onclick={() => switchView('SCENE')}>
-          SCENE
-        </button>
-        <button
-          class="tab"
-          class:active={currentView === 'DEVICES'}
-          onclick={() => switchView('DEVICES')}>
-          DEVICES
-        </button>
-      {:else}
-        <button
-          class="tab"
-          class:active={currentView === 'LOGIN'}
-          onclick={() => switchView('LOGIN')}>
-          LOGIN
-        </button>
-      {/if}
-      <button
-        class="tab"
-        class:active={currentView === 'LOGS'}
-        onclick={() => switchView('LOGS')}>
-        LOGS
-      </button>
-      <button
-        class="tab"
-        class:active={currentView === 'CONFIG'}
-        onclick={() => switchView('CONFIG')}>
-        CONFIG
-      </button>
-    </div>
-  </div>
+  <div class="center-section"></div>
 
   <div class="right-section">
+    <button class="add-pane-btn" onclick={handleAddPane} title="Add new pane">
+      <Plus size={16} />
+    </button>
     {#if $isConnected}
       <button class="disconnect-button" onclick={handleDisconnect} title="Disconnect">
         <LogOut size={16} />
@@ -210,9 +169,11 @@
 
   .right-section {
     display: flex;
+    align-items: center;
     justify-content: flex-end;
     flex-shrink: 0;
     margin-left: 8px;
+    gap: 8px;
   }
 
   .app-name {
@@ -224,32 +185,21 @@
     padding: 0 8px;
   }
 
-  .tabs {
-    display: flex;
-    gap: 2px;
-  }
-
-  .tab {
+  .add-pane-btn {
     background: none;
-    border: none;
+    border: 1px solid var(--colors-border, #333);
     color: var(--colors-text-secondary, #888);
-    font-family: monospace;
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.3px;
-    padding: 6px 8px;
+    padding: 6px 10px;
     cursor: pointer;
-    transition: color 0.2s;
-    white-space: nowrap;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
   }
 
-  .tab:hover {
-    color: var(--colors-text, #aaa);
-  }
-
-  .tab.active {
+  .add-pane-btn:hover {
+    border-color: var(--colors-accent, #0e639c);
     color: var(--colors-text, #fff);
-    background-color: var(--colors-surface, #2d2d2d);
   }
 
   .actions {

@@ -3,14 +3,19 @@
   import { invoke } from '@tauri-apps/api/core';
   import { isConnected, connectionError } from '$lib/stores/connectionState';
   import { clientConfig } from '$lib/stores/config';
-  import { viewState } from '$lib/stores/viewState';
   import { initializeSovaStores } from '$lib/stores';
 
-  let ip = '';
-  let port = 8080;
-  let nickname = '';
-  let connecting = false;
-  let errorMsg = '';
+  interface Props {
+    onConnected?: () => void;
+  }
+
+  let { onConnected }: Props = $props();
+
+  let ip = $state('');
+  let port = $state(8080);
+  let nickname = $state('');
+  let connecting = $state(false);
+  let errorMsg = $state('');
 
   onMount(() => {
     if ($clientConfig) {
@@ -41,7 +46,7 @@
 
       isConnected.set(true);
       connectionError.set(null);
-      viewState.set('SCENE');
+      onConnected?.();
     } catch (error) {
       errorMsg = String(error);
       isConnected.set(false);

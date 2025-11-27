@@ -2,13 +2,19 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 	import { scene } from '$lib/stores';
-	import { selection } from '$lib/stores/selection';
 	import { SERVER_EVENTS } from '$lib/events';
 	import type { Frame, RemoveFramePayload } from '$lib/types/protocol';
+	import type { Snippet } from 'svelte';
+	import { Rows3, Columns3, ArrowLeftRight, ArrowUpDown, ZoomIn, ZoomOut, RotateCcw } from 'lucide-svelte';
 	import SplitPane from './SplitPane.svelte';
-	import SceneToolbar from './scene/SceneToolbar.svelte';
 	import Timeline from './scene/Timeline.svelte';
 	import FrameEditor from './scene/FrameEditor.svelte';
+
+	interface Props {
+		registerToolbar?: (snippet: Snippet | null) => void;
+	}
+
+	let { registerToolbar }: Props = $props();
 
 	// Zoom constraints
 	const MIN_ZOOM = 0.25;
@@ -19,7 +25,7 @@
 	let viewport = $state({ zoom: 1.0, orientation: 'horizontal' as 'horizontal' | 'vertical' });
 
 	// Layout state
-	let splitOrientation = $state<'horizontal' | 'vertical'>('horizontal');
+	let splitOrientation = $state<'horizontal' | 'vertical'>('vertical');
 
 	// Editor state
 	let editingFrame = $state<{ lineIdx: number; frameIdx: number } | null>(null);
@@ -35,6 +41,18 @@
 	const frameKey = $derived(
 		editingFrame ? `${editingFrame.lineIdx}-${editingFrame.frameIdx}` : null
 	);
+
+	function zoomIn() {
+		viewport.zoom = Math.min(MAX_ZOOM, viewport.zoom * ZOOM_FACTOR);
+	}
+
+	function zoomOut() {
+		viewport.zoom = Math.max(MIN_ZOOM, viewport.zoom / ZOOM_FACTOR);
+	}
+
+	function resetZoom() {
+		viewport.zoom = 1.0;
+	}
 
 	function handleZoomChange(zoom: number) {
 		viewport.zoom = zoom;
@@ -56,13 +74,15 @@
 	let unlistenFns: UnlistenFn[] = [];
 
 	onMount(async () => {
+		registerToolbar?.(toolbarSnippet);
+
 		unlistenFns.push(
 			await listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
 				if (!editingFrame) return;
 				const { lineId, frameId } = event.payload;
 				if (editingFrame.lineIdx === lineId) {
 					if (editingFrame.frameIdx === frameId) {
-						editingFrame = null; // Deleted the frame we were editing
+						editingFrame = null;
 					} else if (editingFrame.frameIdx > frameId) {
 						editingFrame = { lineIdx: lineId, frameIdx: editingFrame.frameIdx - 1 };
 					}
@@ -72,7 +92,7 @@
 				if (!editingFrame) return;
 				const removedLineId = event.payload;
 				if (editingFrame.lineIdx === removedLineId) {
-					editingFrame = null; // Deleted the line we were editing
+					editingFrame = null;
 				} else if (editingFrame.lineIdx > removedLineId) {
 					editingFrame = { ...editingFrame, lineIdx: editingFrame.lineIdx - 1 };
 				}
@@ -81,23 +101,45 @@
 	});
 
 	onDestroy(() => {
+		registerToolbar?.(null);
 		unlistenFns.forEach((fn) => fn());
 	});
 </script>
 
-<div class="scene-container">
-	<SceneToolbar
-		zoom={viewport.zoom}
-		minZoom={MIN_ZOOM}
-		maxZoom={MAX_ZOOM}
-		zoomFactor={ZOOM_FACTOR}
-		orientation={viewport.orientation}
-		{splitOrientation}
-		onZoomChange={handleZoomChange}
-		onOrientationChange={toggleTimelineOrientation}
-		onSplitOrientationChange={toggleSplitOrientation}
-	/>
+{#snippet toolbarSnippet()}
+	<div class="toolbar-controls">
+		<div class="zoom-controls">
+			<button class="toolbar-btn" onclick={zoomOut} title="Zoom out" disabled={viewport.zoom <= MIN_ZOOM}>
+				<ZoomOut size={14} />
+			</button>
+			<span class="zoom-level">{Math.round(viewport.zoom * 100)}%</span>
+			<button class="toolbar-btn" onclick={zoomIn} title="Zoom in" disabled={viewport.zoom >= MAX_ZOOM}>
+				<ZoomIn size={14} />
+			</button>
+			{#if viewport.zoom !== 1.0}
+				<button class="toolbar-btn" onclick={resetZoom} title="Reset zoom">
+					<RotateCcw size={12} />
+				</button>
+			{/if}
+		</div>
+		<button class="toolbar-btn" onclick={toggleTimelineOrientation} title="Toggle timeline orientation">
+			{#if viewport.orientation === 'horizontal'}
+				<Columns3 size={14} />
+			{:else}
+				<Rows3 size={14} />
+			{/if}
+		</button>
+		<button class="toolbar-btn" onclick={toggleSplitOrientation} title="Toggle split orientation">
+			{#if splitOrientation === 'horizontal'}
+				<ArrowUpDown size={14} />
+			{:else}
+				<ArrowLeftRight size={14} />
+			{/if}
+		</button>
+	</div>
+{/snippet}
 
+<div class="scene-container">
 	<div class="split-container">
 		<SplitPane orientation={splitOrientation}>
 			{#snippet first()}
@@ -135,5 +177,45 @@
 	.split-container {
 		flex: 1;
 		overflow: hidden;
+	}
+
+	.toolbar-controls {
+		display: flex;
+		align-items: center;
+		gap: 8px;
+	}
+
+	.zoom-controls {
+		display: flex;
+		align-items: center;
+		gap: 4px;
+	}
+
+	.zoom-level {
+		font-family: monospace;
+		font-size: 10px;
+		color: var(--colors-text-secondary);
+		min-width: 36px;
+		text-align: center;
+	}
+
+	.toolbar-btn {
+		background: none;
+		border: 1px solid var(--colors-border);
+		color: var(--colors-text-secondary);
+		padding: 4px;
+		cursor: pointer;
+		display: flex;
+		align-items: center;
+	}
+
+	.toolbar-btn:hover:not(:disabled) {
+		border-color: var(--colors-accent);
+		color: var(--colors-accent);
+	}
+
+	.toolbar-btn:disabled {
+		opacity: 0.3;
+		cursor: not-allowed;
 	}
 </style>
