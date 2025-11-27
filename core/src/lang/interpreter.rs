@@ -15,7 +15,7 @@ pub trait Interpreter : Send + Sync {
     fn execute_next(
         &mut self,
         ctx : &mut EvaluationContext
-    ) -> (Option<ConcreteEvent>, Option<SyncTime>);
+    ) -> (Option<ConcreteEvent>, SyncTime);
 
     fn has_terminated(&self) -> bool;
 

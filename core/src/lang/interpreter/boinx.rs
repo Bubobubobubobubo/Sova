@@ -1,13 +1,11 @@
 use std::{cmp, collections::VecDeque, mem};
 
 use crate::{
-    clock::{SyncTime, TimeSpan, NEVER},
-    lang::{
+    clock::{Clock, NEVER, SyncTime, TimeSpan}, lang::{
         evaluation_context::EvaluationContext,
         event::ConcreteEvent,
         interpreter::{Interpreter, InterpreterFactory},
-    },
-    scene::script::Script,
+    }, log_println, scene::script::Script
 };
 
 mod ast;
@@ -36,7 +34,7 @@ impl BoinxLine {
             output,
             finished: false,
             position: BoinxPosition::Undefined,
-            next_date: 0,
+            next_date: start_date,
             out_buffer: VecDeque::new(),
             previous: None,
         }
@@ -65,6 +63,8 @@ impl BoinxLine {
             return Vec::new();
         };
         self.previous = Some(item.clone());
+
+        let dur = dur.as_micros(ctx.clock, ctx.frame_len);
         
         match item {
             BoinxItem::Stop => {
@@ -72,8 +72,7 @@ impl BoinxLine {
                 return Vec::new();
             }
             BoinxItem::Note(n) => {
-                //vec![ConcreteEvent::MidiNote((), (), (), (), ())]
-                todo!()
+                vec![ConcreteEvent::MidiNote(n as u64, 90, 0, dur, 1)]
             }
             BoinxItem::Number(_) => {
                 todo!()
@@ -87,14 +86,14 @@ impl BoinxLine {
     }
 
     pub fn update(&mut self, ctx: &mut EvaluationContext) -> Vec<BoinxLine> {
-        if !self.ready(ctx) {
+        if !self.ready(ctx.clock) {
             return Vec::new();
         }
         let item = self.output.compo.yield_compiled(ctx);
         let date = ctx.clock.micros();
         let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len);
         let (pos, next_wait) = item.position(ctx, len, date.saturating_sub(self.start_date));
-        self.next_date += next_wait;
+        self.next_date = self.next_date.saturating_add(next_wait);
         let old_pos = mem::replace(&mut self.position, pos);
         let delta = old_pos.diff(&self.position);
         let items = item.at(ctx, delta, len);
@@ -115,8 +114,12 @@ impl BoinxLine {
         self.out_buffer.pop_front()
     }
 
-    pub fn ready(&self, ctx: &EvaluationContext) -> bool {
-        self.next_date <= ctx.clock.micros()
+    pub fn ready(&self, clock: &Clock) -> bool {
+        self.next_date <= clock.micros()
+    }
+
+    pub fn remaining_before_ready(&self, clock: &Clock) -> SyncTime {
+        self.next_date.saturating_sub(clock.micros())
     }
 }
 
@@ -130,7 +133,7 @@ impl Interpreter for BoinxInterpreter {
     fn execute_next(
         &mut self,
         ctx: &mut EvaluationContext,
-    ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+    ) -> (Option<ConcreteEvent>, SyncTime) {
         if !self.started {
             self.execution_lines = self.prog.start(
                 ctx.clock.micros(), 
@@ -143,20 +146,22 @@ impl Interpreter for BoinxInterpreter {
         let mut event = None;
         let mut wait = NEVER;
         for line in self.execution_lines.iter_mut() {
+            let rem = line.remaining_before_ready(ctx.clock);
             let mut lines = line.update(ctx);
             new_lines.append(&mut lines);
             if event.is_none() {
                 event = line.get_event();
             }
-            wait = cmp::min(wait, line.next_date);
+            wait = cmp::min(wait, rem);
         }
+        self.execution_lines.retain(|line| line.next_date < NEVER);
         self.execution_lines.append(&mut new_lines);
-        let wait = if event.is_some() { None } else { Some(wait) };
+        let wait = if event.is_some() { 0 } else { wait };
         (event, wait)
     }
 
     fn has_terminated(&self) -> bool {
-        !self.execution_lines.is_empty()
+        self.started && self.execution_lines.is_empty()
     }
 
     fn stop(&mut self) {

@@ -121,8 +121,9 @@ impl Frame {
                 next_wait = std::cmp::min(next_wait, wait);
                 continue;
             }
-            let Some((event, wait)) = exec.execute_next(partial.child()) else {
-                next_wait = 0;
+            let (opt_ev, wait) = exec.execute_next(partial.child());
+            next_wait = std::cmp::min(next_wait, wait);
+            let Some(event) = opt_ev else {
                 continue;
             };
             match event {
@@ -133,7 +134,6 @@ impl Frame {
                 }
                 _ => events.push(event)
             }
-            next_wait = std::cmp::min(next_wait, wait)
         }
         self.executions.retain(|exec| !exec.has_terminated());
         self.executions.append(&mut new_executions);

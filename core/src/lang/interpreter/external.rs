@@ -2,7 +2,7 @@ use std::{collections::VecDeque, io::{Read, Write}, process::{Child, ChildStdout
 
 use serde::{Deserialize, Serialize};
 
-use crate::{clock::SyncTime, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}, variable::{Variable, VariableValue}}, log_error, scene::script::Script};
+use crate::{clock::{NEVER, SyncTime}, lang::{evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::{Interpreter, InterpreterFactory}, variable::{Variable, VariableValue}}, log_error, scene::script::Script};
 
 pub const EXTERNAL_DONE_CHAR : u8 = 7;
 
@@ -32,11 +32,11 @@ pub enum ExternalAction {
 impl ExternalInterpreter {
 
     fn parse_stdout(&mut self, ctx: &mut EvaluationContext, stdout: &mut ChildStdout) 
-        -> (Option<ConcreteEvent>, Option<SyncTime>)
+        -> (Option<ConcreteEvent>, SyncTime)
     {
         let mut buf = Vec::new();
         let mut event = None;
-        let mut wait = None;
+        let mut wait = NEVER;
         while buf.last().map(|b| *b != EXTERNAL_DONE_CHAR).unwrap_or_default() {
             if stdout.read_to_end(&mut buf).is_err() {
                 log_error!("Unable to read external interpreter output");
@@ -57,7 +57,7 @@ impl ExternalInterpreter {
                     *ctx.stack = stack;
                 },
                 ExternalAction::Event(e) => event = Some(e),
-                ExternalAction::Delay(d) => wait = Some(d),
+                ExternalAction::Delay(d) => wait = d,
                 ExternalAction::Terminate => self.stop(),
             }
         }
@@ -71,7 +71,7 @@ impl Interpreter for ExternalInterpreter {
     fn execute_next(
         &mut self,
         ctx : &mut EvaluationContext
-    ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+    ) -> (Option<ConcreteEvent>, SyncTime) {
         let Ok(ctx_bytes) = serde_json::to_vec(ctx) else {
             return Default::default();
         };

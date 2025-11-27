@@ -6,7 +6,7 @@ use crate::{
     clock::{NEVER, SyncTime, TimeSpan},
     lang::{
         Program, evaluation_context::EvaluationContext, interpreter::boinx::BoinxLine, variable::{Variable, VariableValue}
-    },
+    }, log_println,
 };
 
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -351,7 +351,7 @@ impl BoinxItem {
                     };
                     if dur > date {
                         let sub_len = ctx.clock.micros_to_beats(dur);
-                        let (sub_pos, sub_rem) = item.position(ctx, sub_len, dur - date);
+                        let (sub_pos, sub_rem) = item.position(ctx, sub_len, date);
                         return (BoinxPosition::At(i, Box::new(sub_pos)), sub_rem);
                     }
                     date -= dur;
@@ -370,7 +370,8 @@ impl BoinxItem {
                 (BoinxPosition::Parallel(pos), rem)
             }
             _ => {
-                let rem = ctx.clock.beats_to_micros(len).saturating_sub(date);
+                let micros_len = ctx.clock.beats_to_micros(len);
+                let rem = micros_len.saturating_sub(date);
                 (BoinxPosition::This, rem)
             }
         }

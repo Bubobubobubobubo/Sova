@@ -56,7 +56,9 @@ impl EditWidget {
 
     pub fn get_help() -> &'static str {
         "\
-        C-S: Upload
+        C-S: Upload \n\
+        C-L: Change language \n\
+        C-A: Select all \n\
         "
     }
 
