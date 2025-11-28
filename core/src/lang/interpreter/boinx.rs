@@ -42,16 +42,6 @@ impl BoinxLine {
         }
     }
 
-    // pub fn get_target(&self, ctx: &EvaluationContext) -> (u64, usize) {
-    //     let chan = match &self.output.channel {
-    //         Some(item) => {
-
-    //         }
-    //         None => 1
-    //     };
-    //     todo!()
-    // }
-
     pub fn execute_item(
         &mut self,
         ctx: &mut EvaluationContext,
@@ -71,19 +61,9 @@ impl BoinxLine {
         let dur = dur.as_micros(ctx.clock, ctx.frame_len);
         
         match item {
-            BoinxItem::Stop => {
-                self.finished = true;
-                return Vec::new();
-            }
             BoinxItem::Note(n) => {
                 let channel = channel.as_integer(ctx.clock, ctx.frame_len) as u64;
                 vec![ConcreteEvent::MidiNote(*n as u64, 90, channel, dur, device)]
-            }
-            BoinxItem::Number(_) => {
-                todo!()
-            }
-            BoinxItem::Str(_) => {
-                todo!()
             }
             BoinxItem::ArgMap(map) => {
                 let addr = channel.as_str(ctx.clock, ctx.frame_len);
@@ -168,6 +148,9 @@ impl BoinxLine {
                 }
                 BoinxItem::External(prog) => {
                     self.out_buffer.push_back(ConcreteEvent::StartProgram(prog));
+                }
+                BoinxItem::Stop => {
+                    self.finished = true;
                 }
                 item => {
                     for device in devices.iter() {
