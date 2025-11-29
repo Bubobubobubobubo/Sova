@@ -54,6 +54,8 @@ impl PlaybackManager {
                             target_beat
                         );
 
+                        let _ = update_notifier.send(SovaNotification::TransportStarted);
+
                         scene.kill_executions();
                         scene.reset();
 

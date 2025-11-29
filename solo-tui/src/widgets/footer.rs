@@ -7,7 +7,7 @@ use ratatui::{
 };
 use sova_core::compiler::CompilationState;
 
-use crate::{app::AppState, page::Page, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, scene_widget::SceneWidget}};
+use crate::{app::AppState, page::Page, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, scene_widget::SceneWidget, time_widget::TimeWidget}};
 
 #[derive(Default)]
 pub struct Footer;
@@ -87,6 +87,7 @@ impl StatefulWidget for Footer {
             Page::Scene => SceneWidget::get_help(),
             Page::Edit => EditWidget::get_help(),
             Page::Devices => DevicesWidget::get_help(),
+            Page::Time => TimeWidget::get_help(),
             _ => ""
         };
         Paragraph::new(help).render(middle.inner(Margin {

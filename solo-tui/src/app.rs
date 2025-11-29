@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    event::{AppEvent, Event, EventHandler, TICK_FPS}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
+    event::{AppEvent, Event, EventHandler, TICK_FPS}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget, time_widget::TimeWidget}
 };
 use crossbeam_channel::{Receiver, Sender};
 use ratatui::{
@@ -251,6 +251,8 @@ impl App {
                 Page::Devices => self
                     .devices_widget
                     .process_event(&mut self.state, key_event),
+                Page::Time => 
+                    TimeWidget::process_event(&mut self.state, key_event),
                 Page::Logs => self
                     .log_widget
                     .process_event(key_event),

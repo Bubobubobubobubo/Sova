@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, atomic::{AtomicU64, Ordering}};
 
 use rusty_link::{AblLink, SessionState};
 use serde::{Deserialize, Serialize, ser::SerializeStruct};
@@ -188,7 +188,7 @@ pub struct ClockServer {
     /// The underlying Ableton Link instance.
     pub link: AblLink,
     /// The musical quantum, defining the number of beats per bar or phrase.
-    pub quantum: f64,
+    quantum: AtomicU64,
 }
 
 impl ClockServer {
@@ -202,7 +202,15 @@ impl ClockServer {
     pub fn new(tempo: f64, quantum: f64) -> Self {
         let link = AblLink::new(tempo);
         link.enable_start_stop_sync(true);
-        ClockServer { link, quantum }
+        ClockServer { link, quantum: AtomicU64::new(quantum.to_bits()) }
+    }
+
+    pub fn get_quantum(&self) -> f64 {
+        f64::from_bits(self.quantum.load(Ordering::Relaxed))
+    }
+
+    pub fn set_quantum(&self, quantum: f64) {
+        self.quantum.store(quantum.to_bits(), Ordering::Relaxed);
     }
 
 }
@@ -246,6 +254,22 @@ impl Clock {
         self.commit_app_state();
     }
 
+    /// Start/stop synchronization feature in Ableton Link.
+    pub fn is_sync_enabled(&self) -> bool {
+        self.server.link.is_start_stop_sync_enabled()
+    }
+
+    /// Start/stop synchronization feature in Ableton Link.
+    pub fn play_pause(&mut self) {
+        self.session_state.set_is_playing(!self.is_playing(), self.micros());
+        self.commit_app_state();
+    }
+
+    /// Start/stop synchronization feature in Ableton Link.
+    pub fn is_playing(&self) -> bool {
+        self.session_state.is_playing()
+    }
+
     /// Sets a new tempo for the Ableton Link session.
     ///
     /// The tempo is clamped to a minimum of 20.0 BPM. The change is associated
@@ -273,7 +297,12 @@ impl Clock {
 
     /// Returns the musical quantum (beats per bar/phrase) from the server configuration.
     pub fn quantum(&self) -> f64 {
-        self.server.quantum
+        self.server.get_quantum()
+    }
+
+    /// Configures the musical quantum (beats per bar/phrase) from the server configuration.
+    pub fn set_quantum(&self, quantum: f64) {
+        self.server.set_quantum(quantum);
     }
 
     /// Returns the current beat position on the timeline based on the current Link time and quantum.
@@ -288,7 +317,7 @@ impl Clock {
     ///
     /// * `beat` - The target beat position on the timeline.
     pub fn date_at_beat(&self, beat: f64) -> SyncTime {
-        self.session_state.time_at_beat(beat, self.server.quantum) as SyncTime
+        self.session_state.time_at_beat(beat, self.quantum()) as SyncTime
     }
 
     /// Calculates the absolute Link time (microseconds) corresponding to a beat position relative to the current time.
@@ -298,12 +327,13 @@ impl Clock {
     /// * `beats` - The number of beats relative to the current beat position.
     pub fn date_at_relative_beats(&self, beats: f64) -> SyncTime {
         let current_micros = self.server.link.clock_micros() + self.drift as i64;
+        let quantum = self.quantum();
         let current_beat = self
             .session_state
-            .beat_at_time(current_micros, self.server.quantum);
+            .beat_at_time(current_micros, quantum);
         let target_beat = current_beat + beats;
         self.session_state
-            .time_at_beat(target_beat, self.server.quantum) as SyncTime
+            .time_at_beat(target_beat, quantum) as SyncTime
     }
 
     /// Calculates the beat position corresponding to a specific absolute Link time (microseconds).
@@ -313,7 +343,7 @@ impl Clock {
     /// * `date` - The target absolute time in microseconds.
     pub fn beat_at_date(&self, date: SyncTime) -> f64 {
         self.session_state
-            .beat_at_time(date as i64, self.server.quantum)
+            .beat_at_time(date as i64, self.quantum())
     }
 
     /// Calculates the beat position corresponding to a Link time relative to the current time.
@@ -326,7 +356,7 @@ impl Clock {
             + date as i64 
             + self.drift as i64;
         self.session_state
-            .beat_at_time(rel_date, self.server.quantum)
+            .beat_at_time(rel_date, self.quantum())
     }
 
     /// Converts a duration in beats to microseconds based on the current tempo.
@@ -370,6 +400,11 @@ impl Clock {
     pub fn with_drift(mut self, drift: SyncTime) -> Clock {
         self.drift = drift;
         self
+    }
+
+    pub fn reset_beat(&mut self) {
+        self.session_state.request_beat_at_time(0.0, self.server.link.clock_micros(), self.quantum());
+        self.commit_app_state();
     }
 
 }

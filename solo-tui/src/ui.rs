@@ -7,7 +7,7 @@ use ratatui::{
 use crate::{
     app::App,
     page::Page,
-    widgets::{footer::Footer, header::Header},
+    widgets::{footer::Footer, header::Header, time_widget::TimeWidget},
 };
 
 impl Widget for &mut App {
@@ -39,12 +39,15 @@ impl Widget for &mut App {
                 "edit"
             }
             Page::Configure => "configure",
-            Page::Time => "time",
+            Page::Time => {
+                TimeWidget.render(content_area, buf, &mut self.state);
+                "time"
+            }
             Page::Logs => {
                 self.log_widget.render(content_area, buf);
                 "logs"
             }
-            Page::Vars => "vars",
+            Page::Vars => "variables",
         };
 
         Header::default().render(header_area, buf, &mut self.state);

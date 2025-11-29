@@ -96,6 +96,9 @@ impl StatefulWidget for &mut DevicesWidget {
 
     fn render(self, area: Rect, buf: &mut Buffer, state: &mut Self::State) {
         self.scroll_state = self.scroll_state.content_length((state.devices.len() - 1) * 3);
+        if self.state.selected().is_none() && !state.devices.is_empty() {
+            self.state.select(Some(0));
+        }
         let header_style = Style::default()
             .fg(Color::White)
             .bold();

@@ -327,7 +327,6 @@ impl Scheduler {
 
         self.clock.session_state.set_is_playing(true, start_date);
         self.clock.commit_app_state();
-        let _ = self.update_notifier.send(SovaNotification::TransportStarted);
     }
 
     pub fn process_transport_stop(&mut self) {
@@ -338,7 +337,6 @@ impl Scheduler {
         self.clock.commit_app_state();
 
         self.scene.kill_executions();
-        let _ = self.update_notifier.send(SovaNotification::TransportStopped);
     }
 
 }
