@@ -7,7 +7,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio}, sync::Arc,
@@ -133,4 +133,4 @@ impl Compiler for ExternalCompiler {
 /// A type alias for a collection mapping compiler names (Strings) to Arc-ed [`Compiler`] trait objects.
 ///
 /// This allows managing multiple compiler implementations dynamically.
-pub type CompilerCollection = HashMap<String, Arc<dyn Compiler>>;
+pub type CompilerCollection = BTreeMap<String, Arc<dyn Compiler>>;

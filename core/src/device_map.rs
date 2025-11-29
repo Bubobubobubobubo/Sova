@@ -16,7 +16,7 @@
 //! - Providing a list of available and connected devices (`DeviceInfo`).
 
 use std::{
-    collections::HashMap,
+    collections::BTreeMap,
     net::{IpAddr, SocketAddr},
     str::FromStr,
     sync::{Arc, Mutex},
@@ -40,10 +40,10 @@ const MAX_DEVICE_SLOTS: usize = 16;
 pub struct DeviceMap {
     /// Currently connected input devices, keyed by their unique user-given name.
     /// Values are `DeviceItem`s containing the assigned name and the device handle.
-    pub input_connections: Mutex<HashMap<String, Arc<ProtocolDevice>>>,
+    pub input_connections: Mutex<BTreeMap<String, Arc<ProtocolDevice>>>,
     /// Currently connected output devices, keyed by their unique user-given name.
     /// Values are `DeviceItem`s containing the assigned name and the device handle.
-    pub output_connections: Mutex<HashMap<String, Arc<ProtocolDevice>>>,
+    pub output_connections: Mutex<BTreeMap<String, Arc<ProtocolDevice>>>,
     /// Maps user-assigned Slot IDs (1-N) to the system or virtual device name assigned to it.
     /// Slot 0 is implicitly the Log device and is not stored here.
     pub slot_assignments: Mutex<[Option<String> ; MAX_DEVICE_SLOTS]>,
@@ -400,7 +400,7 @@ impl DeviceMap {
     /// and secondarily by name (alphabetical for unassigned devices).
     /// The internal Log device is excluded from this list.
     pub fn device_list(&self) -> Vec<DeviceInfo> {
-        let mut discovered_devices_map: HashMap<String, DeviceInfo> = HashMap::new();
+        let mut discovered_devices_map: BTreeMap<String, DeviceInfo> = BTreeMap::new();
         let connected_map = self.output_connections.lock().unwrap(); // Lock output connections once
 
         // Helper to create DeviceInfo, checking slot assignment and connection status

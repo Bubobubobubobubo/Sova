@@ -71,11 +71,15 @@ impl EditWidget {
                 self.text_area.select_all();
             }
             KeyCode::Char('l') if event.modifiers == KeyModifiers::CONTROL => {
-                let langs = state.languages.languages().map(str::to_owned).collect();
+                let Some(frame) = state.selected_frame() else {
+                    return;
+                };
+                let langs : Vec<String> = state.languages.languages().map(str::to_owned).collect();
+                let i = langs.iter().position(|l| l == frame.script().lang()).unwrap_or_default();
                 state.events.send(AppEvent::Popup(
                     "Script language".to_owned(), 
                     "Which language to use for this script ?".to_owned(), 
-                    PopupValue::Choice(0, langs),
+                    PopupValue::Choice(i, langs),
                     Box::new(|state, x| {
                         upload_lang(state, x.into());
                     })));

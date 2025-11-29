@@ -35,6 +35,10 @@ impl Popup {
         self.callback = Some(callback);
         self.showing = true;
 
+        if let PopupValue::Choice(i,_) = &self.value {
+            self.list_state.select(Some(*i));
+        } 
+
         Self::update_textarea(&mut self.text_area, &self.value);
     }
 
