@@ -19,6 +19,7 @@ export * from './connectionState';
 export * from './languages';
 export * from './localEdits';
 export * from './projects';
+export * from './projectsUI';
 
 // Import initialization functions
 import {
@@ -75,6 +76,21 @@ import {
 	initializeProjectsStore,
 	cleanupProjectsStore
 } from './projects';
+
+import {
+	initializeConfig,
+	cleanupConfig
+} from './config';
+
+import {
+	initializeConnectionListener,
+	cleanupConnectionListener
+} from './connectionState';
+
+import {
+	initializeLogsStore,
+	cleanupLogsStore
+} from './logs';
 
 let helloUnlisten: UnlistenFn | null = null;
 
@@ -138,4 +154,18 @@ export function cleanupSovaStores(): void {
 	cleanupLanguagesStore();
 	cleanupLocalEditsStore();
 	cleanupProjectsStore();
+}
+
+// Initialize app-level stores (config, connection, logs)
+export async function initializeApp(): Promise<void> {
+	await initializeConfig();
+	await initializeConnectionListener();
+	await initializeLogsStore();
+}
+
+// Cleanup app-level stores
+export function cleanupApp(): void {
+	cleanupConfig();
+	cleanupConnectionListener();
+	cleanupLogsStore();
 }

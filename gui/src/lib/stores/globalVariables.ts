@@ -1,7 +1,8 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { SERVER_EVENTS } from '$lib/events';
 import type { VariableValue } from '$lib/types/protocol';
+import { ListenerGroup } from './helpers';
 
 // Global variables (A-Z single-letter variables)
 export const globalVariables: Writable<Record<string, VariableValue>> = writable({});
@@ -17,20 +18,17 @@ export const globalVariableNames: Readable<string[]> = derived(
 	($vars) => Object.keys($vars).sort()
 );
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 export async function initializeGlobalVariablesStore(): Promise<void> {
-	unlistenFunctions.push(
-		await listen<Record<string, VariableValue>>(SERVER_EVENTS.GLOBAL_VARIABLES, (event) => {
+	await listeners.add(() =>
+		listen<Record<string, VariableValue>>(SERVER_EVENTS.GLOBAL_VARIABLES, (event) => {
 			globalVariables.set(event.payload);
 		})
 	);
 }
 
 export function cleanupGlobalVariablesStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	globalVariables.set({});
 }

@@ -1,6 +1,7 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import type { DeviceInfo, DeviceKind } from '$lib/types/protocol';
+import { ListenerGroup } from './helpers';
 
 // Main devices store
 export const devices: Writable<DeviceInfo[]> = writable([]);
@@ -37,21 +38,18 @@ export function getDevicesByKind(kind: DeviceKind): Readable<DeviceInfo[]> {
 	return derived(devices, ($devices) => $devices.filter((d) => d.kind === kind));
 }
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 export async function initializeDevicesStore(): Promise<void> {
 	// Listen for device list updates
-	unlistenFunctions.push(
-		await listen<DeviceInfo[]>('server:device-list', (event) => {
+	await listeners.add(() =>
+		listen<DeviceInfo[]>('server:device-list', (event) => {
 			devices.set(event.payload);
 		})
 	);
 }
 
 export function cleanupDevicesStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	devices.set([]);
 }

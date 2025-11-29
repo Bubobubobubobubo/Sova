@@ -1,7 +1,8 @@
-import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { writable, get, type Writable } from 'svelte/store';
+import { listen } from '@tauri-apps/api/event';
 import { SERVER_EVENTS } from '$lib/events';
 import type { RemoveFramePayload } from '$lib/types/protocol';
+import { ListenerGroup } from './helpers';
 
 export interface LocalEdit {
 	content: string;
@@ -11,7 +12,7 @@ export interface LocalEdit {
 // Map<frameKey, LocalEdit> where frameKey = "lineIdx-frameIdx"
 export const localEdits: Writable<Map<string, LocalEdit>> = writable(new Map());
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 function makeKey(lineIdx: number, frameIdx: number): string {
 	return `${lineIdx}-${frameIdx}`;
@@ -48,8 +49,8 @@ export function clearAllLocalEdits(): void {
 // Initialize store with cleanup listeners
 export async function initializeLocalEditsStore(): Promise<void> {
 	// Clean up local edits when frames are removed
-	unlistenFunctions.push(
-		await listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
+	await listeners.add(() =>
+		listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
 			const { lineId, frameId } = event.payload;
 			localEdits.update(($edits) => {
 				const newEdits = new Map<string, LocalEdit>();
@@ -73,8 +74,8 @@ export async function initializeLocalEditsStore(): Promise<void> {
 	);
 
 	// Clean up local edits when lines are removed
-	unlistenFunctions.push(
-		await listen<number>(SERVER_EVENTS.REMOVE_LINE, (event) => {
+	await listeners.add(() =>
+		listen<number>(SERVER_EVENTS.REMOVE_LINE, (event) => {
 			const removedLineId = event.payload;
 			localEdits.update(($edits) => {
 				const newEdits = new Map<string, LocalEdit>();
@@ -96,9 +97,6 @@ export async function initializeLocalEditsStore(): Promise<void> {
 
 // Cleanup on disconnect
 export function cleanupLocalEditsStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	localEdits.set(new Map());
 }

@@ -1,6 +1,7 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import type { ChatPayload, PeerEditingPayload } from '$lib/types/protocol';
+import { ListenerGroup } from './helpers';
 
 // Peer list
 export const peers: Writable<string[]> = writable([]);
@@ -46,19 +47,19 @@ export function getFramesEditedByUser(user: string): Readable<FrameLock[]> {
 	return derived(frameLocks, ($locks) => $locks.filter((lock) => lock.user === user));
 }
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 export async function initializeCollaborationStore(): Promise<void> {
 	// Listen for peers updates
-	unlistenFunctions.push(
-		await listen<string[]>('server:peers-updated', (event) => {
+	await listeners.add(() =>
+		listen<string[]>('server:peers-updated', (event) => {
 			peers.set(event.payload);
 		})
 	);
 
 	// Listen for chat messages
-	unlistenFunctions.push(
-		await listen<ChatPayload>('server:chat', (event) => {
+	await listeners.add(() =>
+		listen<ChatPayload>('server:chat', (event) => {
 			chatMessages.update(($messages) => [
 				...$messages,
 				{
@@ -71,8 +72,8 @@ export async function initializeCollaborationStore(): Promise<void> {
 	);
 
 	// Listen for peer started editing
-	unlistenFunctions.push(
-		await listen<PeerEditingPayload>('server:peer-started-editing', (event) => {
+	await listeners.add(() =>
+		listen<PeerEditingPayload>('server:peer-started-editing', (event) => {
 			frameLocks.update(($locks) => {
 				// Remove any existing lock for this frame
 				const filtered = $locks.filter(
@@ -93,8 +94,8 @@ export async function initializeCollaborationStore(): Promise<void> {
 	);
 
 	// Listen for peer stopped editing
-	unlistenFunctions.push(
-		await listen<PeerEditingPayload>('server:peer-stopped-editing', (event) => {
+	await listeners.add(() =>
+		listen<PeerEditingPayload>('server:peer-stopped-editing', (event) => {
 			frameLocks.update(($locks) =>
 				$locks.filter(
 					(lock) =>
@@ -110,10 +111,7 @@ export async function initializeCollaborationStore(): Promise<void> {
 }
 
 export function cleanupCollaborationStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	peers.set([]);
 	chatMessages.set([]);
 	frameLocks.set([]);

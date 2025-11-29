@@ -1,9 +1,10 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import type { LinkState, ClockState, FramePosition } from '$lib/types/protocol';
 import { ticker } from './ticker';
 import { getClock, getScene } from '$lib/api/client';
 import { isConnected } from './connectionState';
+import { ListenerGroup } from './helpers';
 
 // Transport state
 export const isPlaying: Writable<boolean> = writable(false);
@@ -56,35 +57,35 @@ export function getCurrentFrameForLine(lineId: number): Readable<number | null> 
 	});
 }
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 let unsubscribeTicker: (() => void) | null = null;
 let tickCount = 0;
 
 export async function initializeTransportStore(): Promise<void> {
 	// Listen for transport started
-	unlistenFunctions.push(
-		await listen('server:transport-started', () => {
+	await listeners.add(() =>
+		listen('server:transport-started', () => {
 			isPlaying.set(true);
 		})
 	);
 
 	// Listen for transport stopped
-	unlistenFunctions.push(
-		await listen('server:transport-stopped', () => {
+	await listeners.add(() =>
+		listen('server:transport-stopped', () => {
 			isPlaying.set(false);
 		})
 	);
 
 	// Listen for clock state updates
-	unlistenFunctions.push(
-		await listen<ClockState>('server:clock-state', (event) => {
+	await listeners.add(() =>
+		listen<ClockState>('server:clock-state', (event) => {
 			clockState.set(event.payload);
 		})
 	);
 
 	// Listen for frame position updates
-	unlistenFunctions.push(
-		await listen<FramePosition[]>('server:frame-position', (event) => {
+	await listeners.add(() =>
+		listen<FramePosition[]>('server:frame-position', (event) => {
 			framePositions.set(event.payload);
 		})
 	);
@@ -105,10 +106,7 @@ export async function initializeTransportStore(): Promise<void> {
 }
 
 export function cleanupTransportStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 
 	if (unsubscribeTicker) {
 		unsubscribeTicker();

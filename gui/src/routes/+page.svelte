@@ -4,8 +4,7 @@
   import ThemeProvider from '$lib/components/ThemeProvider.svelte';
   import TopBar from '$lib/components/TopBar.svelte';
   import PaneLayout from '$lib/components/panes/PaneLayout.svelte';
-  import { initializeApp, cleanupApp } from '$lib/stores/config';
-  import { initializeSovaStores, cleanupSovaStores } from '$lib/stores';
+  import { initializeApp, cleanupApp, initializeSovaStores, cleanupSovaStores } from '$lib/stores';
   import { isConnected } from '$lib/stores/connectionState';
 
   onMount(async () => {

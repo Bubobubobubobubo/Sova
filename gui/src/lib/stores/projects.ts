@@ -1,5 +1,5 @@
 import { writable, derived, get } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { SERVER_EVENTS } from '$lib/events';
 import type { ProjectInfo } from '$lib/types/projects';
 import type { Snapshot, ActionTiming } from '$lib/types/protocol';
@@ -7,31 +7,44 @@ import * as projectsApi from '$lib/api/projects';
 import { getSnapshot, setScene, setTempo, ActionTiming as AT } from '$lib/api/client';
 import { isConnected } from './connectionState';
 import { clearAllLocalEdits } from './localEdits';
+import { ListenerGroup } from './helpers';
+import {
+	projectsUIState,
+	setStatusMessage,
+	clearStatusMessage,
+	stopEditingName,
+	type SortField,
+	type SortDirection
+} from './projectsUI';
 
-export type SortField = 'name' | 'tempo' | 'line_count' | 'updated_at';
-export type SortDirection = 'asc' | 'desc';
+// Re-export UI state for convenience
+export {
+	statusMessage,
+	searchQuery,
+	sortField,
+	sortDirection,
+	editingName,
+	setSearchQuery,
+	setSort,
+	setStatusMessage,
+	clearStatusMessage,
+	startEditingName,
+	stopEditingName,
+	type SortField,
+	type SortDirection
+} from './projectsUI';
 
-interface ProjectsState {
+interface ProjectsDataState {
 	projects: ProjectInfo[];
-	searchQuery: string;
-	sortField: SortField;
-	sortDirection: SortDirection;
 	pendingSave: string | null;
-	statusMessage: string;
-	editingName: string | null;
 }
 
-const initialState: ProjectsState = {
+const initialState: ProjectsDataState = {
 	projects: [],
-	searchQuery: '',
-	sortField: 'updated_at',
-	sortDirection: 'desc',
-	pendingSave: null,
-	statusMessage: '',
-	editingName: null
+	pendingSave: null
 };
 
-const state = writable<ProjectsState>(initialState);
+const state = writable<ProjectsDataState>(initialState);
 
 function sanitizeProjectName(name: string): string {
 	return name.replace(/[<>:"/\\|?*]/g, '_').trim();
@@ -70,52 +83,18 @@ function compareProjects(a: ProjectInfo, b: ProjectInfo, field: SortField, direc
 	return direction === 'desc' ? -result : result;
 }
 
-export const filteredProjects = derived(state, ($state) => {
+export const filteredProjects = derived([state, projectsUIState], ([$state, $ui]) => {
 	let filtered = $state.projects;
 
-	if ($state.searchQuery) {
-		const query = $state.searchQuery.toLowerCase();
+	if ($ui.searchQuery) {
+		const query = $ui.searchQuery.toLowerCase();
 		filtered = filtered.filter((p) => p.name.toLowerCase().includes(query));
 	}
 
-	return filtered.sort((a, b) => compareProjects(a, b, $state.sortField, $state.sortDirection));
+	return filtered.sort((a, b) => compareProjects(a, b, $ui.sortField, $ui.sortDirection));
 });
 
-export const statusMessage = derived(state, ($state) => $state.statusMessage);
-export const searchQuery = derived(state, ($state) => $state.searchQuery);
-export const sortField = derived(state, ($state) => $state.sortField);
-export const sortDirection = derived(state, ($state) => $state.sortDirection);
 export const pendingSave = derived(state, ($state) => $state.pendingSave);
-export const editingName = derived(state, ($state) => $state.editingName);
-
-export function setSearchQuery(query: string): void {
-	state.update((s) => ({ ...s, searchQuery: query }));
-}
-
-export function setSort(field: SortField): void {
-	state.update((s) => {
-		if (s.sortField === field) {
-			return { ...s, sortDirection: s.sortDirection === 'asc' ? 'desc' : 'asc' };
-		}
-		return { ...s, sortField: field, sortDirection: 'desc' };
-	});
-}
-
-export function setStatusMessage(message: string): void {
-	state.update((s) => ({ ...s, statusMessage: message }));
-}
-
-export function clearStatusMessage(): void {
-	state.update((s) => ({ ...s, statusMessage: '' }));
-}
-
-export function startEditingName(name: string): void {
-	state.update((s) => ({ ...s, editingName: name }));
-}
-
-export function stopEditingName(): void {
-	state.update((s) => ({ ...s, editingName: null }));
-}
 
 export async function refreshProjects(): Promise<void> {
 	try {
@@ -138,7 +117,8 @@ export async function initiateSave(name: string): Promise<void> {
 		return;
 	}
 
-	state.update((s) => ({ ...s, pendingSave: sanitized, statusMessage: 'Requesting snapshot...' }));
+	state.update((s) => ({ ...s, pendingSave: sanitized }));
+	setStatusMessage('Requesting snapshot...');
 	await getSnapshot();
 }
 
@@ -248,17 +228,16 @@ export function projectExists(name: string): boolean {
 	return $state.projects.some((p) => p.name === sanitized);
 }
 
-let snapshotUnlisten: UnlistenFn | null = null;
+const listeners = new ListenerGroup();
 
 export async function initializeProjectsStore(): Promise<void> {
-	snapshotUnlisten = await listen<Snapshot>(SERVER_EVENTS.SNAPSHOT, (event) => {
-		completeSave(event.payload);
-	});
+	await listeners.add(() =>
+		listen<Snapshot>(SERVER_EVENTS.SNAPSHOT, (event) => {
+			completeSave(event.payload);
+		})
+	);
 }
 
 export function cleanupProjectsStore(): void {
-	if (snapshotUnlisten) {
-		snapshotUnlisten();
-		snapshotUnlisten = null;
-	}
+	listeners.cleanup();
 }

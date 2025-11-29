@@ -1,7 +1,8 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { SERVER_EVENTS } from '$lib/events';
 import type { CompilationState, CompilationUpdatePayload, RemoveFramePayload } from '$lib/types/protocol';
+import { ListenerGroup } from './helpers';
 
 // Track latest scriptId per frame position
 interface FrameCompilation {
@@ -53,11 +54,11 @@ export const failedCompilations: Readable<Array<{
 	return failed;
 });
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 export async function initializeCompilationStore(): Promise<void> {
-	unlistenFunctions.push(
-		await listen<CompilationUpdatePayload>(SERVER_EVENTS.COMPILATION_UPDATE, (event) => {
+	await listeners.add(() =>
+		listen<CompilationUpdatePayload>(SERVER_EVENTS.COMPILATION_UPDATE, (event) => {
 			const { lineId, frameId, scriptId, state } = event.payload;
 			compilationStates.update(($states) => {
 				const key = makeKey(lineId, frameId);
@@ -69,8 +70,8 @@ export async function initializeCompilationStore(): Promise<void> {
 	);
 
 	// Clean up compilation state when frames are removed
-	unlistenFunctions.push(
-		await listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
+	await listeners.add(() =>
+		listen<RemoveFramePayload>(SERVER_EVENTS.REMOVE_FRAME, (event) => {
 			const { lineId, frameId } = event.payload;
 			compilationStates.update(($states) => {
 				const newStates = new Map<string, FrameCompilation>();
@@ -94,8 +95,8 @@ export async function initializeCompilationStore(): Promise<void> {
 	);
 
 	// Clean up compilation state when lines are removed
-	unlistenFunctions.push(
-		await listen<number>(SERVER_EVENTS.REMOVE_LINE, (event) => {
+	await listeners.add(() =>
+		listen<number>(SERVER_EVENTS.REMOVE_LINE, (event) => {
 			const removedLineId = event.payload;
 			compilationStates.update(($states) => {
 				const newStates = new Map<string, FrameCompilation>();
@@ -116,9 +117,6 @@ export async function initializeCompilationStore(): Promise<void> {
 }
 
 export function cleanupCompilationStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	compilationStates.set(new Map());
 }

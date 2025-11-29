@@ -1,11 +1,10 @@
 import { writable, derived, type Writable, type Readable } from 'svelte/store';
 import { invoke } from '@tauri-apps/api/core';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { type EditorConfig } from './editorConfig';
 import { themes, type Theme } from '$lib/themes';
 import { transformThemeColors } from '$lib/utils/colorUtils';
-import { initializeConnectionListener, cleanupConnectionListener } from './connectionState';
-import { initializeLogsStore, cleanupLogsStore } from './logs';
+import { ListenerGroup } from './helpers';
 
 export interface ClientConfig {
 	ip: string;
@@ -81,7 +80,7 @@ export function setRuntimeNickname(nickname: string): void {
 	runtimeNickname.set(nickname);
 }
 
-let unlisten: UnlistenFn | null = null;
+const listeners = new ListenerGroup();
 
 export async function initializeConfig(): Promise<void> {
 	try {
@@ -97,31 +96,16 @@ export async function initializeConfig(): Promise<void> {
 		// Failed to load config - will use defaults
 	}
 
-	if (unlisten) return;
-
-	unlisten = await listen<Config>('config-update', (event) => {
-		// Update config store but NOT runtimeNickname
-		// This keeps nicknames independent across instances
-		config.set(event.payload);
-	});
+	await listeners.add(() =>
+		listen<Config>('config-update', (event) => {
+			// Update config store but NOT runtimeNickname
+			// This keeps nicknames independent across instances
+			config.set(event.payload);
+		})
+	);
 }
 
-export function cleanupConfig() {
-	if (unlisten) {
-		unlisten();
-		unlisten = null;
-	}
+export function cleanupConfig(): void {
+	listeners.cleanup();
 	nicknameInitialized = false;
-}
-
-export async function initializeApp(): Promise<void> {
-	await initializeConfig();
-	await initializeConnectionListener();
-	await initializeLogsStore();
-}
-
-export function cleanupApp(): void {
-	cleanupConfig();
-	cleanupConnectionListener();
-	cleanupLogsStore();
 }

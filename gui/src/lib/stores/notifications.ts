@@ -1,6 +1,7 @@
 import { writable, type Writable } from 'svelte/store';
-import { listen, type UnlistenFn } from '@tauri-apps/api/event';
+import { listen } from '@tauri-apps/api/event';
 import { SERVER_EVENTS } from '$lib/events';
+import { ListenerGroup } from './helpers';
 
 export type NotificationType = 'success' | 'error' | 'info';
 
@@ -47,36 +48,33 @@ export function dismissNotification(id: number): void {
 	notifications.update(($n) => removeNotification($n, id));
 }
 
-let unlistenFunctions: UnlistenFn[] = [];
+const listeners = new ListenerGroup();
 
 export async function initializeNotificationsStore(): Promise<void> {
 	// Listen for success
-	unlistenFunctions.push(
-		await listen(SERVER_EVENTS.SUCCESS, () => {
+	await listeners.add(() =>
+		listen(SERVER_EVENTS.SUCCESS, () => {
 			notify('success', 'Operation successful', 3000);
 		})
 	);
 
 	// Listen for errors
-	unlistenFunctions.push(
-		await listen<string>(SERVER_EVENTS.ERROR, (event) => {
+	await listeners.add(() =>
+		listen<string>(SERVER_EVENTS.ERROR, (event) => {
 			notify('error', `Error: ${event.payload}`, 10000);
 		})
 	);
 
 	// Listen for connection refused
-	unlistenFunctions.push(
-		await listen<string>(SERVER_EVENTS.CONNECTION_REFUSED, (event) => {
+	await listeners.add(() =>
+		listen<string>(SERVER_EVENTS.CONNECTION_REFUSED, (event) => {
 			notify('error', `Connection refused: ${event.payload}`, 10000);
 		})
 	);
 }
 
 export function cleanupNotificationsStore(): void {
-	for (const unlisten of unlistenFunctions) {
-		unlisten();
-	}
-	unlistenFunctions = [];
+	listeners.cleanup();
 	notifications.set([]);
 }
 
