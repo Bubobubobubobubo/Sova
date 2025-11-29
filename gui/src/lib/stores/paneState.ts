@@ -25,6 +25,24 @@ export interface PaneLayout {
 
 const STORAGE_KEY = 'sova-pane-layout';
 
+// Drag state for pane view swapping
+export interface DragState {
+	paneId: string;
+	viewType: ViewType | null;
+}
+
+const { subscribe: dragSubscribe, set: setDragState } = writable<DragState | null>(null);
+
+export const paneDragState = {
+	subscribe: dragSubscribe,
+	start(paneId: string, viewType: ViewType | null): void {
+		setDragState({ paneId, viewType });
+	},
+	clear(): void {
+		setDragState(null);
+	}
+};
+
 function generateId(): string {
 	return crypto.randomUUID();
 }
@@ -298,6 +316,21 @@ function createPaneStore() {
 				const parent = findParentSplit(newLayout.root, paneId);
 				if (parent) {
 					parent.direction = parent.direction === 'horizontal' ? 'vertical' : 'horizontal';
+				}
+				return newLayout;
+			});
+		},
+
+		swapViews(paneId1: string, paneId2: string): void {
+			if (paneId1 === paneId2) return;
+			update((layout) => {
+				const newLayout = structuredClone(layout);
+				const node1 = findNode(newLayout.root, paneId1);
+				const node2 = findNode(newLayout.root, paneId2);
+				if (node1?.type === 'leaf' && node2?.type === 'leaf') {
+					const temp = node1.viewType;
+					node1.viewType = node2.viewType;
+					node2.viewType = temp;
 				}
 				return newLayout;
 			});

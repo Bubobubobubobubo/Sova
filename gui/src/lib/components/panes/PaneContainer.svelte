@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { Columns2, Rows2, X, LayoutGrid, RotateCcw } from 'lucide-svelte';
-	import { paneLayout, type ViewType } from '$lib/stores/paneState';
+	import { paneLayout, paneDragState, type ViewType } from '$lib/stores/paneState';
 	import ViewSelector from './ViewSelector.svelte';
 	import ConfigEditor from '../ConfigEditor.svelte';
 	import Login from '../Login.svelte';
@@ -20,6 +20,11 @@
 	let { paneId, viewType, isOnlyPane }: Props = $props();
 
 	let toolbarControls: Snippet | null = $state(null);
+	let headerElement: HTMLDivElement | null = $state(null);
+	let isDropTarget = $state(false);
+
+	// Check if this pane is being dragged
+	let isDragSource = $derived($paneDragState?.paneId === paneId);
 
 	const viewTitles: Record<ViewType, string> = {
 		LOGIN: 'Login',
@@ -62,10 +67,81 @@
 	function registerToolbar(snippet: Snippet | null) {
 		toolbarControls = snippet;
 	}
+
+	function handleDragStart(event: MouseEvent) {
+		// Only start drag on left mouse button
+		if (event.button !== 0) return;
+		// Don't start drag if clicking on buttons
+		if ((event.target as HTMLElement).closest('button')) return;
+
+		paneDragState.start(paneId, viewType);
+
+		window.addEventListener('mousemove', handleDragMove);
+		window.addEventListener('mouseup', handleDragEnd);
+	}
+
+	function handleDragMove(event: MouseEvent) {
+		// Dispatch custom event with mouse position for other panes to check
+		window.dispatchEvent(
+			new CustomEvent('pane-drag-move', {
+				detail: { x: event.clientX, y: event.clientY }
+			})
+		);
+	}
+
+	function handleDragEnd(event: MouseEvent) {
+		window.removeEventListener('mousemove', handleDragMove);
+		window.removeEventListener('mouseup', handleDragEnd);
+
+		// Find which pane header we're over
+		const dropTarget = document.elementFromPoint(event.clientX, event.clientY)?.closest('[data-pane-id]') as HTMLElement | null;
+		const targetPaneId = dropTarget?.dataset.paneId;
+
+		if (targetPaneId && targetPaneId !== paneId && $paneDragState) {
+			paneLayout.swapViews($paneDragState.paneId, targetPaneId);
+		}
+
+		paneDragState.clear();
+		window.dispatchEvent(new CustomEvent('pane-drag-end'));
+	}
+
+	function handlePaneDragMove(event: CustomEvent<{ x: number; y: number }>) {
+		if (!$paneDragState || $paneDragState.paneId === paneId || !headerElement) {
+			isDropTarget = false;
+			return;
+		}
+
+		const rect = headerElement.getBoundingClientRect();
+		const { x, y } = event.detail;
+		isDropTarget = x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+	}
+
+	function handlePaneDragEnd() {
+		isDropTarget = false;
+	}
+
+	$effect(() => {
+		window.addEventListener('pane-drag-move', handlePaneDragMove as EventListener);
+		window.addEventListener('pane-drag-end', handlePaneDragEnd);
+
+		return () => {
+			window.removeEventListener('pane-drag-move', handlePaneDragMove as EventListener);
+			window.removeEventListener('pane-drag-end', handlePaneDragEnd);
+		};
+	});
 </script>
 
 <div class="pane-container">
-	<div class="pane-header">
+	<div
+		class="pane-header"
+		class:drag-source={isDragSource}
+		class:drop-target={isDropTarget}
+		bind:this={headerElement}
+		data-pane-id={paneId}
+		onmousedown={handleDragStart}
+		role="button"
+		tabindex="0"
+	>
 		<span class="pane-title">
 			{viewType ? viewTitles[viewType] : 'Select View'}
 		</span>
@@ -137,6 +213,21 @@
 		background-color: var(--colors-surface);
 		border-bottom: 1px solid var(--colors-border);
 		flex-shrink: 0;
+		cursor: grab;
+		user-select: none;
+	}
+
+	.pane-header:active {
+		cursor: grabbing;
+	}
+
+	.pane-header.drag-source {
+		opacity: 0.5;
+	}
+
+	.pane-header.drop-target {
+		background-color: var(--colors-accent);
+		border-bottom-color: var(--colors-accent);
 	}
 
 	.pane-title {
