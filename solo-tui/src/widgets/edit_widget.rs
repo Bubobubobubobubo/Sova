@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{buffer::Buffer, layout::{Constraint, Layout, Rect}, style::{Style, Stylize}, widgets::{StatefulWidget, Widget}};
 use sova_core::{scene::script::Script, schedule::{ActionTiming, SchedulerMessage}};
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, TextArea};
 
 use crate::{app::AppState, event::AppEvent, popup::PopupValue};
 
@@ -85,17 +85,20 @@ impl EditWidget {
                     })));
             }
             KeyCode::Char('w') if event.modifiers == KeyModifiers::CONTROL => {
-                if self.text_area.is_selecting() {
-                    self.text_area.cancel_selection();
-                } else {
-                    self.text_area.start_selection();
-                }
+                self.text_area.start_selection();
+                self.text_area.move_cursor(CursorMove::WordForward);
             }
             KeyCode::Char('c') if event.modifiers == KeyModifiers::CONTROL => {
                 self.text_area.copy();
+                state.events.send(
+                    AppEvent::Positive("Text yanked !".to_owned())
+                );
             }
             KeyCode::Char('x') if event.modifiers == KeyModifiers::CONTROL => {
                 self.text_area.cut();
+                state.events.send(
+                    AppEvent::Positive("Text yanked !".to_owned())
+                );
             }
             KeyCode::Char('v') if event.modifiers == KeyModifiers::CONTROL => {
                 self.text_area.paste();
