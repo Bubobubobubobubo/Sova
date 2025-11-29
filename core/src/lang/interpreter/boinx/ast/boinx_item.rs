@@ -339,7 +339,7 @@ impl From<BoinxItem> for VariableValue {
             BoinxItem::Sequence(items) | BoinxItem::Simultaneous(items) => {
                 map.insert("_len".to_owned(), (items.len() as i64).into());
                 for (i, item) in items.into_iter().enumerate() {
-                    map.insert(format!("{}", i), item.into());
+                    map.insert(i.to_string(), item.into());
                 }
                 map.into()
             }
@@ -348,13 +348,13 @@ impl From<BoinxItem> for VariableValue {
                 let BoinxCondition(i1, op, i2) = cond;
                 map.insert("0".to_owned(), (*i1).into());
                 map.insert("1".to_owned(), (*i2).into());
-                map.insert("_op".to_owned(), format!("{}", op).into());
+                map.insert("_op".to_owned(), op.to_string().into());
                 map.insert("_if".to_owned(), (*p1).into());
                 map.insert("_else".to_owned(), (*p2).into());
                 map.into()
             }
             BoinxItem::Identity(ident) => {
-                map.insert("_var".to_owned(), format!("{}", ident).into());
+                map.insert("_var".to_owned(), ident.to_string().into());
                 map.into()
             }
             BoinxItem::SubProg(prog) => {
@@ -362,7 +362,7 @@ impl From<BoinxItem> for VariableValue {
                 map.into()
             }
             BoinxItem::Arithmetic(i1, op, i2) => {
-                let op = format!("{}", op);
+                let op = op.to_string();
                 map.insert("0".to_owned(), (*i1).into());
                 map.insert("1".to_owned(), (*i2).into());
                 map.insert("_op".to_owned(), op.into());
@@ -420,7 +420,7 @@ impl From<VariableValue> for BoinxItem {
                         };
                         let mut vec: Vec<BoinxItem> = Vec::new();
                         for i in 0..len {
-                            let index = format!("{}", i);
+                            let index = i.to_string();
                             let Some(item) = map.remove(&index) else {
                                 return BoinxItem::Mute;
                             };

@@ -28,12 +28,16 @@ impl Widget for &mut App {
                     .render(content_area, buf, &mut self.state);
                 "scene"
             }
-            Page::Devices => "devices",
+            Page::Devices => {
+                self.devices_widget
+                    .render(content_area, buf, &mut self.state);
+                "devices"
+            }
             Page::Edit => {
                 self.edit_widget
                     .render(content_area, buf, &mut self.state);
                 "edit"
-            },
+            }
             Page::Configure => "configure",
             Page::Time => "time",
             Page::Logs => {

@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    event::{AppEvent, Event, EventHandler}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
+    event::{AppEvent, Event, EventHandler, TICK_FPS}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
 };
 use crossbeam_channel::{Receiver, Sender};
 use ratatui::{
@@ -39,9 +39,11 @@ pub struct App {
     pub state: AppState,
     pub scene_widget: SceneWidget,
     pub edit_widget: EditWidget,
+    pub devices_widget: DevicesWidget,
     pub log_widget: LogWidget,
     pub popup: Popup,
-    pub notification: Notification
+    pub notification: Notification,
+    frame_counter: u16
 }
 
 impl App {
@@ -71,9 +73,11 @@ impl App {
             },
             scene_widget: SceneWidget::default(),
             edit_widget: EditWidget::default(),
+            devices_widget: DevicesWidget::default(),
             log_widget: LogWidget::default(),
             popup: Popup::default(),
-            notification: Notification::new()
+            notification: Notification::new(),
+            frame_counter: 0
         }
     }
 
@@ -162,6 +166,9 @@ impl App {
                 .line_mut(line_index)
                 .remove_frame(frame_index),
             SovaNotification::CompilationUpdated(line_index, frame_index, _, state) => {
+                if state.is_err() {
+                    self.state.events.send(AppEvent::Negative(state.to_string()));
+                }
                 let frame = self
                     .state
                     .scene_image
@@ -237,6 +244,9 @@ impl App {
                 Page::Edit => self
                     .edit_widget
                     .process_event(&mut self.state, key_event),
+                Page::Devices => self
+                    .devices_widget
+                    .process_event(&mut self.state, key_event),
                 Page::Logs => self
                     .log_widget
                     .process_event(key_event),
@@ -252,6 +262,10 @@ impl App {
     /// needs to be updated at a fixed frame rate. E.g. polling a server, updating an animation.
     pub fn tick(&mut self) {
         self.state.clock.capture_app_state();
+        if self.frame_counter == 0 {
+            self.state.devices = self.state.device_map.device_list();
+        }
+        self.frame_counter = (self.frame_counter + 1) % (TICK_FPS as u16);
     }
 
     /// Set running to false to quit the application.

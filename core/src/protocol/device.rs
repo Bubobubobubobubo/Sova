@@ -32,11 +32,32 @@ pub enum DeviceKind {
     Other,
 }
 
+impl Display for DeviceKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeviceKind::Midi => write!(f, "Midi"),
+            DeviceKind::Osc => write!(f, "Osc"),
+            DeviceKind::Log => write!(f, "Log"),
+            DeviceKind::AudioEngine => write!(f, "AudioEngine"),
+            DeviceKind::Other => write!(f, "Other"),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]
 pub enum DeviceDirection {
     #[default]
     Output,
     Input
+}
+
+impl Display for DeviceDirection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            DeviceDirection::Output => write!(f, "Output"),
+            DeviceDirection::Input => write!(f, "Input"),
+        }
+    }
 }
 
 /// Represents the different types of devices the system can interact with.
@@ -234,8 +255,21 @@ impl ProtocolDevice {
             ProtocolDevice::MIDIOutDevice(midi_out) => midi_out.name.clone(),
             ProtocolDevice::OSCOutDevice(osc_out) 
             | ProtocolDevice::DirtOutDevice(osc_out)
-            | ProtocolDevice::DoughOutDevice(osc_out) => osc_out.name.clone(),
+            | ProtocolDevice::DoughOutDevice(osc_out) => osc_out.address.to_string(),
             ProtocolDevice::AudioEngine { .. } => "Internal".to_string(),
+        }
+    }
+
+    pub fn kind(&self) -> DeviceKind {
+        match self {
+            ProtocolDevice::Log => DeviceKind::Log,
+            ProtocolDevice::MIDIInDevice(_) 
+            | ProtocolDevice::MIDIOutDevice(_) => DeviceKind::Midi,
+            ProtocolDevice::OSCOutDevice(_) 
+            | ProtocolDevice::OSCInDevice
+            | ProtocolDevice::DirtOutDevice(_)
+            | ProtocolDevice::DoughOutDevice(_) => DeviceKind::Osc,
+            ProtocolDevice::AudioEngine { .. } => DeviceKind::AudioEngine,
         }
     }
 

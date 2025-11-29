@@ -159,7 +159,7 @@ impl From<VariableValue> for BoinxProg {
         };
         let mut prog: Vec<BoinxStatement> = Vec::new();
         for i in 0..len {
-            let index = format!("{}", i);
+            let index = i.to_string();
             let Some(item) = map.remove(&index) else {
                 return Self::default();
             };
@@ -174,7 +174,7 @@ impl From<BoinxProg> for VariableValue {
         let mut map: HashMap<String, VariableValue> = HashMap::new();
         map.insert("_len".to_owned(), (value.0.len() as i64).into());
         for (i, item) in value.0.into_iter().enumerate() {
-            map.insert(format!("{}", i), item.into());
+            map.insert(i.to_string(), item.into());
         }
         map.into()
     }

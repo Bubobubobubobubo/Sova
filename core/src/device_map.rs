@@ -400,7 +400,6 @@ impl DeviceMap {
     /// and secondarily by name (alphabetical for unassigned devices).
     /// The internal Log device is excluded from this list.
     pub fn device_list(&self) -> Vec<DeviceInfo> {
-        log_println!("[~] Generating device list (excluding implicit log)...");
         let mut discovered_devices_map: HashMap<String, DeviceInfo> = HashMap::new();
         let connected_map = self.output_connections.lock().unwrap(); // Lock output connections once
 
@@ -410,7 +409,7 @@ impl DeviceMap {
                                   direction: DeviceDirection,
                                   device_ref_opt: Option<&ProtocolDevice>|
          -> DeviceInfo {
-            let assigned_slot_id = self.get_slot_for_name(&name).unwrap_or(0);
+            let assigned_slot_id = self.get_slot_for_name(&name);
 
             // Determine connection status based on presence in connected_map for outputs
             // For system ports discovered but not explicitly connected via Sova, this might show false.
@@ -423,7 +422,7 @@ impl DeviceMap {
             };
 
             DeviceInfo {
-                slot_id: Some(assigned_slot_id),
+                slot_id: assigned_slot_id,
                 name,
                 kind,
                 direction,
@@ -470,17 +469,13 @@ impl DeviceMap {
         // This ensures `is_connected` is true and OSC address is included for these.
         for (name, device_arc) in connected_map.iter() {
             // Determine kind and get device reference
-            let (kind, device_ref) = match &**device_arc {
-                ProtocolDevice::MIDIOutDevice { .. } => (DeviceKind::Midi, Some(&**device_arc)),
-                ProtocolDevice::OSCOutDevice { .. } => (DeviceKind::Osc, Some(&**device_arc)),
-                _ => (DeviceKind::Other, None), // Skip Log, In, etc.
-            };
+            let kind = device_arc.kind();
 
             if kind == DeviceKind::Midi || kind == DeviceKind::Osc {
                 // Insert or update the entry using create_device_info with the device reference
                 discovered_devices_map.insert(
                     name.clone(),
-                    create_device_info(name.clone(), kind, DeviceDirection::Output, device_ref),
+                    create_device_info(name.clone(), kind, DeviceDirection::Output, Some(&device_arc)),
                 );
             }
         }
@@ -498,7 +493,6 @@ impl DeviceMap {
             }
         });
 
-        log_println!("[~] Device list generated. Count: {}", final_list.len());
         final_list
     }
 

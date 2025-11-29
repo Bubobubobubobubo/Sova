@@ -9,7 +9,7 @@ use std::{
 
 use crate::{app::AppState, popup::PopupValue};
 
-const TICK_FPS: f64 = 30.0;
+pub const TICK_FPS: f64 = 30.0;
 
 pub enum Event {
     Tick,

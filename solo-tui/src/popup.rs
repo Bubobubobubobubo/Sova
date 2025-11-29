@@ -71,8 +71,8 @@ impl Popup {
     fn update_textarea(text_area: &mut TextArea, value: &PopupValue) {
         match &value {
             PopupValue::Text(txt) => *text_area = vec![txt.clone()].into(),
-            PopupValue::Float(f) => *text_area = vec![format!("{f}")].into(),
-            PopupValue::Int(i) => *text_area = vec![format!("{i}")].into(),
+            PopupValue::Float(f) => *text_area = vec![f.to_string()].into(),
+            PopupValue::Int(i) => *text_area = vec![i.to_string()].into(),
             _ => ()
         }
         text_area.set_block(Block::bordered()
