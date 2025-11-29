@@ -219,6 +219,29 @@ export async function openFolder(): Promise<void> {
 	}
 }
 
+export async function importProject(timing: ActionTiming): Promise<void> {
+	try {
+		setStatusMessage('Select a snapshot to import...');
+		const snapshot = await projectsApi.importProject();
+
+		if (!snapshot) {
+			clearStatusMessage();
+			return;
+		}
+
+		setStatusMessage('Importing...');
+		await setTempo(snapshot.tempo, timing);
+		await setScene(snapshot.scene, timing);
+
+		clearAllLocalEdits();
+		window.dispatchEvent(new CustomEvent('project:loaded'));
+
+		setStatusMessage('Imported snapshot');
+	} catch (e) {
+		setStatusMessage(`Failed to import: ${e}`);
+	}
+}
+
 export function projectExists(name: string): boolean {
 	const sanitized = sanitizeProjectName(name);
 	const $state = get(state);

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { Search, FolderOpen, RefreshCw, Play, Clock, Trash2, Save } from 'lucide-svelte';
+  import { Search, FolderOpen, RefreshCw, Play, Clock, Trash2, Save, Import } from 'lucide-svelte';
   import { isConnected } from '$lib/stores/connectionState';
   import {
     filteredProjects,
@@ -21,8 +21,10 @@
     startEditingName,
     stopEditingName,
     openFolder,
-    projectExists
+    projectExists,
+    importProject
   } from '$lib/stores/projects';
+  import { ActionTiming } from '$lib/api/client';
   import type { SortField } from '$lib/stores/projects';
   import type { ProjectInfo } from '$lib/types/projects';
 
@@ -134,6 +136,9 @@
         />
       </div>
       <div class="toolbar-buttons">
+        <button class="icon-button" onclick={() => importProject(ActionTiming.immediate())} title="Import" disabled={!$isConnected}>
+          <Import size={14} />
+        </button>
         <button class="icon-button" onclick={() => refreshProjects()} title="Refresh">
           <RefreshCw size={14} />
         </button>
@@ -507,17 +512,6 @@
     cursor: not-allowed;
   }
 
-  .action-button.load-now {
-    color: var(--ansi-green, #4ade80);
-  }
-
-  .action-button.load-end {
-    color: var(--ansi-blue, #60a5fa);
-  }
-
-  .action-button.delete {
-    color: var(--colors-danger, #f87171);
-  }
 
   .empty-state {
     padding: 32px;

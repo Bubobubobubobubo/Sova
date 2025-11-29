@@ -192,10 +192,18 @@ async fn open_projects_folder() -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+async fn import_project(path: String) -> Result<sova_core::server::Snapshot, String> {
+    disk::load_project_from_path(std::path::Path::new(&path))
+        .await
+        .map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let server_manager = Arc::new(Mutex::new(
                 ServerManager::new(app.handle().clone())
@@ -264,7 +272,8 @@ pub fn run() {
             load_project,
             delete_project,
             rename_project,
-            open_projects_folder
+            open_projects_folder,
+            import_project
         ])
         .build(tauri::generate_context!())
         .expect("error while running tauri application")

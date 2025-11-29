@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { onDestroy } from 'svelte';
-	import { Check, AlertCircle, Loader2, Play, RotateCcw, X } from 'lucide-svelte';
+	import { Check, AlertCircle, Loader2, Send, RotateCcw, X } from 'lucide-svelte';
 	import Select from '$lib/components/Select.svelte';
 	import { EditorView } from '@codemirror/view';
 	import { editorConfig } from '$lib/stores/config';
@@ -209,9 +209,8 @@
 
 <div class="editor-pane" onkeydown={handleKeydown}>
 	{#if frame && frameKey}
-		<div class="editor-header" class:dirty={isDirty}>
-			<div class="header-left">
-				<span class="frame-label">Line {(lineIdx ?? 0) + 1} Frame {(frameIdx ?? 0) + 1}</span>
+		<div class="editor-header">
+			<div class="header-content">
 				<Select
 					options={$availableLanguages}
 					value={selectedLang}
@@ -255,60 +254,45 @@
 					/>
 				</label>
 
-				<button
-					class="enabled-toggle"
-					class:disabled={!localEnabled}
-					onclick={() => localEnabled = !localEnabled}
-					title={localEnabled ? 'Enabled (click to disable)' : 'Disabled (click to enable)'}
-				>
-					{localEnabled ? '●' : '○'}
-				</button>
-			</div>
+				<label class="enabled-field">
+					<input
+						type="checkbox"
+						bind:checked={localEnabled}
+					/>
+					<span>Enabled</span>
+				</label>
 
-			<div class="header-right">
 				{#if isDirty}
 					<button
-						class="discard-button"
+						class="action-btn"
 						onclick={discardChanges}
 						title="Discard changes"
 					>
 						<RotateCcw size={12} />
+						Fetch
 					</button>
 				{/if}
 
-				{#if compilationStatus === 'compiling' || isEvaluating}
-					<span class="status compiling" title="Compiling...">
-						<Loader2 size={12} class="spin" />
-					</span>
-				{:else if compilationStatus === 'compiled'}
-					<span class="status compiled" title="Compiled">
-						<Check size={12} />
-					</span>
-				{:else if compilationStatus === 'error'}
-					<span class="status error" title={compilationError || 'Compilation error'}>
-						<AlertCircle size={12} />
-					</span>
-				{/if}
-
 				<button
-					class="eval-button"
+					class="action-btn"
 					onclick={evaluateScript}
 					disabled={isEvaluating}
 					title="Evaluate (Cmd+Enter)"
 				>
-					<Play size={12} />
+					<Send size={12} />
+					Evaluate
 				</button>
-
-				{#if onClose}
-					<button
-						class="close-button"
-						onclick={onClose}
-						title="Close editor"
-					>
-						<X size={12} />
-					</button>
-				{/if}
 			</div>
+
+			{#if onClose}
+				<button
+					class="close-button"
+					onclick={onClose}
+					title="Close editor"
+				>
+					<X size={12} />
+				</button>
+			{/if}
 		</div>
 
 		{:else}
@@ -347,39 +331,22 @@
 	}
 
 	.editor-header {
-		height: 28px;
 		background-color: var(--colors-surface);
 		border-bottom: 1px solid var(--colors-border);
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0 8px;
+		padding: 4px 8px;
+		gap: 8px;
 		font-size: 10px;
 		color: var(--colors-text-secondary);
-		transition: background-color 0.2s;
 	}
 
-	.editor-header.dirty {
-		background-color: color-mix(in srgb, var(--colors-accent) 15%, var(--colors-surface));
-	}
-
-	.header-left,
-	.header-right {
+	.header-content {
+		flex: 1;
 		display: flex;
 		align-items: center;
+		flex-wrap: wrap;
 		gap: 6px;
-	}
-
-	.header-left {
-		flex: 1;
-	}
-
-	.header-right {
-		justify-content: flex-end;
-	}
-
-	.frame-label {
-		color: var(--colors-text-secondary);
 	}
 
 	.prop-field {
@@ -410,46 +377,18 @@
 		outline: none;
 	}
 
-	.enabled-toggle {
-		background: none;
-		border: 1px solid var(--colors-border);
-		color: var(--colors-success, #4caf50);
-		padding: 2px 6px;
-		cursor: pointer;
-		font-size: 10px;
-	}
-
-	.enabled-toggle.disabled {
-		color: var(--colors-text-secondary);
-		opacity: 0.5;
-	}
-
-	.enabled-toggle:hover {
-		border-color: var(--colors-accent);
-	}
-
-	.status {
+	.enabled-field {
 		display: flex;
 		align-items: center;
-		justify-content: center;
-		width: 18px;
-		height: 18px;
-	}
-
-	.status.compiling {
+		gap: 4px;
+		font-size: 10px;
 		color: var(--colors-text-secondary);
+		cursor: pointer;
 	}
 
-	.status.compiled {
-		color: var(--colors-success, #4caf50);
-	}
-
-	.status.error {
-		color: var(--colors-error, #f44336);
-	}
-
-	:global(.status .spin) {
-		animation: spin 1s linear infinite;
+	.enabled-field input[type="checkbox"] {
+		margin: 0;
+		cursor: pointer;
 	}
 
 	@keyframes spin {
@@ -461,8 +400,7 @@
 		}
 	}
 
-	.eval-button,
-	.discard-button,
+	.action-btn,
 	.close-button {
 		background: none;
 		border: 1px solid var(--colors-border);
@@ -471,25 +409,26 @@
 		cursor: pointer;
 		display: flex;
 		align-items: center;
-		justify-content: center;
+		gap: 4px;
+		font-size: 10px;
+		font-family: monospace;
 	}
 
-	.eval-button:hover:not(:disabled),
-	.discard-button:hover,
+	.action-btn:hover:not(:disabled),
 	.close-button:hover {
 		border-color: var(--colors-accent);
 		color: var(--colors-accent);
 	}
 
-	.eval-button:disabled {
+	.action-btn:disabled {
 		opacity: 0.5;
 		cursor: not-allowed;
 	}
 
 	.status-bar {
-		height: 22px;
+		height: 28px;
 		padding: 0 8px;
-		font-size: 10px;
+		font-size: 12px;
 		font-family: monospace;
 		display: flex;
 		align-items: center;
