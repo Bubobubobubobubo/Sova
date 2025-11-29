@@ -650,29 +650,29 @@ impl SovaCoreServer {
             select! {
                 // Accept new TCP connections
                 Ok((socket, client_addr)) = listener.accept() => {
-                     log_println!("[🔌] New connection from {}", client_addr);
-                     let client_state = self.state.clone(); // Clone state for the new task
-                     // Spawn a task to handle this client independently
-                     tokio::spawn(async move {
-                         match process_client(socket, client_state).await {
-                             Ok(client_name) => {
-                                // Log graceful disconnection
-                                log_println!("[🔌] Client '{}' disconnected.", client_name);
-                             },
-                             Err(e) => {
-                                 // Log errors during client processing
-                                 log_eprintln!("[!] Error handling client {}: {}", client_addr, e);
-                             }
-                         }
-                     });
-                 }
-                 // Handle Ctrl+C for graceful shutdown
-                 _ = signal::ctrl_c() => {
+                    log_println!("[🔌] New connection from {}", client_addr);
+                    let client_state = self.state.clone(); // Clone state for the new task
+                    // Spawn a task to handle this client independently
+                    tokio::spawn(async move {
+                        match process_client(socket, client_state).await {
+                            Ok(client_name) => {
+                            // Log graceful disconnection
+                            log_println!("[🔌] Client '{}' disconnected.", client_name);
+                            },
+                            Err(e) => {
+                                // Log errors during client processing
+                                log_eprintln!("[!] Error handling client {}: {}", client_addr, e);
+                            }
+                        }
+                    });
+                }
+                // Handle Ctrl+C for graceful shutdown
+                _ = signal::ctrl_c() => {
                     log_println!("\n[!] Ctrl+C received, shutting down server...");
                     break; // Exit the main loop
-                 }
-                 // Avoid 100% CPU usage if no events occur
-                 _ = tokio::time::sleep(Duration::from_millis(10)) => {}
+                }
+                // Avoid 100% CPU usage if no events occur
+                _ = tokio::time::sleep(Duration::from_millis(10)) => {}
             }
         }
 

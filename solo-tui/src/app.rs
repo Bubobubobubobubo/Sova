@@ -31,6 +31,10 @@ impl AppState {
     pub fn selected_frame(&self) -> Option<&Frame> {
         self.scene_image.get_frame(self.selected.0, self.selected.1)
     }
+
+    pub fn refresh_devices(&mut self) {
+        self.devices = self.device_map.device_list();
+    }
 }
 
 /// Application.
@@ -263,7 +267,7 @@ impl App {
     pub fn tick(&mut self) {
         self.state.clock.capture_app_state();
         if self.frame_counter == 0 {
-            self.state.devices = self.state.device_map.device_list();
+            self.state.refresh_devices();
         }
         self.frame_counter = (self.frame_counter + 1) % (TICK_FPS as u16);
     }
