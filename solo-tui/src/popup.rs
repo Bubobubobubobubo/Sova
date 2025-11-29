@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use crossterm::event::{KeyCode, KeyEvent};
-use ratatui::{buffer::Buffer, layout::{Constraint, Flex, Layout, Rect}, style::{Color, Style, Stylize}, widgets::{Block, BorderType, Clear, Paragraph, Widget, Wrap}};
+use ratatui::{buffer::Buffer, layout::{Constraint, Flex, Layout, Rect}, style::{Color, Style, Stylize}, widgets::{Block, BorderType, Clear, HighlightSpacing, List, ListItem, ListState, Paragraph, StatefulWidget, Widget, Wrap}};
 use tui_textarea::{CursorMove, TextArea};
 
 use crate::app::AppState;
@@ -16,7 +16,8 @@ pub struct Popup {
     pub content: String,
     pub value: PopupValue,
     callback: Option<Box<dyn FnOnce(&mut AppState, PopupValue)>>,
-    text_area: TextArea<'static>
+    text_area: TextArea<'static>,
+    list_state: ListState
 }
 
 impl Popup {
@@ -91,10 +92,15 @@ impl Popup {
                     KeyCode::Right => *b = false,
                     _ => ()
                 }
-                PopupValue::Choice(i, v) => match event.code {
-                    KeyCode::Left | KeyCode::Up => *i = (*i - 1 + v.len()) % v.len(),
-                    KeyCode::Right | KeyCode::Down => *i = (*i + 1) % v.len(),
-                    _ => ()
+                PopupValue::Choice(i, _) => { 
+                    match event.code {
+                        KeyCode::Up => self.list_state.select_previous(),
+                        KeyCode::Down => self.list_state.select_next(),
+                        KeyCode::Left => self.list_state.select_first(),
+                        KeyCode::Right => self.list_state.select_last(),
+                        _ => ()
+                    }
+                    *i = self.list_state.selected().unwrap_or_default();
                 }
                 PopupValue::Text(txt) => {
                     self.text_area.input(event);
@@ -147,7 +153,7 @@ impl Popup {
     fn popup_area(area: Rect, percent_x: u16, len: usize, additional_lines: u16) -> Rect {
         let len = 125 * (len as u16) / 100;
         let width = percent_x * area.width / 100;
-        let lines = 3 + 3 + len / width + u16::from(len % width > 0) + additional_lines;
+        let lines = 3 + len / width + u16::from(len % width > 0) + additional_lines;
         let horizontal = Layout::horizontal([Constraint::Length(width)]).flex(Flex::Center);
         let vertical = Layout::vertical([Constraint::Length(lines)]).flex(Flex::Center);
         let [area] = horizontal.areas(area);
@@ -157,7 +163,7 @@ impl Popup {
 
 }
 
-impl Widget for &Popup {
+impl Widget for &mut Popup {
 
     fn render(self, area: Rect, buf: &mut Buffer) {
         if !self.showing {
@@ -165,14 +171,17 @@ impl Widget for &Popup {
         }
         let button_block = Block::bordered().border_type(BorderType::Rounded);
         let selected_style = Style::default().bg(Color::White).fg(Color::Black).bold();
-        let additional_lines = if self.value.is_choice() { 10 } else { 0 };
+        let additional_lines = match &self.value {
+            PopupValue::Choice(_, v) => std::cmp::min(10, v.len() as u16),
+            _ => 3
+        };
         let area = Popup::popup_area(area, 30, self.content.len(), additional_lines);
         Clear.render(area, buf);
         let block = Block::bordered()
             .border_type(BorderType::Rounded)
             .title(self.title.as_str())
             .on_black();
-        let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(3)]);
+        let layout = Layout::vertical([Constraint::Min(0), Constraint::Length(additional_lines)]);
         let [text_area, input_area] = layout.areas(block.inner(area));
         block.render(area, buf);
         Paragraph::new(self.content.as_str())
@@ -202,14 +211,19 @@ impl Widget for &Popup {
                     .centered()
                     .block(button_block)
                     .render(no_area, buf)
-            },
+            }
             PopupValue::Text(_) 
                 | PopupValue::Float(_)
                 | PopupValue::Int(_) => {
                 self.text_area.render(input_area, buf);
-            },
-            PopupValue::Choice(i, v) => {
-                todo!()
+            }
+            PopupValue::Choice(_, v) => {
+                let items : Vec<ListItem> = v.iter().map(|s| ListItem::from(s.as_str())).collect();
+                let list = List::new(items)
+                    .highlight_style(selected_style)
+                    .highlight_symbol(">")
+                    .highlight_spacing(HighlightSpacing::Always);
+                StatefulWidget::render(list, input_area, buf, &mut self.list_state);
             }
         }
     }

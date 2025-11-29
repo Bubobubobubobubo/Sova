@@ -58,7 +58,7 @@ fn main() -> color_eyre::Result<()> {
     let _ = devices.assign_slot(1, DEFAULT_MIDI_OUT);
 
     let (world_handle, sched_handle, sched_iface, sched_updates) =
-        init::start_scheduler_and_world(clock_server.clone(), devices.clone(), languages);
+        init::start_scheduler_and_world(clock_server.clone(), devices.clone(), languages.clone());
 
     let initial_scene = Scene::new(vec![Line::default()]);
     let _ = sched_iface.send(SchedulerMessage::SetScene(
@@ -71,7 +71,7 @@ fn main() -> color_eyre::Result<()> {
     let result = App::new(
         sched_iface.clone(), 
         sched_updates, 
-        log_rx, clock_server, devices.clone()
+        log_rx, clock_server, devices.clone(), languages.clone()
     ).run(terminal);
     ratatui::restore();
 

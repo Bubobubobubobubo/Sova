@@ -423,7 +423,7 @@ impl DeviceMap {
             };
 
             DeviceInfo {
-                slot_id: assigned_slot_id,
+                slot_id: Some(assigned_slot_id),
                 name,
                 kind,
                 direction,
@@ -491,10 +491,10 @@ impl DeviceMap {
         // Sort: Assigned devices first (by Slot ID), then unassigned devices (alphabetically)
         final_list.sort_by(|a, b| {
             match (a.slot_id, b.slot_id) {
-                (0, 0) => a.name.cmp(&b.name),         // Both unassigned: sort by name
-                (0, _) => std::cmp::Ordering::Greater, // Unassigned goes after assigned
-                (_, 0) => std::cmp::Ordering::Less,    // Assigned goes before unassigned
-                (id_a, id_b) => id_a.cmp(&id_b),       // Both assigned: sort by slot ID
+                (None, None) => a.name.cmp(&b.name),         // Both unassigned: sort by name
+                (None, _) => std::cmp::Ordering::Greater, // Unassigned goes after assigned
+                (_, None) => std::cmp::Ordering::Less,    // Assigned goes before unassigned
+                (Some(id_a), Some(id_b)) => id_a.cmp(&id_b),       // Both assigned: sort by slot ID
             }
         });
 
