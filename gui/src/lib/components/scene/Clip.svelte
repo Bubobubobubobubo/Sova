@@ -263,7 +263,6 @@
 		flex-direction: column;
 		justify-content: space-between;
 		padding: 6px 8px;
-		user-select: none;
 		box-sizing: border-box;
 		overflow: hidden;
 	}
@@ -272,10 +271,6 @@
 		justify-content: center;
 		align-items: center;
 		padding: 4px;
-	}
-
-	.clip * {
-		user-select: none;
 	}
 
 	.clip:hover {

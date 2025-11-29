@@ -300,6 +300,7 @@
     color: var(--colors-text, #fff);
     flex: 1;
     word-break: break-word;
+    user-select: text;
   }
 
   /* Severity color coding */

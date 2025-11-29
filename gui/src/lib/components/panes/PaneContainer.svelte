@@ -214,7 +214,6 @@
 		border-bottom: 1px solid var(--colors-border);
 		flex-shrink: 0;
 		cursor: grab;
-		user-select: none;
 	}
 
 	.pane-header:active {
