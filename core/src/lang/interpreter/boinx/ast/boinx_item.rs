@@ -245,7 +245,7 @@ impl BoinxItem {
             Self::Sequence(v) | Self::Simultaneous(v) => {
                 Box::new(v.iter_mut().map(|i| i.slots()).flatten())
             }
-            Self::Duration(_) | Self::Number(_) | Self::Placeholder | Self::Str(_)
+            Self::Duration(_) | Self::Number(_) | Self::Placeholder /*| Self::Str(_)*/
                 => Box::new(iter::once(self)),
             Self::Condition(c, prog1, prog2) => {
                 Box::new(c.slots().chain(prog1.slots()).chain(prog2.slots()))
@@ -269,11 +269,11 @@ impl BoinxItem {
                 *self = BoinxItem::WithDuration(Box::new(other), TimeSpan::Frames(*f)),
             BoinxItem::Duration(d) => 
                 *self = BoinxItem::WithDuration(Box::new(other), *d),
-            BoinxItem::Str(s) => {
+            /*BoinxItem::Str(s) => {
                 let mut value_map = HashMap::new();
                 value_map.insert(s.clone(), other);
                 *self = BoinxItem::ArgMap(value_map);
-            }
+            }*/
             _ => ()
         }
     }
