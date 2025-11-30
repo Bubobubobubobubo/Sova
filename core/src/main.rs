@@ -4,19 +4,16 @@ use crate::lang::interpreter::boinx::BoinxInterpreterFactory;
 use crate::lang::interpreter::InterpreterDirectory;
 use crate::lang::LanguageCenter;
 use crate::logger::get_logger;
-use crate::protocol::audio_engine_proxy::AudioEngineProxy;
 use crate::schedule::ActionTiming;
 // TimingConfig import removed for now
 use clap::Parser;
-use crossbeam_channel::bounded;
 use device_map::DeviceMap;
 use scene::Scene;
 use scene::Line;
 use schedule::SchedulerMessage;
 use server::{SovaCoreServer, ServerState};
 use std::io::ErrorKind;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::{sync::Arc, thread};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 use lang::Transcoder;
 
