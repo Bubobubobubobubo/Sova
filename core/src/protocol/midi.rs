@@ -220,7 +220,7 @@ impl MidiOut {
         }
         #[cfg(target_os = "windows")]
         {
-            Err(MidiError(
+            Err(ProtocolError(
                 "Virtual MIDI ports are not supported on Windows.".to_string(),
             ))
         }
@@ -440,7 +440,7 @@ impl MidiIn {
         }
         #[cfg(target_os = "windows")]
         {
-            Err(MidiError(
+            Err(ProtocolError(
                 "Virtual MIDI input ports are not supported on Windows.".to_string(),
             ))
         }
