@@ -1,7 +1,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
-    event::{AppEvent, Event, EventHandler}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget}
+    event::{AppEvent, Event, EventHandler, TICK_FPS}, notification::Notification, page::Page, popup::{Popup, PopupValue}, widgets::{devices_widget::DevicesWidget, edit_widget::EditWidget, log_widget::LogWidget, scene_widget::SceneWidget, time_widget::TimeWidget}
 };
 use crossbeam_channel::{Receiver, Sender};
 use ratatui::{
@@ -9,14 +9,14 @@ use ratatui::{
     crossterm::event::{KeyCode, KeyEvent, KeyModifiers},
 };
 use sova_core::{
-    LogMessage, Scene, clock::{Clock, ClockServer}, device_map::DeviceMap, lang::variable::VariableValue, protocol::DeviceInfo, scene::Frame, schedule::{ActionTiming, SchedulerMessage, SovaNotification}
+    LogMessage, Scene, clock::{Clock, ClockServer}, device_map::DeviceMap, lang::{LanguageCenter, variable::VariableValue}, protocol::DeviceInfo, scene::Frame, schedule::{ActionTiming, SchedulerMessage, SovaNotification, playback::PlaybackState}
 };
 
 pub struct AppState {
     pub running: bool,
     pub scene_image: Scene,
     pub global_vars: HashMap<String, VariableValue>,
-    pub playing: bool,
+    pub playing: PlaybackState,
     pub positions: Vec<(usize, usize)>,
     pub clock: Clock,
     pub devices: Vec<DeviceInfo>,
@@ -24,11 +24,16 @@ pub struct AppState {
     pub selected: (usize, usize),
     pub events: EventHandler,
     pub device_map: Arc<DeviceMap>,
+    pub languages: Arc<LanguageCenter>
 }
 
 impl AppState {
     pub fn selected_frame(&self) -> Option<&Frame> {
         self.scene_image.get_frame(self.selected.0, self.selected.1)
+    }
+
+    pub fn refresh_devices(&mut self) {
+        self.devices = self.device_map.device_list();
     }
 }
 
@@ -38,9 +43,11 @@ pub struct App {
     pub state: AppState,
     pub scene_widget: SceneWidget,
     pub edit_widget: EditWidget,
+    pub devices_widget: DevicesWidget,
     pub log_widget: LogWidget,
     pub popup: Popup,
-    pub notification: Notification
+    pub notification: Notification,
+    frame_counter: u16
 }
 
 impl App {
@@ -51,6 +58,7 @@ impl App {
         log_rx: Receiver<LogMessage>,
         clock_server: Arc<ClockServer>,
         device_map: Arc<DeviceMap>,
+        languages: Arc<LanguageCenter>
     ) -> Self {
         App {
             sched_iface,
@@ -65,13 +73,15 @@ impl App {
                 page: Default::default(),
                 selected: Default::default(),
                 events: EventHandler::new(sched_update, log_rx),
-                device_map,
+                device_map, languages
             },
             scene_widget: SceneWidget::default(),
             edit_widget: EditWidget::default(),
+            devices_widget: DevicesWidget::default(),
             log_widget: LogWidget::default(),
             popup: Popup::default(),
-            notification: Notification::new()
+            notification: Notification::new(),
+            frame_counter: 0
         }
     }
 
@@ -125,7 +135,7 @@ impl App {
 
     pub fn handle_notification(&mut self, notif: SovaNotification) -> color_eyre::Result<()> {
         match notif {
-            SovaNotification::Nothing | SovaNotification::TempoChanged(_) => (),
+            SovaNotification::Tick | SovaNotification::TempoChanged(_) => (),
             SovaNotification::UpdatedScene(scene) => self.state.scene_image = scene,
             SovaNotification::UpdatedLines(items) => {
                 for (index, line) in items {
@@ -160,6 +170,9 @@ impl App {
                 .line_mut(line_index)
                 .remove_frame(frame_index),
             SovaNotification::CompilationUpdated(line_index, frame_index, _, state) => {
+                if state.is_err() {
+                    self.state.events.send(AppEvent::Negative(state.to_string()));
+                }
                 let frame = self
                     .state
                     .scene_image
@@ -167,8 +180,7 @@ impl App {
                     .frame_mut(frame_index);
                 *frame.compilation_state_mut() = state;
             }
-            SovaNotification::TransportStarted => self.state.playing = true,
-            SovaNotification::TransportStopped => self.state.playing = false,
+            SovaNotification::PlaybackStateChanged(state) => self.state.playing = state,
             SovaNotification::FramePositionChanged(positions) => self.state.positions = positions,
             SovaNotification::GlobalVariablesChanged(values) => self.state.global_vars = values,
             SovaNotification::Log(msg) => self.log(msg),
@@ -220,7 +232,7 @@ impl App {
             }
 
             KeyCode::Char(' ') if key_event.modifiers == KeyModifiers::CONTROL => {
-                let event = if self.state.playing {
+                let event = if self.state.playing.is_playing() {
                     SchedulerMessage::TransportStop(ActionTiming::Immediate)
                 } else {
                     SchedulerMessage::TransportStart(ActionTiming::Immediate)
@@ -235,6 +247,14 @@ impl App {
                 Page::Edit => self
                     .edit_widget
                     .process_event(&mut self.state, key_event),
+                Page::Devices => self
+                    .devices_widget
+                    .process_event(&mut self.state, key_event),
+                Page::Time => 
+                    TimeWidget::process_event(&mut self.state, key_event),
+                Page::Logs => self
+                    .log_widget
+                    .process_event(key_event),
                 _ => (),
             }
         }
@@ -247,6 +267,10 @@ impl App {
     /// needs to be updated at a fixed frame rate. E.g. polling a server, updating an animation.
     pub fn tick(&mut self) {
         self.state.clock.capture_app_state();
+        if self.frame_counter == 0 {
+            self.state.refresh_devices();
+        }
+        self.frame_counter = (self.frame_counter + 1) % (TICK_FPS as u16);
     }
 
     /// Set running to false to quit the application.

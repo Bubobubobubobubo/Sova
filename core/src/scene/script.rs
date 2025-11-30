@@ -3,7 +3,7 @@ use std::{collections::{BTreeMap, VecDeque}, hash::{self, DefaultHasher, Hash, H
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    clock::SyncTime, compiler::{CompilationError, CompilationState}, lang::{
+    clock::{NEVER, SyncTime}, compiler::{CompilationError, CompilationState}, lang::{
         Program, evaluation_context::PartialContext, event::ConcreteEvent, interpreter::asm_interpreter::ASMInterpreter, variable::{VariableStore, VariableValue}
     }
 };
@@ -173,26 +173,18 @@ impl ScriptExecution {
     pub fn execute_next<'a>(
         &'a mut self,
         mut partial: PartialContext<'a>
-    ) -> Option<(ConcreteEvent, SyncTime)> {
+    ) -> (Option<ConcreteEvent>, SyncTime) {
         if self.has_terminated() {
-            return None;
+            return (None, NEVER);
         }
         partial.instance_vars = Some(&mut self.instance_vars);
         partial.stack = Some(&mut self.stack);
         let Some(mut ctx) = partial.to_context() else {
-            return None;
+            return (None, NEVER);
         };
-        let (opt_ev, opt_wait) = self.interpreter.execute_next(&mut ctx);
-        if opt_ev.is_none() && opt_wait.is_none() {
-            return None;
-        }
-        let wait = opt_wait.unwrap_or(0);
-        let mut res = (ConcreteEvent::Nop, wait);
-        if let Some(ev) = opt_ev {
-            res.0 = ev;
-        };
+        let (opt_ev, wait) = self.interpreter.execute_next(&mut ctx);
         self.scheduled_time = self.scheduled_time.saturating_add(wait);
-        Some(res)
+        (opt_ev, wait)
     }
 
     #[inline]

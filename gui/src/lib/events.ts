@@ -29,8 +29,7 @@ export const SERVER_EVENTS = {
 	FRAME_POSITION: 'server:frame-position',
 
 	// Transport
-	TRANSPORT_STARTED: 'server:transport-started',
-	TRANSPORT_STOPPED: 'server:transport-stopped',
+	PLAYBACK_STATE_CHANGED: 'server:playback-state-changed',
 	CLOCK_STATE: 'server:clock-state',
 
 	// Devices

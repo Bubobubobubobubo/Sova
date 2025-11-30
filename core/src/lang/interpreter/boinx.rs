@@ -1,19 +1,19 @@
 use std::{cmp, collections::VecDeque, mem};
 
 use crate::{
-    clock::{SyncTime, TimeSpan, NEVER},
-    lang::{
+    clock::{Clock, NEVER, SyncTime, TimeSpan}, lang::{
         evaluation_context::EvaluationContext,
         event::ConcreteEvent,
-        interpreter::{Interpreter, InterpreterFactory},
-    },
-    scene::script::Script,
+        interpreter::{Interpreter, InterpreterFactory}, variable::VariableValue,
+    }, protocol::osc::OSCMessage, scene::script::Script
 };
 
 mod ast;
 mod parser;
+mod position;
 
 use ast::*;
+pub use position::*;
 
 pub use parser::parse_boinx;
 
@@ -36,7 +36,7 @@ impl BoinxLine {
             output,
             finished: false,
             position: BoinxPosition::Undefined,
-            next_date: 0,
+            next_date: start_date,
             out_buffer: VecDeque::new(),
             previous: None,
         }
@@ -45,57 +45,129 @@ impl BoinxLine {
     pub fn execute_item(
         &mut self,
         ctx: &mut EvaluationContext,
-        item: BoinxItem,
+        item: &BoinxItem,
         dur: TimeSpan,
+        device: usize,
+        channel: &VariableValue,
     ) -> Vec<ConcreteEvent> {
         if let BoinxItem::Previous = item {
-            if let Some(prev) = &self.previous {
-                return self.execute_item(ctx, prev.clone(), dur);
+            if let Some(prev) = self.previous.clone() {
+                return self.execute_item(ctx, &prev, dur, device, channel);
             }
             return Vec::new();
         };
         self.previous = Some(item.clone());
+
+        let dur = dur.as_micros(ctx.clock, ctx.frame_len);
+        
         match item {
-            BoinxItem::Stop => {
-                self.finished = true;
-                return Vec::new();
-            }
             BoinxItem::Note(n) => {
-                //vec![ConcreteEvent::MidiNote((), (), (), (), ())]
-                todo!()
+                let channel = channel.as_integer(ctx.clock, ctx.frame_len) as u64;
+                vec![ConcreteEvent::MidiNote(*n as u64, 90, channel, dur, device)]
             }
-            BoinxItem::Number(_) => {
-                todo!()
+            BoinxItem::ArgMap(map) => {
+                let mut args = Vec::new();
+                for (key, value) in map.iter() {
+                    args.push(VariableValue::Str(key.clone()));
+                    args.push(VariableValue::from(value.clone()));
+                }
+                if channel.is_str() {
+                    let addr = channel.as_str(ctx.clock, ctx.frame_len);
+                    vec![ConcreteEvent::Osc { 
+                        message: OSCMessage::new(addr, args), 
+                        device_id: device
+                    }]
+                } else {
+                    vec![ConcreteEvent::Dirt { args, device_id: device }]
+                }
+                
             }
-            BoinxItem::Str(_) => {
-                todo!()
-            }
-            BoinxItem::External(prog) => vec![ConcreteEvent::StartProgram(prog)],
             _ => Vec::new(),
         }
     }
 
+    pub fn get_targets(&self, ctx: &mut EvaluationContext, len: f64, date: SyncTime) 
+        -> (Vec<usize>, Vec<VariableValue>) 
+    {
+        let devices = if let Some(dev_item) = &self.output.device {
+            let dev_item = dev_item.evaluate(ctx);
+            let (pos, _) = dev_item.position(ctx, len, date);
+            let items = dev_item.at(ctx, pos, len);
+            items.into_iter().map(|(i,_)| match i {
+                BoinxItem::Note(n) => n as usize,
+                BoinxItem::Str(s) => ctx.device_map.get_slot_for_name(&s).unwrap_or(1),
+                _ => 1
+            }).collect()
+        } else {
+            vec![1]
+        };
+        let channels = if let Some(chan_item) = &self.output.channel {
+            let chan_item = chan_item.evaluate(ctx);
+            let (pos, _) = chan_item.position(ctx, len, date);
+            let items = chan_item.at(ctx, pos, len);
+            items.into_iter().map(|(i,_)| VariableValue::from(i)).collect()
+        } else {
+            vec![0.into()]
+        };
+        (devices, channels)
+    }
+
+    pub fn start_subprog(
+        &self, 
+        prog: BoinxProg, 
+        ctx: &mut EvaluationContext, 
+        len: TimeSpan, 
+        at: SyncTime
+    ) -> Vec<BoinxLine> {
+        let mut prog_lines = prog.start(at, len, ctx);
+        for line in prog_lines.iter_mut() {
+            if line.output.device.is_none() {
+                line.output.device = self.output.device.clone();
+            }
+            if line.output.channel.is_none() {
+                line.output.channel = self.output.channel.clone();
+            }
+        }
+        prog_lines
+    }
+
     pub fn update(&mut self, ctx: &mut EvaluationContext) -> Vec<BoinxLine> {
-        if !self.ready(ctx) {
+        if !self.ready(ctx.clock) {
             return Vec::new();
         }
         let item = self.output.compo.yield_compiled(ctx);
         let date = ctx.clock.micros();
         let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len);
+        let (devices, channels) = self.get_targets(ctx, len, date);
         let (pos, next_wait) = item.position(ctx, len, date.saturating_sub(self.start_date));
-        self.next_date += next_wait;
+        self.next_date = self.next_date.saturating_add(next_wait);
         let old_pos = mem::replace(&mut self.position, pos);
         let delta = old_pos.diff(&self.position);
         let items = item.at(ctx, delta, len);
         let mut new_lines = Vec::new();
         for (item, dur) in items {
-            if let BoinxItem::SubProg(prog) = item {
-                let mut prog_lines = prog.start(self.next_date, dur, ctx);
-                new_lines.append(&mut prog_lines);
-                continue;
-            };
-            let vec = self.execute_item(ctx, item, dur);
-            self.out_buffer.append(&mut vec.into());
+            match item {
+                BoinxItem::SubProg(prog) => {
+                    let mut prog_lines = self.start_subprog(*prog, ctx, dur, self.next_date);
+                    new_lines.append(&mut prog_lines);
+                }
+                BoinxItem::External(prog) => {
+                    self.out_buffer.push_back(ConcreteEvent::StartProgram(prog));
+                }
+                BoinxItem::Stop => {
+                    self.finished = true;
+                }
+                item => {
+                    for device in devices.iter() {
+                        for channel in channels.iter() {
+                            let vec = self.execute_item(
+                                ctx, &item, dur, *device, channel
+                            );
+                            self.out_buffer.append(&mut vec.into());
+                        }
+                    }
+                }
+            }
         }
         new_lines
     }
@@ -104,8 +176,12 @@ impl BoinxLine {
         self.out_buffer.pop_front()
     }
 
-    pub fn ready(&self, ctx: &EvaluationContext) -> bool {
-        self.next_date <= ctx.clock.micros()
+    pub fn ready(&self, clock: &Clock) -> bool {
+        self.next_date <= clock.micros()
+    }
+
+    pub fn remaining_before_ready(&self, clock: &Clock) -> SyncTime {
+        self.next_date.saturating_sub(clock.micros())
     }
 }
 
@@ -119,7 +195,7 @@ impl Interpreter for BoinxInterpreter {
     fn execute_next(
         &mut self,
         ctx: &mut EvaluationContext,
-    ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+    ) -> (Option<ConcreteEvent>, SyncTime) {
         if !self.started {
             self.execution_lines = self.prog.start(
                 ctx.clock.micros(), 
@@ -132,20 +208,22 @@ impl Interpreter for BoinxInterpreter {
         let mut event = None;
         let mut wait = NEVER;
         for line in self.execution_lines.iter_mut() {
+            let rem = line.remaining_before_ready(ctx.clock);
             let mut lines = line.update(ctx);
             new_lines.append(&mut lines);
             if event.is_none() {
                 event = line.get_event();
             }
-            wait = cmp::min(wait, line.next_date);
+            wait = cmp::min(wait, rem);
         }
+        self.execution_lines.retain(|line| line.next_date < NEVER);
         self.execution_lines.append(&mut new_lines);
-        let wait = if event.is_some() { None } else { Some(wait) };
+        let wait = if event.is_some() { 0 } else { wait };
         (event, wait)
     }
 
     fn has_terminated(&self) -> bool {
-        !self.execution_lines.is_empty()
+        self.started && self.execution_lines.is_empty()
     }
 
     fn stop(&mut self) {

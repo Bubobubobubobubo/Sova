@@ -1,13 +1,32 @@
 import { writable, derived, get, type Writable, type Readable } from 'svelte/store';
 import { listen } from '@tauri-apps/api/event';
-import type { LinkState, ClockState, FramePosition } from '$lib/types/protocol';
+import type { LinkState, ClockState, FramePosition, PlaybackState } from '$lib/types/protocol';
 import { ticker } from './ticker';
 import { getClock, getScene } from '$lib/api/client';
 import { isConnected } from './connectionState';
 import { ListenerGroup } from './helpers';
+import { SERVER_EVENTS } from '$lib/events';
 
 // Transport state
-export const isPlaying: Writable<boolean> = writable(false);
+export const playbackState: Writable<PlaybackState> = writable('Stopped');
+
+// Derived: is transport playing (for backward compatibility)
+export const isPlaying: Readable<boolean> = derived(
+	playbackState,
+	($state) => $state === 'Playing'
+);
+
+// Derived: is transport starting (waiting for beat)
+export const isStarting: Readable<boolean> = derived(
+	playbackState,
+	($state) => typeof $state === 'object' && 'Starting' in $state
+);
+
+// Derived: starting target beat (if in Starting state)
+export const startingBeat: Readable<number | null> = derived(
+	playbackState,
+	($state) => typeof $state === 'object' && 'Starting' in $state ? $state.Starting : null
+);
 
 // Clock state
 export const clockState: Writable<ClockState | null> = writable(null);
@@ -62,30 +81,23 @@ let unsubscribeTicker: (() => void) | null = null;
 let tickCount = 0;
 
 export async function initializeTransportStore(): Promise<void> {
-	// Listen for transport started
+	// Listen for playback state changes
 	await listeners.add(() =>
-		listen('server:transport-started', () => {
-			isPlaying.set(true);
-		})
-	);
-
-	// Listen for transport stopped
-	await listeners.add(() =>
-		listen('server:transport-stopped', () => {
-			isPlaying.set(false);
+		listen<PlaybackState>(SERVER_EVENTS.PLAYBACK_STATE_CHANGED, (event) => {
+			playbackState.set(event.payload);
 		})
 	);
 
 	// Listen for clock state updates
 	await listeners.add(() =>
-		listen<ClockState>('server:clock-state', (event) => {
+		listen<ClockState>(SERVER_EVENTS.CLOCK_STATE, (event) => {
 			clockState.set(event.payload);
 		})
 	);
 
 	// Listen for frame position updates
 	await listeners.add(() =>
-		listen<FramePosition[]>('server:frame-position', (event) => {
+		listen<FramePosition[]>(SERVER_EVENTS.FRAME_POSITION, (event) => {
 			framePositions.set(event.payload);
 		})
 	);
@@ -114,7 +126,7 @@ export function cleanupTransportStore(): void {
 	}
 
 	tickCount = 0;
-	isPlaying.set(false);
+	playbackState.set('Stopped');
 	clockState.set(null);
 	linkState.set(null);
 	framePositions.set([]);

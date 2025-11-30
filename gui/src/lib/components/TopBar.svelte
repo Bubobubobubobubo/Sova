@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Play, Pause, LogOut, Plus, Users, User, HelpCircle } from 'lucide-svelte';
   import { isConnected } from '$lib/stores/connectionState';
-  import { isPlaying, clockState } from '$lib/stores/transport';
+  import { isPlaying, isStarting, clockState } from '$lib/stores/transport';
   import { peerCount } from '$lib/stores/collaboration';
   import { runtimeNickname, setRuntimeNickname } from '$lib/stores/config';
   import { startTransport, stopTransport, setTempo, setName } from '$lib/api/client';
@@ -129,13 +129,13 @@
 
     {#if $isConnected}
       <div class="actions">
-        <div class="bar-progress" class:playing={$isPlaying} style="width: {barProgress}%"></div>
+        <div class="bar-progress" class:playing={$isPlaying || $isStarting} style="width: {barProgress}%"></div>
 
         <button
           class="transport-button play-button"
           data-help-id="play-button"
-          onclick={() => $isPlaying ? stopTransport() : startTransport()}>
-          {#if $isPlaying}
+          onclick={() => ($isPlaying || $isStarting) ? stopTransport() : startTransport()}>
+          {#if $isPlaying || $isStarting}
             <Pause size={16} />
           {:else}
             <Play size={16} />

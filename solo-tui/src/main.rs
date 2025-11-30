@@ -4,14 +4,13 @@ use crossbeam_channel::unbounded;
 use sova_core::{
     Scene,
     clock::ClockServer,
-    compiler::{ExternalCompiler, bali::BaliCompiler, dummylang::DummyCompiler},
+    compiler::{bali::BaliCompiler, dummylang::DummyCompiler},
     device_map::DeviceMap,
     init,
     lang::{
         LanguageCenter, Transcoder,
         interpreter::{
             InterpreterDirectory, boinx::BoinxInterpreterFactory,
-            external::ExternalInterpreterFactory,
         },
     },
     scene::Line,
@@ -36,10 +35,8 @@ fn create_language_center() -> Arc<LanguageCenter> {
     let mut transcoder = Transcoder::default();
     transcoder.add_compiler(BaliCompiler);
     transcoder.add_compiler(DummyCompiler);
-    transcoder.add_compiler(ExternalCompiler);
     let mut interpreters = InterpreterDirectory::new();
     interpreters.add_factory(BoinxInterpreterFactory);
-    interpreters.add_factory(ExternalInterpreterFactory);
     Arc::new(LanguageCenter {
         transcoder,
         interpreters,
@@ -55,9 +52,11 @@ fn main() -> color_eyre::Result<()> {
     let devices = Arc::new(DeviceMap::new());
 
     let _ = devices.create_virtual_midi_port(DEFAULT_MIDI_OUT);
+    let _ = devices.create_osc_output_device("SovaOSC", "127.0.0.1", 5000);
+    let _ = devices.assign_slot(1, DEFAULT_MIDI_OUT);
 
     let (world_handle, sched_handle, sched_iface, sched_updates) =
-        init::start_scheduler_and_world(clock_server.clone(), devices.clone(), languages);
+        init::start_scheduler_and_world(clock_server.clone(), devices.clone(), languages.clone());
 
     let initial_scene = Scene::new(vec![Line::default()]);
     let _ = sched_iface.send(SchedulerMessage::SetScene(
@@ -70,7 +69,7 @@ fn main() -> color_eyre::Result<()> {
     let result = App::new(
         sched_iface.clone(), 
         sched_updates, 
-        log_rx, clock_server, devices.clone()
+        log_rx, clock_server, devices.clone(), languages.clone()
     ).run(terminal);
     ratatui::restore();
 

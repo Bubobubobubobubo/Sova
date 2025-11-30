@@ -1,4 +1,6 @@
-use pest::{Parser, iterators::Pairs, pratt_parser::PrattParser};
+use std::collections::HashMap;
+
+use pest::{Parser, iterators::{Pair, Pairs}, pratt_parser::PrattParser};
 use pest_derive::Parser;
 
 use crate::{clock::{SyncTime, TimeSpan}, compiler::CompilationError, lang::interpreter::boinx::ast::{BoinxArithmeticOp, BoinxCompo, BoinxCompoOp, BoinxCondition, BoinxConditionOp, BoinxIdent, BoinxIdentQualif, BoinxItem, BoinxOutput, BoinxProg, BoinxStatement}};
@@ -16,6 +18,7 @@ lazy_static::lazy_static! {
             .op(
                 Op::infix(compo_op, Right) | 
                 Op::infix(iter_op, Right) |
+                Op::infix(zip_op, Right) |
                 Op::infix(each_op, Right) 
             )
             .op(
@@ -97,8 +100,14 @@ fn parse_condition(mut pairs: Pairs<Rule>) -> BoinxCondition {
     BoinxCondition(Box::new(lhs), op, Box::new(rhs))
 }
 
+fn parse_str(pair: Pair<Rule>) -> String {
+    let s = pair.as_str();
+    let sub = &s[1..(s.len() - 1)];
+    sub.to_owned()
+}
+
 fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
-    BOINX_PRATT_PARSER
+    let mut compo = BOINX_PRATT_PARSER
         .map_primary(|primary| match primary.as_rule() {
             Rule::int => {
                 let i = primary.as_str().parse().unwrap_or_default();
@@ -113,9 +122,7 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 BoinxItem::Number(f).into()
             }
             Rule::str => {
-                let s = primary.as_str();
-                let sub = &s[1..(s.len() - 1)];
-                BoinxItem::Str(sub.to_owned()).into()
+                BoinxItem::Str(parse_str(primary)).into()
             }
             Rule::ident => 
                 BoinxItem::Identity(parse_ident(primary.into_inner())).into(),
@@ -166,12 +173,24 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                     .collect();
                 BoinxItem::Simultaneous(vec).into()
             }
+            Rule::map => {
+                let mut value_map = HashMap::new();
+                let mut pairs = primary.into_inner();
+                while pairs.peek().is_some() {
+                    let str = parse_str(pairs.next().unwrap());
+                    let item = pairs.next().unwrap().into_inner();
+                    let item = parse_compo(item).extract();
+                    value_map.insert(str, item);
+                }
+                BoinxItem::ArgMap(value_map).into()
+            }
             _ => unreachable!()
         })
         .map_infix(|lhs: BoinxCompo, op, rhs: BoinxCompo| match op.as_rule() {
             Rule::compo_op => lhs.chain(BoinxCompoOp::Compose, rhs),
             Rule::iter_op => lhs.chain(BoinxCompoOp::Iterate, rhs),
             Rule::each_op => lhs.chain(BoinxCompoOp::Each, rhs),
+            Rule::zip_op => lhs.chain(BoinxCompoOp::Zip, rhs),
             _ => {
                 let op = match op.as_rule() {
                     Rule::add => BoinxArithmeticOp::Add,
@@ -196,7 +215,11 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 BoinxItem::Negative(Box::new(rhs.extract())).into(),
             _ => unreachable!()
         })
-        .parse(pairs)
+        .parse(pairs);
+    if !compo.has_vars() {
+        compo = compo.flatten().into();
+    }
+    compo
 }
 
 fn parse_prog(pairs: Pairs<Rule>) -> BoinxProg {

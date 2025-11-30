@@ -52,8 +52,8 @@ impl ClientManager {
         tauri::async_runtime::spawn(async move {
             let mut consecutive_failures = 0;
             let mut consecutive_emit_failures = 0;
-            let mut last_heartbeat = std::time::Instant::now();
-            const HEARTBEAT_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+            let mut last_message = std::time::Instant::now();
+            const MESSAGE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
             loop {
                 tokio::select! {
                     Some(message) = message_receiver.recv() => {
@@ -114,12 +114,7 @@ impl ClientManager {
                         match read_result {
                             Ok(message) => {
                                 consecutive_failures = 0;
-
-                                // Handle heartbeat - just update timestamp, don't emit to JS
-                                if matches!(message, ServerMessage::Heartbeat) {
-                                    last_heartbeat = std::time::Instant::now();
-                                    continue;
-                                }
+                                last_message = std::time::Instant::now();
 
                                 if let Err(e) = Self::handle_server_message(&app_handle, message) {
                                     sova_core::log_error!("Failed to handle server message: {}", e);
@@ -137,11 +132,11 @@ impl ClientManager {
                             }
                             Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => {
                                 // No data available - NOT a failure, this is normal during idle
-                                // Check heartbeat timeout
-                                if last_heartbeat.elapsed() > HEARTBEAT_TIMEOUT {
-                                    sova_core::log_error!("No heartbeat for {:?}, disconnecting", HEARTBEAT_TIMEOUT);
+                                // Check message timeout (clock ticks serve as implicit keep-alive)
+                                if last_message.elapsed() > MESSAGE_TIMEOUT {
+                                    sova_core::log_error!("No messages for {:?}, disconnecting", MESSAGE_TIMEOUT);
                                     let _ = app_handle.emit("client-disconnected", ClientDisconnectEvent {
-                                        reason: "heartbeat_timeout".to_string(),
+                                        reason: "message_timeout".to_string(),
                                     });
                                     return;
                                 }
@@ -229,12 +224,8 @@ impl ClientManager {
                 }))?;
             }
 
-            TransportStarted => {
-                app_handle.emit("server:transport-started", ())?;
-            }
-
-            TransportStopped => {
-                app_handle.emit("server:transport-stopped", ())?;
+            PlaybackStateChanged(state) => {
+                app_handle.emit("server:playback-state-changed", state)?;
             }
 
             LogString(msg) => {
@@ -332,13 +323,9 @@ impl ClientManager {
                 app_handle.emit("server:compilation-update", serde_json::json!({
                     "lineId": line_id,
                     "frameId": frame_id,
-                    "scriptId": script_id.to_string(),  // Serialize as string to avoid JS precision loss
+                    "scriptId": script_id.to_string(),
                     "state": state,
                 }))?;
-            }
-
-            Heartbeat => {
-                // Handled before this function is called, should never reach here
             }
         }
 

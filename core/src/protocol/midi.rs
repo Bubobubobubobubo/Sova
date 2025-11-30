@@ -1,4 +1,3 @@
-use midir::os::unix::VirtualOutput;
 use midir::{MidiInput, MidiOutput, MidiOutputConnection};
 
 use control_memory::MidiInMemory;
@@ -210,6 +209,7 @@ impl MidiOut {
 
         #[cfg(not(target_os = "windows"))]
         {
+            use midir::os::unix::VirtualOutput;
             match midi_out.create_virtual(&self.name) {
                 Ok(connection) => {
                     *self.connection.lock().unwrap() = Some(connection);
@@ -220,7 +220,7 @@ impl MidiOut {
         }
         #[cfg(target_os = "windows")]
         {
-            Err(MidiError(
+            Err(ProtocolError(
                 "Virtual MIDI ports are not supported on Windows.".to_string(),
             ))
         }
@@ -440,7 +440,7 @@ impl MidiIn {
         }
         #[cfg(target_os = "windows")]
         {
-            Err(MidiError(
+            Err(ProtocolError(
                 "Virtual MIDI input ports are not supported on Windows.".to_string(),
             ))
         }

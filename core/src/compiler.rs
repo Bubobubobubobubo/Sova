@@ -7,7 +7,7 @@
 
 use std::{
     borrow::Cow,
-    collections::{BTreeMap, HashMap},
+    collections::BTreeMap,
     io::Write,
     path::PathBuf,
     process::{Command, Stdio}, sync::Arc,
@@ -61,33 +61,37 @@ pub trait Compiler: Send + Sync + std::fmt::Debug {
 /// It communicates with the external process via standard input (sending source code)
 /// and standard output (receiving the compiled [`Program`] as JSON).
 #[derive(Debug)]
-pub struct ExternalCompiler;
+pub struct ExternalCompiler {
+    pub name: String,
+    pub command: String,
+}
+
+impl ExternalCompiler {
+    
+    pub fn new(name: String, command: String) -> Self {
+        Self { name, command }
+    }
+
+}
 
 impl Compiler for ExternalCompiler {
     /// Returns the name of the compiler, which is the executable name/path.
     fn name(&self) -> &str {
-        "external compiler"
+        &self.name
     }
 
     /// Executes the external compiler process to compile the source code.
     ///
     /// Sends `text` to the process's stdin and expects a JSON representation of
     /// a [`Program`] on the process's stdout.
-    fn compile(&self, text: &str, args: &BTreeMap<String, String>) -> Result<Program, CompilationError> {
-        let Some(cmd) = args.get("command") else {
-            return Err(CompilationError { 
-                lang: "external".to_owned(), 
-                info: format!("No command has been specified for external compiler !"), 
-                from: 0, to: 0 
-            });
-        };
-        let mut compiler = Command::new(&cmd)
+    fn compile(&self, text: &str, _args: &BTreeMap<String, String>) -> Result<Program, CompilationError> {
+        let mut compiler = Command::new(&self.command)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .spawn()?;
         let Some(mut stdin) = compiler.stdin.take() else {
             return Err(CompilationError::default_error(
-                "External language".to_string(),
+                format!("{} error: Unable to send script content to external process !",self.name.clone()),
             ));
         };
         stdin.write_all(text.as_bytes())?;
@@ -133,4 +137,4 @@ impl Compiler for ExternalCompiler {
 /// A type alias for a collection mapping compiler names (Strings) to Arc-ed [`Compiler`] trait objects.
 ///
 /// This allows managing multiple compiler implementations dynamically.
-pub type CompilerCollection = HashMap<String, Arc<dyn Compiler>>;
+pub type CompilerCollection = BTreeMap<String, Arc<dyn Compiler>>;

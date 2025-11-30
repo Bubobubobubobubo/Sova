@@ -1,7 +1,7 @@
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use ratatui::{buffer::Buffer, layout::{Constraint, Layout, Rect}, style::{Style, Stylize}, widgets::{StatefulWidget, Widget}};
 use sova_core::{scene::script::Script, schedule::{ActionTiming, SchedulerMessage}};
-use tui_textarea::TextArea;
+use tui_textarea::{CursorMove, TextArea};
 
 use crate::{app::AppState, event::AppEvent, popup::PopupValue};
 
@@ -56,7 +56,9 @@ impl EditWidget {
 
     pub fn get_help() -> &'static str {
         "\
-        C-S: Upload
+        C-S: Upload \n\
+        C-L: Change language \n\
+        C-A: Select all \n\
         "
     }
 
@@ -69,16 +71,37 @@ impl EditWidget {
                 self.text_area.select_all();
             }
             KeyCode::Char('l') if event.modifiers == KeyModifiers::CONTROL => {
+                let Some(frame) = state.selected_frame() else {
+                    return;
+                };
+                let langs : Vec<String> = state.languages.languages().map(str::to_owned).collect();
+                let i = langs.iter().position(|l| l == frame.script().lang()).unwrap_or_default();
                 state.events.send(AppEvent::Popup(
                     "Script language".to_owned(), 
                     "Which language to use for this script ?".to_owned(), 
-                    PopupValue::Text(state
-                        .selected_frame()
-                        .map(|f| f.script().lang().to_owned())
-                        .unwrap_or(String::new())),
+                    PopupValue::Choice(i, langs),
                     Box::new(|state, x| {
                         upload_lang(state, x.into());
                     })));
+            }
+            KeyCode::Char('w') if event.modifiers == KeyModifiers::CONTROL => {
+                self.text_area.start_selection();
+                self.text_area.move_cursor(CursorMove::WordForward);
+            }
+            KeyCode::Char('c') if event.modifiers == KeyModifiers::CONTROL => {
+                self.text_area.copy();
+                state.events.send(
+                    AppEvent::Positive("Text yanked !".to_owned())
+                );
+            }
+            KeyCode::Char('x') if event.modifiers == KeyModifiers::CONTROL => {
+                self.text_area.cut();
+                state.events.send(
+                    AppEvent::Positive("Text yanked !".to_owned())
+                );
+            }
+            KeyCode::Char('v') if event.modifiers == KeyModifiers::CONTROL => {
+                self.text_area.paste();
             }
             _ => { 
                 self.text_area.input(event);

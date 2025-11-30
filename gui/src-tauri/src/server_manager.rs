@@ -5,8 +5,8 @@ use sova_core::{
     clock::ClockServer,
     device_map::DeviceMap,
     lang::{LanguageCenter, Transcoder, interpreter::InterpreterDirectory},
-    compiler::{bali::BaliCompiler, dummylang::DummyCompiler, ExternalCompiler},
-    lang::interpreter::{boinx::BoinxInterpreterFactory, external::ExternalInterpreterFactory},
+    compiler::{bali::BaliCompiler, dummylang::DummyCompiler},
+    lang::interpreter::boinx::BoinxInterpreterFactory,
     init,
     scene::{Scene, Line},
     schedule::{SchedulerMessage, ActionTiming},
@@ -56,11 +56,9 @@ impl ServerManager {
         let mut transcoder = Transcoder::default();
         transcoder.add_compiler(BaliCompiler);
         transcoder.add_compiler(DummyCompiler);
-        transcoder.add_compiler(ExternalCompiler);
 
         let mut interpreters = InterpreterDirectory::new();
         interpreters.add_factory(BoinxInterpreterFactory);
-        interpreters.add_factory(ExternalInterpreterFactory);
 
         let languages = Arc::new(LanguageCenter { transcoder, interpreters });
 

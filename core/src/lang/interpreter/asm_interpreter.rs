@@ -1,4 +1,4 @@
-use crate::{clock::SyncTime, compiler::CompilationState, lang::{Instruction, Program, evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::Interpreter}, scene::script::{ReturnInfo, Script}};
+use crate::{clock::{NEVER, SyncTime}, compiler::CompilationState, lang::{Instruction, Program, evaluation_context::EvaluationContext, event::ConcreteEvent, interpreter::Interpreter}, scene::script::{ReturnInfo, Script}};
 
 #[derive(Debug, Default, Clone)]
 pub struct ASMInterpreter {
@@ -60,15 +60,15 @@ impl Interpreter for ASMInterpreter {
     fn execute_next(
         &mut self,
         ctx : &mut EvaluationContext
-    ) -> (Option<ConcreteEvent>, Option<SyncTime>) {
+    ) -> (Option<ConcreteEvent>, SyncTime) {
         if self.has_terminated() {
-            return (None, None);
+            return (None, NEVER);
         }
         let current = &self.prog[self.instruction_index];
         match current {
             Instruction::Control(_) => {
                 self.execute_control(ctx);
-                (None, None)
+                (None, 0)
             }
             Instruction::Effect(event, var_time_span) => {
                 self.instruction_index += 1;
@@ -79,7 +79,7 @@ impl Interpreter for ASMInterpreter {
                 let c_event = event.make_concrete(ctx);
                 // let res = (c_event, self.scheduled_time);
                 // self.scheduled_time += wait;
-                (Some(c_event), Some(wait))
+                (Some(c_event), wait)
             }
         }
     }

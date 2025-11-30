@@ -1,6 +1,6 @@
 use std::{
     cmp::Ordering,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ops::{BitAnd, BitOr, BitXor, Neg, Not, Shl, Shr},
 };
 
@@ -275,6 +275,9 @@ impl VariableValue {
             VariableValue::Dur(_) => {
                 *other = other.cast_as_dur();
             }
+            VariableValue::Map(_) => {
+                *other = other.cast_as_map();
+            }
             _ => match other {
                 VariableValue::Integer(_) => {
                     *self = self.cast_as_integer(ctx.clock, ctx.frame_len);
@@ -351,7 +354,7 @@ impl VariableValue {
                 VariableValue::Decimal(y_sign, y_num, y_den),
             ) => VariableValue::Bool(eq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 == f2),
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Bool(d1 == d2),
             _ => panic!("Comparison (eq) with wrong types, this should never happen"),
         }
     }
@@ -366,7 +369,7 @@ impl VariableValue {
                 VariableValue::Decimal(y_sign, y_num, y_den),
             ) => VariableValue::Bool(neq_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den)),
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Bool(f1 != f2),
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => todo!(),
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => VariableValue::Bool(d1 != d2),
             _ => panic!("Comparison (neq) with wrong types, this should never happen"),
         }
     }
@@ -385,8 +388,16 @@ impl VariableValue {
                     add_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
             }
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
-                VariableValue::Dur(_d1.add(_d2, ctx.clock, ctx.frame_len))
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => {
+                VariableValue::Dur(d1.add(d2, ctx.clock, ctx.frame_len))
+            }
+            (VariableValue::Map(mut m1), VariableValue::Map(m2)) => {
+                for (key, value) in m2 {
+                    if !m1.contains_key(&key) {
+                        m1.insert(key, value);
+                    }
+                }
+                VariableValue::Map(m1)
             }
             _ => panic!("Addition with wrong types, this should never happen"),
         }
@@ -416,8 +427,21 @@ impl VariableValue {
                     div_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
             }
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
-                VariableValue::Dur(_d1.div(_d2, ctx.clock, ctx.frame_len))
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => {
+                VariableValue::Dur(d1.div(d2, ctx.clock, ctx.frame_len))
+            }
+            (VariableValue::Map(mut m1), VariableValue::Map(mut m2)) => {
+                let k1 : HashSet<String> = m1.keys().cloned().collect();
+                let k2 : HashSet<String> = m2.keys().cloned().collect();
+                let mut res = HashMap::new();
+                for key in k1.symmetric_difference(&k2) {
+                    if m1.contains_key(key) {
+                        res.insert(key.clone(), m1.remove(key).unwrap());
+                    } else {
+                        res.insert(key.clone(), m2.remove(key).unwrap());
+                    }
+                }
+                VariableValue::Map(res)
             }
             _ => panic!("Division with wrong types, this should never happen"),
         }
@@ -450,6 +474,14 @@ impl VariableValue {
                     rem_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
             }
+            (VariableValue::Map(m1), VariableValue::Map(mut m2)) => {
+                for key in m1.keys() {
+                    if m2.contains_key(key) {
+                        m2.remove(key);
+                    }
+                }
+                VariableValue::Map(m2)
+            }
             _ => panic!("Reminder (modulo) with wrong types, this should never happen"),
         }
     }
@@ -468,8 +500,17 @@ impl VariableValue {
                     mul_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
             }
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
-                VariableValue::Dur(_d1.mul(_d2, ctx.clock, ctx.frame_len))
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => {
+                VariableValue::Dur(d1.mul(d2, ctx.clock, ctx.frame_len))
+            }
+            (VariableValue::Map(mut m1), VariableValue::Map(m2)) => {
+                let k1 : HashSet<String> = m1.keys().cloned().collect();
+                let k2 : HashSet<String> = m2.keys().cloned().collect();
+                let mut res = HashMap::new();
+                for key in k1.intersection(&k2) {
+                    res.insert(key.clone(), m1.remove(key).unwrap());
+                }
+                VariableValue::Map(res)
             }
             _ => panic!("Multiplication with wrong types, this should never happen"),
         }
@@ -489,8 +530,16 @@ impl VariableValue {
                     sub_decimal(x_sign, x_num, x_den, y_sign, y_num, y_den);
                 VariableValue::Decimal(z_sign, z_num, z_den)
             }
-            (VariableValue::Dur(_d1), VariableValue::Dur(_d2)) => {
-                VariableValue::Dur(_d1.sub(_d2, ctx.clock, ctx.frame_len))
+            (VariableValue::Dur(d1), VariableValue::Dur(d2)) => {
+                VariableValue::Dur(d1.sub(d2, ctx.clock, ctx.frame_len))
+            }
+            (VariableValue::Map(mut m1), VariableValue::Map(m2)) => {
+                for key in m2.keys() {
+                    if m1.contains_key(key) {
+                        m1.remove(key);
+                    }
+                }
+                VariableValue::Map(m1)
             }
             _ => panic!("Subtraction with wrong types, this should never happen"),
         }
@@ -503,7 +552,7 @@ impl VariableValue {
                 VariableValue::Integer(i1.pow(i2 as u32))
             }
             (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1.powf(f2)),
-            _ => panic!("Subtraction with wrong types, this should never happen"),
+            _ => panic!("Power with wrong types, this should never happen"),
         }
     }
 
@@ -566,6 +615,10 @@ impl VariableValue {
 
     pub fn cast_as_dur(&self) -> VariableValue {
         VariableValue::Dur(self.as_dur())
+    }
+
+    pub fn cast_as_map(&self) -> VariableValue {
+        VariableValue::Map(self.as_map())
     }
 
     pub fn cast_as_blob(&self) -> VariableValue {
@@ -733,6 +786,42 @@ impl VariableValue {
             VariableValue::Map(_) => Vec::new(),
             VariableValue::Blob(b) => b.clone()
         }
+    }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, VariableValue::Integer(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, VariableValue::Float(_))
+    }
+
+    pub fn is_decimal(&self) -> bool {
+        matches!(self, VariableValue::Decimal(_,_,_))
+    }
+
+    pub fn is_bool(&self) -> bool {
+        matches!(self, VariableValue::Bool(_))
+    }
+
+    pub fn is_str(&self) -> bool {
+        matches!(self, VariableValue::Str(_))
+    }
+
+    pub fn is_dur(&self) -> bool {
+        matches!(self, VariableValue::Dur(_))
+    }
+
+    pub fn is_func(&self) -> bool {
+        matches!(self, VariableValue::Func(_))
+    }
+
+    pub fn is_map(&self) -> bool {
+        matches!(self, VariableValue::Map(_))
+    }
+
+    pub fn is_blob(&self) -> bool {
+        matches!(self, VariableValue::Blob(_))
     }
 }
 

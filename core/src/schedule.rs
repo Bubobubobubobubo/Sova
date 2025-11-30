@@ -110,7 +110,7 @@ impl Scheduler {
             deferred_actions: Vec::new(),
             playback_manager: PlaybackManager::default(),
             shutdown_requested: false,
-            scene_structure: Vec::new()
+            scene_structure: Vec::new(),
         }
     }
 
@@ -179,11 +179,6 @@ impl Scheduler {
         if timing == ActionTiming::Immediate {
             self.apply_action(msg);
         } else {
-            log_println!(
-                "Deferred action: {:?}, target: {:?}",
-                msg,
-                msg.timing()
-            ); // Debug log
             self.deferred_actions.push(msg);
         }
     }
@@ -211,16 +206,17 @@ impl Scheduler {
         }
     }
 
-    pub fn process_deferred(&mut self, date: SyncTime) -> SyncTime {
+    pub fn process_deferred(&mut self, previous_date: SyncTime, date: SyncTime) -> SyncTime {
+        let previous_beat = self.clock.beat_at_date(previous_date);
         let beat = self.clock.beat_at_date(date);
         let to_apply : Vec<SchedulerMessage> = self.deferred_actions.extract_if(.., |action| {
             action.timing().should_apply(
+                previous_beat,
                 beat,
                 &self.scene
             )
         }).collect();
         for action in to_apply {
-            log_println!("Applying deferred action: {:?}", action); // Debug log
             self.apply_action(action);
         }
         self.deferred_actions
@@ -247,6 +243,7 @@ impl Scheduler {
 
     pub fn do_your_thing(&mut self) {
         let start_date = self.clock.micros();
+        let mut previous_date = start_date;
         log_println!("[+] Starting scheduler at {start_date}");
         loop {
             self.clock.capture_app_state();
@@ -260,17 +257,23 @@ impl Scheduler {
             let date = self.clock.micros();
 
             // Process deferred actions
-            self.next_wait = Some(self.process_deferred(date));
+            self.next_wait = Some(self.process_deferred(previous_date, date));
+
+            previous_date = date;
 
             if let Some(wait_time) = self.playback_manager.update_state(
                 &self.clock,
                 &mut self.scene,
-                &self.update_notifier,
             ) {
                 self.next_wait = Some(min(wait_time, self.next_wait.unwrap_or(NEVER)));
             }
+            if self.playback_manager.state_has_changed() {
+                let _ = self.update_notifier.send(
+                    SovaNotification::PlaybackStateChanged(self.playback_manager.state())
+                );
+            }
 
-            if !self.playback_manager.is_playing() {
+            if !self.playback_manager.state().is_playing() {
                 continue;
             }
             
@@ -327,7 +330,6 @@ impl Scheduler {
 
         self.clock.session_state.set_is_playing(true, start_date);
         self.clock.commit_app_state();
-        let _ = self.update_notifier.send(SovaNotification::TransportStarted);
     }
 
     pub fn process_transport_stop(&mut self) {
@@ -338,7 +340,6 @@ impl Scheduler {
         self.clock.commit_app_state();
 
         self.scene.kill_executions();
-        let _ = self.update_notifier.send(SovaNotification::TransportStopped);
     }
 
 }

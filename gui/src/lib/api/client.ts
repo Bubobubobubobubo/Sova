@@ -11,7 +11,8 @@ import type {
 export const ActionTiming = {
 	immediate: (): ActionTiming => 'Immediate',
 	endOfLine: (lineId: number): ActionTiming => ({ EndOfLine: lineId }),
-	atBeat: (beat: number): ActionTiming => ({ AtBeat: beat })
+	atBeat: (beat: number): ActionTiming => ({ AtBeat: beat }),
+	atNextBeat: (): ActionTiming => 'AtNextBeat'
 };
 
 // Core send function
@@ -63,14 +64,14 @@ export async function configureLines(
 export async function addLine(
 	index: number,
 	line: Line,
-	timing: ActionTiming = ActionTiming.immediate()
+	timing: ActionTiming = ActionTiming.atNextBeat()
 ): Promise<void> {
 	await sendMessage({ AddLine: [index, line, timing] });
 }
 
 export async function removeLine(
 	index: number,
-	timing: ActionTiming = ActionTiming.immediate()
+	timing: ActionTiming = ActionTiming.atNextBeat()
 ): Promise<void> {
 	await sendMessage({ RemoveLine: [index, timing] });
 }
@@ -100,7 +101,7 @@ export async function addFrame(
 	lineId: number,
 	frameId: number,
 	frame: Frame,
-	timing: ActionTiming = ActionTiming.immediate()
+	timing: ActionTiming = ActionTiming.atNextBeat()
 ): Promise<void> {
 	await sendMessage({ AddFrame: [lineId, frameId, stripCompiledFromFrame(frame), timing] });
 }
@@ -108,7 +109,7 @@ export async function addFrame(
 export async function removeFrame(
 	lineId: number,
 	frameId: number,
-	timing: ActionTiming = ActionTiming.immediate()
+	timing: ActionTiming = ActionTiming.atNextBeat()
 ): Promise<void> {
 	await sendMessage({ RemoveFrame: [lineId, frameId, timing] });
 }

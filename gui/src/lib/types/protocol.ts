@@ -16,7 +16,14 @@ export interface LogMessage {
 export type ActionTiming =
 	| 'Immediate'
 	| { EndOfLine: number }
-	| { AtBeat: number };
+	| { AtBeat: number }
+	| 'AtNextBeat';
+
+// PlaybackState for transport state (matches Rust enum serialization)
+export type PlaybackState =
+	| 'Stopped'
+	| { Starting: number }  // target beat
+	| 'Playing';
 
 // Variable types (matches Rust enum serialization)
 export type VariableValue =

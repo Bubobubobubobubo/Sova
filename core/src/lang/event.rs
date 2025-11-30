@@ -69,6 +69,7 @@ impl ConcreteEvent {
 #[serde(rename_all = "snake_case")]
 pub enum Event {
     Nop,
+    /// MidiNote(note, velocity, channel, duration, device_id)
     MidiNote(Variable, Variable, Variable, Variable, Variable),
     // TODO: MIDI Pitchbend
     MidiControl(Variable, Variable, Variable, Variable),
