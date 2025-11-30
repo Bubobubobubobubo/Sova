@@ -66,16 +66,21 @@ impl BoinxLine {
                 vec![ConcreteEvent::MidiNote(*n as u64, 90, channel, dur, device)]
             }
             BoinxItem::ArgMap(map) => {
-                let addr = channel.as_str(ctx.clock, ctx.frame_len);
                 let mut args = Vec::new();
                 for (key, value) in map.iter() {
                     args.push(VariableValue::Str(key.clone()));
                     args.push(VariableValue::from(value.clone()));
                 }
-                vec![ConcreteEvent::Osc { 
-                    message: OSCMessage::new(addr, args), 
-                    device_id: device
-                }]
+                if channel.is_str() {
+                    let addr = channel.as_str(ctx.clock, ctx.frame_len);
+                    vec![ConcreteEvent::Osc { 
+                        message: OSCMessage::new(addr, args), 
+                        device_id: device
+                    }]
+                } else {
+                    vec![ConcreteEvent::Dirt { args, device_id: device }]
+                }
+                
             }
             _ => Vec::new(),
         }

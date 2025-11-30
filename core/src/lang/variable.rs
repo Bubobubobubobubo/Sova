@@ -787,6 +787,42 @@ impl VariableValue {
             VariableValue::Blob(b) => b.clone()
         }
     }
+
+    pub fn is_int(&self) -> bool {
+        matches!(self, VariableValue::Integer(_))
+    }
+
+    pub fn is_float(&self) -> bool {
+        matches!(self, VariableValue::Float(_))
+    }
+
+    pub fn is_decimal(&self) -> bool {
+        matches!(self, VariableValue::Decimal(_,_,_))
+    }
+
+    pub fn is_bool(&self) -> bool {
+        matches!(self, VariableValue::Bool(_))
+    }
+
+    pub fn is_str(&self) -> bool {
+        matches!(self, VariableValue::Str(_))
+    }
+
+    pub fn is_dur(&self) -> bool {
+        matches!(self, VariableValue::Dur(_))
+    }
+
+    pub fn is_func(&self) -> bool {
+        matches!(self, VariableValue::Func(_))
+    }
+
+    pub fn is_map(&self) -> bool {
+        matches!(self, VariableValue::Map(_))
+    }
+
+    pub fn is_blob(&self) -> bool {
+        matches!(self, VariableValue::Blob(_))
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
