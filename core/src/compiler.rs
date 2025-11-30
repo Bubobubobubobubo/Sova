@@ -91,7 +91,7 @@ impl Compiler for ExternalCompiler {
             .spawn()?;
         let Some(mut stdin) = compiler.stdin.take() else {
             return Err(CompilationError::default_error(
-                "External language".to_string(),
+                format!("{} error: Unable to send script content to external process !",self.name.clone()),
             ));
         };
         stdin.write_all(text.as_bytes())?;
