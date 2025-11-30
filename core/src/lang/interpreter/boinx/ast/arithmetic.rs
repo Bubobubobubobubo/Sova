@@ -67,6 +67,65 @@ pub fn arithmetic_op(
             }
             Simultaneous(res)
         }
+        (Sequence(v1), op, Simultaneous(v2)) => {
+            let mut res = Vec::new();
+            for item1 in v1 {
+                let mut inner = Vec::new();
+                for item2 in v2.iter() {
+                    inner.push(arithmetic_op(ctx, item1.clone(), op, item2.clone()));
+                }
+                res.push(Simultaneous(inner));
+            }
+            Sequence(res)
+        }
+        (Simultaneous(v1), op, Sequence(v2)) => {
+            let mut res = Vec::new();
+            for item1 in v1 {
+                let mut inner = Vec::new();
+                for item2 in v2.iter() {
+                    inner.push(arithmetic_op(ctx, item1.clone(), op, item2.clone()));
+                }
+                res.push(Sequence(inner));
+            }
+            Simultaneous(res)
+        }
+        (Simultaneous(v1), op, item2) => {
+            let mut res = Vec::new();
+            for item1 in v1 {
+                res.push(arithmetic_op(ctx, item1, op, item2.clone()));
+            }
+            Simultaneous(res)
+        }
+        (item1, op, Simultaneous(v2)) => {
+            let mut res = Vec::new();
+            for item2 in v2 {
+                res.push(arithmetic_op(ctx, item1.clone(), op, item2));
+            }
+            Simultaneous(res)
+        }
+        (Sequence(v1), op, item2) => {
+            let mut res = Vec::new();
+            for item1 in v1 {
+                res.push(arithmetic_op(ctx, item1, op, item2.clone()));
+            }
+            Sequence(res)
+        }
+        (item1, op, Sequence(v2)) => {
+            let mut res = Vec::new();
+            for item2 in v2 {
+                res.push(arithmetic_op(ctx, item1.clone(), op, item2));
+            }
+            Sequence(res)
+        }
+        (WithDuration(i1, d1), op, WithDuration(i2, d2)) => {
+            todo!()
+        }
+        (WithDuration(i1, d1), op, i2) => {
+            todo!()
+        }
+        (i1, op, WithDuration(i2, d2)) => {
+            todo!()
+        }
         (i1, op, i2) => {
             let mut i1 = VariableValue::from(i1);
             let mut i2 = VariableValue::from(i2);
