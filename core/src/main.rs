@@ -146,13 +146,6 @@ async fn main() {
     // Test log to verify full mode works
     log_info!("Logger initialized in full mode - all logs will reach file, terminal, and clients");
 
-    // Handle --list-devices flag before initialization
-    if cli.list_devices {
-        let logger = bubo_engine::types::LoggerHandle::new_console();
-        bubo_engine::list_audio_devices(&logger);
-        return;
-    }
-
     // ======================================================================
     // Splash screen
     greeter();
