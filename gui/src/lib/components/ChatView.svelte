@@ -26,14 +26,6 @@
 	async function handleSendMessage() {
 		const trimmed = messageInput.trim();
 		if (trimmed && $runtimeNickname) {
-			chatMessages.update((msgs) => [
-				...msgs,
-				{
-					user: $runtimeNickname,
-					message: trimmed,
-					timestamp: Date.now()
-				}
-			]);
 			messageInput = '';
 			sendChat(trimmed);
 		}
@@ -63,7 +55,7 @@
 		{#if $chatMessages.length === 0}
 			<div class="empty-state">No messages yet</div>
 		{:else}
-			{#each $chatMessages as msg (msg.timestamp)}
+			{#each $chatMessages as msg, i (`${msg.timestamp}-${i}`)}
 				<div class="message">
 					<span class="timestamp">{formatTimestamp(msg.timestamp)}</span>
 					<span class="username" style="color: {getUserColor(msg.user)}">{msg.user}</span>

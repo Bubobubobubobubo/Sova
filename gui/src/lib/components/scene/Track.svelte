@@ -34,6 +34,10 @@
 		onNameBlur: () => void;
 		isFrameSelected: (frameIdx: number) => boolean;
 		playingFrameIdx: number | null;
+		onSolo: () => void;
+		onMute: () => void;
+		isSolo: boolean;
+		isMuted: boolean;
 	}
 
 	let {
@@ -65,7 +69,11 @@
 		onNameKeydown,
 		onNameBlur,
 		isFrameSelected,
-		playingFrameIdx
+		playingFrameIdx,
+		onSolo,
+		onMute,
+		isSolo,
+		isMuted
 	}: Props = $props();
 
 	const ctx = getTimelineContext();
@@ -123,7 +131,21 @@
 	style={trackStyle}
 >
 	<div class="track-header" class:vertical={ctx.isVertical}>
-		<span class="track-number">{lineIdx}</span>
+		<span class="track-number">LINE {lineIdx}</span>
+		<div class="track-controls">
+			<button
+				class="track-solo"
+				class:active={isSolo}
+				onclick={onSolo}
+				title="Solo"
+			>S</button>
+			<button
+				class="track-mute"
+				class:active={isMuted}
+				onclick={onMute}
+				title="Mute"
+			>M</button>
+		</div>
 		<button
 			class="track-remove"
 			onclick={onRemoveTrack}
@@ -207,44 +229,105 @@
 
 	.track-header {
 		position: relative;
-		width: 60px;
-		min-width: 60px;
+		width: 70px;
+		min-width: 70px;
 		background-color: var(--colors-surface);
 		border-right: 1px solid var(--colors-border);
 		display: flex;
+		flex-direction: column;
 		align-items: center;
-		justify-content: space-between;
-		padding: 0 8px;
+		justify-content: center;
+		gap: 6px;
+		padding: 8px 4px;
 		box-sizing: border-box;
 	}
 
 	.track-header.vertical {
 		width: auto;
 		min-width: auto;
-		height: 60px;
-		min-height: 60px;
+		height: auto;
+		min-height: auto;
 		border-right: none;
 		border-bottom: 1px solid var(--colors-border);
 		flex-direction: column;
+		gap: 6px;
 		padding: 8px 0;
 		box-sizing: border-box;
 	}
 
+	.track-controls {
+		display: flex;
+		flex-direction: row;
+		gap: 4px;
+	}
+
+	.track-solo,
+	.track-mute {
+		background: none;
+		border: 1px solid var(--colors-border);
+		color: var(--colors-text-secondary);
+		cursor: pointer;
+		padding: 3px 6px;
+		font-size: 9px;
+		font-weight: 600;
+		line-height: 1;
+		opacity: 0.5;
+	}
+
+	.track-row:hover .track-solo,
+	.track-row:hover .track-mute {
+		opacity: 1;
+	}
+
+	.track-solo:hover {
+		border-color: var(--colors-accent);
+		color: var(--colors-accent);
+	}
+
+	.track-mute:hover {
+		border-color: #f59e0b;
+		color: #f59e0b;
+	}
+
+	.track-solo.active {
+		background-color: var(--colors-accent);
+		border-color: var(--colors-accent);
+		color: var(--colors-background);
+		opacity: 1;
+	}
+
+	.track-mute.active {
+		background-color: #f59e0b;
+		border-color: #f59e0b;
+		color: var(--colors-background);
+		opacity: 1;
+	}
+
 	.track-number {
-		font-size: 14px;
+		font-size: 10px;
 		font-weight: 600;
 		color: var(--colors-text);
+		white-space: nowrap;
 	}
 
 	.track-remove {
+		position: absolute;
+		top: 2px;
+		right: 2px;
 		background: none;
 		border: none;
 		color: var(--colors-text-secondary);
 		cursor: pointer;
-		padding: 4px;
+		padding: 2px;
 		opacity: 0;
 		display: flex;
 		align-items: center;
+	}
+
+	.track-header.vertical .track-remove {
+		top: auto;
+		right: 4px;
+		bottom: auto;
 	}
 
 	.track-row:hover .track-remove {

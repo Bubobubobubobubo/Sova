@@ -48,8 +48,12 @@ export function getFramesEditedByUser(user: string): Readable<FrameLock[]> {
 }
 
 const listeners = new ListenerGroup();
+let initialized = false;
 
 export async function initializeCollaborationStore(): Promise<void> {
+	if (initialized) return;
+	initialized = true;
+
 	// Listen for peers updates
 	await listeners.add(() =>
 		listen<string[]>('server:peers-updated', (event) => {
@@ -112,6 +116,7 @@ export async function initializeCollaborationStore(): Promise<void> {
 
 export function cleanupCollaborationStore(): void {
 	listeners.cleanup();
+	initialized = false;
 	peers.set([]);
 	chatMessages.set([]);
 	frameLocks.set([]);

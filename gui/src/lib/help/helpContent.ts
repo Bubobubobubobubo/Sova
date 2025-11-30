@@ -119,7 +119,7 @@ export const helpContent: Record<string, HelpEntry> = {
 	},
 	'devices-remove': {
 		title: 'Remove Device',
-		description: 'Delete this OSC output from your project.'
+		description: 'Delete this OSC output from the server devices.'
 	},
 	'zone-snapshots': {
 		title: 'Snapshots',

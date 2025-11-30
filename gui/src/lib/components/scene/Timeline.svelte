@@ -71,6 +71,11 @@
 	let lineWidthMultipliers: Map<number, number> = $state(new Map());
 	let lineResizing: { lineIdx: number; startPos: number; startMultiplier: number } | null = $state(null);
 
+	// Solo/Mute state
+	let soloLineIdx: number | null = $state(null);
+	let mutedLines: Set<number> = $state(new Set());
+	let savedEnabledStates: Map<string, boolean> = $state(new Map());
+
 	const LINE_WIDTH_MIN = 0.5;
 	const LINE_WIDTH_MAX = 3.0;
 
@@ -106,6 +111,98 @@
 		window.removeEventListener('mousemove', handleLineResizeMove);
 		window.removeEventListener('mouseup', handleLineResizeEnd);
 		lineResizing = null;
+	}
+
+	// Solo/Mute functions
+	function saveCurrentStates() {
+		if (!$scene || savedEnabledStates.size > 0) return;
+		const newStates = new Map<string, boolean>();
+		for (let l = 0; l < $scene.lines.length; l++) {
+			const line = $scene.lines[l];
+			for (let f = 0; f < line.frames.length; f++) {
+				newStates.set(`${l}-${f}`, line.frames[f].enabled);
+			}
+		}
+		savedEnabledStates = newStates;
+	}
+
+	function getSavedEnabled(lineIdx: number, frameIdx: number): boolean {
+		const key = `${lineIdx}-${frameIdx}`;
+		return savedEnabledStates.get(key) ?? true;
+	}
+
+	async function applyEffects() {
+		if (!$scene) return;
+
+		const updates: [number, number, Frame][] = [];
+
+		for (let l = 0; l < $scene.lines.length; l++) {
+			const line = $scene.lines[l];
+			for (let f = 0; f < line.frames.length; f++) {
+				const frame = line.frames[f];
+				let shouldBeEnabled: boolean;
+
+				if (soloLineIdx !== null && l !== soloLineIdx) {
+					shouldBeEnabled = false;
+				} else if (mutedLines.has(l)) {
+					shouldBeEnabled = false;
+				} else {
+					shouldBeEnabled = getSavedEnabled(l, f);
+				}
+
+				if (frame.enabled !== shouldBeEnabled) {
+					updates.push([l, f, { ...frame, enabled: shouldBeEnabled }]);
+				}
+			}
+		}
+
+		if (updates.length > 0) {
+			try {
+				await setFrames(updates, ActionTiming.immediate());
+			} catch (error) {
+				console.error('Failed to apply solo/mute effects:', error);
+			}
+		}
+	}
+
+	async function toggleSolo(lineIdx: number) {
+		if (soloLineIdx === lineIdx) {
+			soloLineIdx = null;
+			if (mutedLines.size === 0) {
+				await applyEffects();
+				savedEnabledStates = new Map();
+			} else {
+				await applyEffects();
+			}
+		} else {
+			saveCurrentStates();
+			soloLineIdx = lineIdx;
+			await applyEffects();
+		}
+	}
+
+	async function toggleMute(lineIdx: number) {
+		saveCurrentStates();
+		const newMuted = new Set(mutedLines);
+		if (newMuted.has(lineIdx)) {
+			newMuted.delete(lineIdx);
+		} else {
+			newMuted.add(lineIdx);
+		}
+		mutedLines = newMuted;
+		await applyEffects();
+
+		if (soloLineIdx === null && mutedLines.size === 0) {
+			savedEnabledStates = new Map();
+		}
+	}
+
+	function isSolo(lineIdx: number): boolean {
+		return soloLineIdx === lineIdx;
+	}
+
+	function isMuted(lineIdx: number): boolean {
+		return mutedLines.has(lineIdx);
 	}
 
 	// Visible beat markers based on scroll position (every 4 beats)
@@ -567,7 +664,15 @@
 		const frame = $scene.lines[lineIdx]?.frames[frameIdx];
 		if (!frame) return;
 
-		const updatedFrame = { ...frame, enabled: !frame.enabled };
+		const newEnabled = !frame.enabled;
+		const updatedFrame = { ...frame, enabled: newEnabled };
+
+		// Also update saved state if we have any solo/mute active
+		if (savedEnabledStates.size > 0) {
+			const key = `${lineIdx}-${frameIdx}`;
+			savedEnabledStates = new Map(savedEnabledStates).set(key, newEnabled);
+		}
+
 		try {
 			await setFrames([[lineIdx, frameIdx, updatedFrame]], ActionTiming.immediate());
 		} catch (error) {
@@ -816,6 +921,10 @@
 					onNameBlur={handleNameBlur}
 					isFrameSelected={(frameIdx) => isFrameSelected(lineIdx, frameIdx)}
 					playingFrameIdx={getPlayingFrameIdx(lineIdx)}
+					onSolo={() => toggleSolo(lineIdx)}
+					onMute={() => toggleMute(lineIdx)}
+					isSolo={isSolo(lineIdx)}
+					isMuted={isMuted(lineIdx)}
 				/>
 			{/each}
 
@@ -903,8 +1012,8 @@
 	}
 
 	.ruler-header {
-		width: 60px;
-		min-width: 60px;
+		width: 70px;
+		min-width: 70px;
 		border-right: 1px solid var(--colors-border);
 		box-sizing: border-box;
 	}
@@ -912,11 +1021,12 @@
 	.ruler-header.vertical {
 		width: auto;
 		min-width: auto;
-		height: 60px;
-		min-height: 60px;
+		height: auto;
+		min-height: auto;
 		border-right: none;
 		border-bottom: 1px solid var(--colors-border);
 		box-sizing: border-box;
+		padding: 8px 0;
 	}
 
 	.ruler-content {
