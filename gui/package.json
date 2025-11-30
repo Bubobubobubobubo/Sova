@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "grammar:build": "for f in src/languages/*.grammar; do npx lezer-generator \"$f\" -o \"${f%.grammar}.grammar.js\"; done"
   },
   "license": "MIT",
   "dependencies": {
@@ -24,6 +25,7 @@
     "@codemirror/view": "^6.38.8",
     "@humanspeak/svelte-virtual-list": "^0.3.6",
     "@lezer/highlight": "^1.2.3",
+    "@lezer/lr": "^1.4.4",
     "@replit/codemirror-emacs": "^6.1.0",
     "@replit/codemirror-vim": "^6.3.0",
     "@tauri-apps/api": "^2",

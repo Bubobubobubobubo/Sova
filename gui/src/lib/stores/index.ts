@@ -92,6 +92,8 @@ import {
 	cleanupLogsStore
 } from './logs';
 
+import { initializeLanguages } from '../../languages';
+
 let helloUnlisten: UnlistenFn | null = null;
 
 // Initialize all Sova-related stores
@@ -158,6 +160,7 @@ export function cleanupSovaStores(): void {
 
 // Initialize app-level stores (config, connection, logs)
 export async function initializeApp(): Promise<void> {
+	initializeLanguages();
 	await initializeConfig();
 	await initializeConnectionListener();
 	await initializeLogsStore();

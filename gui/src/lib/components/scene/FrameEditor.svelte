@@ -12,7 +12,8 @@
 		clearLocalEdit
 	} from '$lib/stores/localEdits';
 	import { compilationStates } from '$lib/stores/compilation';
-	import { createEditor, createEditorSubscriptions } from '$lib/editor/editorFactory';
+	import { createEditor, createEditorSubscriptions, reconfigureLanguage } from '$lib/editor/editorFactory';
+	import { getLanguageSupport } from '../../../languages';
 	import { setFrames, ActionTiming } from '$lib/api/client';
 	import type { Frame, CompilationState } from '$lib/types/protocol';
 
@@ -80,11 +81,13 @@
 		if (!editorContainer || !$editorConfig) return;
 
 		if (!editorView) {
+			const langSupport = getLanguageSupport(selectedLang) ?? [];
 			editorView = createEditor(
 				editorContainer,
 				'',
-				[createUpdateListener()],
-				$editorConfig
+				langSupport,
+				$editorConfig,
+				[createUpdateListener()]
 			);
 			unsubscribe = createEditorSubscriptions(editorView);
 		}
@@ -115,6 +118,13 @@
 			localName = frame?.name ?? '';
 			localEnabled = frame?.enabled ?? true;
 		}
+	});
+
+	// Reconfigure language when selectedLang changes
+	$effect(() => {
+		if (!editorView) return;
+		const langSupport = getLanguageSupport(selectedLang) ?? [];
+		reconfigureLanguage(editorView, langSupport);
 	});
 
 	function getCompilationStatus(state: CompilationState | null | undefined): 'none' | 'compiling' | 'compiled' | 'error' {

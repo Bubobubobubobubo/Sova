@@ -28,6 +28,7 @@ const autocompletionCompartment = new Compartment();
 const rectangularSelectionCompartment = new Compartment();
 const foldGutterCompartment = new Compartment();
 const matchHighlightingCompartment = new Compartment();
+const languageCompartment = new Compartment();
 
 function getKeymapExtension(mode: string) {
   switch (mode) {
@@ -112,7 +113,7 @@ function buildExtensions(config: EditorConfig, theme: Theme, transparency: numbe
     rectangularSelectionCompartment.of(config.rectangular_selection ? [rectangularSelection(), crosshairCursor()] : []),
     foldGutterCompartment.of(config.fold_gutter ? foldGutter() : []),
     matchHighlightingCompartment.of(config.match_highlighting ? highlightSelectionMatches() : []),
-    language,
+    languageCompartment.of(language),
     themeCompartment.of(createEditorTheme(config.font_size, config.cursor_blink_rate, theme, transparency, config.font_family))
   ];
 }
@@ -194,4 +195,10 @@ export function createEditorSubscriptions(view: EditorView): () => void {
     unsubscribeTheme();
     unsubscribeTransparency();
   };
+}
+
+export function reconfigureLanguage(view: EditorView, language: Extension): void {
+  view.dispatch({
+    effects: languageCompartment.reconfigure(language)
+  });
 }
