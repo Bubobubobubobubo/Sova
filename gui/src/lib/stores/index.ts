@@ -31,7 +31,7 @@ import {
 import {
 	initializeTransportStore,
 	cleanupTransportStore,
-	isPlaying,
+	playbackState,
 	linkState
 } from './transport';
 
@@ -106,7 +106,7 @@ export async function initializeSovaStores(): Promise<void> {
 		scene.set(data.scene);
 
 		// Initialize transport
-		isPlaying.set(data.isPlaying);
+		playbackState.set(data.isPlaying ? 'Playing' : 'Stopped');
 		linkState.set(data.linkState);
 
 		// Initialize devices
