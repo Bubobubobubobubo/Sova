@@ -182,10 +182,10 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 let mut value_map = HashMap::new();
                 let mut pairs = primary.into_inner();
                 while pairs.peek().is_some() {
-                    let str = parse_str(pairs.next().unwrap());
+                    let name = pairs.next().unwrap().as_str().to_owned();
                     let item = pairs.next().unwrap().into_inner();
                     let item = parse_compo(item).extract();
-                    value_map.insert(str, item);
+                    value_map.insert(name, item);
                 }
                 BoinxItem::ArgMap(value_map).into()
             }
