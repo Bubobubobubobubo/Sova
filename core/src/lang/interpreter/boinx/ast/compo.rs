@@ -1,6 +1,6 @@
-use std::{collections::HashMap, fmt::Display};
+use std::{collections::{BTreeSet, HashMap}, fmt::Display};
 
-use crate::lang::{evaluation_context::EvaluationContext, interpreter::boinx::ast::BoinxItem, variable::VariableValue};
+use crate::lang::{evaluation_context::EvaluationContext, interpreter::boinx::ast::{BoinxIdent, BoinxItem}, variable::VariableValue};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum BoinxCompoOp {
@@ -47,13 +47,13 @@ impl BoinxCompo {
     }
 
     /// Evaluates all identitifiers in the compo
-    pub fn evaluate_vars(&self, ctx: &EvaluationContext) -> BoinxCompo {
+    pub fn evaluate_vars(&self, ctx: &EvaluationContext, forbidden: &mut BTreeSet<BoinxIdent>) -> BoinxCompo {
         let mut compo = BoinxCompo {
-            item: self.item.evaluate_vars(ctx),
+            item: self.item.evaluate_vars(ctx, forbidden),
             next: None,
         };
         if let Some((op, next)) = &self.next {
-            compo.next = Some((*op, Box::new(next.evaluate_vars(ctx))));
+            compo.next = Some((*op, Box::new(next.evaluate_vars(ctx, forbidden))));
         };
         compo
     }
@@ -133,7 +133,8 @@ impl BoinxCompo {
 
     /// Evaluates the composition, then flattens it into a single item
     pub fn yield_compiled(&self, ctx: &EvaluationContext) -> BoinxItem {
-        self.evaluate_vars(ctx).flatten().evaluate(ctx)
+        let mut forbidden = BTreeSet::new();
+        self.evaluate_vars(ctx, &mut forbidden).flatten().evaluate(ctx)
     }
 
     pub fn extract(self) -> BoinxItem {

@@ -36,6 +36,7 @@ lazy_static::lazy_static! {
             )
             .op(Op::infix(pow, Left))
             .op(Op::prefix(minus))
+            .op(Op::prefix(escape))
     };
 }
 
@@ -113,8 +114,6 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 let i = primary.as_str().parse().unwrap_or_default();
                 BoinxItem::Note(i).into()
             }
-            Rule::prev => BoinxItem::Previous.into(),
-            Rule::stop => BoinxItem::Stop.into(),
             Rule::note => 
                 BoinxItem::Note(parse_note(primary.into_inner())).into(),
             Rule::real => {
@@ -122,7 +121,13 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
                 BoinxItem::Number(f).into()
             }
             Rule::str => {
-                BoinxItem::Str(parse_str(primary)).into()
+                let is_escape = primary.as_str().starts_with("'");
+                let string = parse_str(primary);
+                if is_escape {
+                    BoinxItem::Escape(Box::new(BoinxItem::Str(string))).into()
+                } else {
+                    BoinxItem::Str(string).into()
+                }
             }
             Rule::ident => 
                 BoinxItem::Identity(parse_ident(primary.into_inner())).into(),
@@ -213,6 +218,8 @@ fn parse_compo(pairs: Pairs<Rule>) -> BoinxCompo {
         .map_prefix(|op, rhs| match op.as_rule() {
             Rule::minus => 
                 BoinxItem::Negative(Box::new(rhs.extract())).into(),
+            Rule::escape => 
+                BoinxItem::Escape(Box::new(rhs.extract())).into(),
             _ => unreachable!()
         })
         .parse(pairs);
