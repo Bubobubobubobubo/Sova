@@ -91,6 +91,7 @@ impl OSCMessage {
     {
         let latency_micros = (dev.latency * 1_000_000.0) as u64;
         let target_date = date + latency_micros;
+        
         let timetag = match OscTime::try_from(clock.to_system_time(target_date)) {
             Ok(t) => Some(t.into()),
             _ => None

@@ -17,7 +17,7 @@ impl BoinxCompoOp {
             "|" => Self::Compose,
             "°" => Self::Iterate,
             "~" => Self::Each,
-            "°|" => Self::Zip,
+            "!" => Self::Zip,
             _ => Self::Compose,
         }
     }
@@ -29,7 +29,7 @@ impl Display for BoinxCompoOp {
             Self::Compose => write!(f, "|"),
             Self::Iterate => write!(f, "°"),
             Self::Each => write!(f, "~"),
-            Self::Zip => write!(f, "°|")
+            Self::Zip => write!(f, "!")
         }
     }
 }
