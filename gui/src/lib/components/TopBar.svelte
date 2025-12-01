@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Play, Pause, LogOut, Plus, Users, User, HelpCircle } from 'lucide-svelte';
+  import { Play, Pause, LogOut, Plus, Users, User, HelpCircle, Save } from 'lucide-svelte';
   import { isConnected } from '$lib/stores/connectionState';
   import { isPlaying, isStarting, clockState } from '$lib/stores/transport';
   import { peerCount } from '$lib/stores/collaboration';
@@ -9,6 +9,7 @@
   import { paneLayout } from '$lib/stores/paneState';
   import AboutModal from './AboutModal.svelte';
   import { isHelpModeActive, toggleHelpMode } from '$lib/stores/helpMode';
+  import { initiateSave, projectExists } from '$lib/stores/projects';
 
   let showAbout = $state(false);
 
@@ -19,6 +20,11 @@
   let isEditingNickname = $state(false);
   let tempNicknameValue = $state('');
   let nicknameInputElement: HTMLInputElement;
+
+  let showSaveModal = $state(false);
+  let saveNameInput = $state('');
+  let showOverwriteConfirm = $state(false);
+  let saveInputElement: HTMLInputElement;
 
   let barProgress = $derived(
     $clockState !== null
@@ -121,11 +127,52 @@
       cancelEditingNickname();
     }
   }
+
+  function openSaveModal() {
+    saveNameInput = '';
+    showSaveModal = true;
+    setTimeout(() => saveInputElement?.focus(), 0);
+  }
+
+  function closeSaveModal() {
+    showSaveModal = false;
+    showOverwriteConfirm = false;
+    saveNameInput = '';
+  }
+
+  function handleSaveSubmit() {
+    if (!saveNameInput.trim()) return;
+    if (projectExists(saveNameInput.trim())) {
+      showOverwriteConfirm = true;
+    } else {
+      doSave();
+    }
+  }
+
+  async function doSave() {
+    await initiateSave(saveNameInput.trim());
+    closeSaveModal();
+  }
+
+  function handleSaveKeydown(event: KeyboardEvent) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      handleSaveSubmit();
+    } else if (event.key === 'Escape') {
+      closeSaveModal();
+    }
+  }
 </script>
 
 <div class="topbar">
   <div class="left-section">
     <button class="app-name" data-help-id="app-name" onclick={() => showAbout = true}>Sova</button>
+
+    {#if $isConnected}
+      <button class="save-btn" data-help-id="quick-save" onclick={openSaveModal} title="Save snapshot">
+        <Save size={14} />
+      </button>
+    {/if}
 
     {#if $isConnected}
       <div class="actions">
@@ -231,6 +278,35 @@
 </div>
 
 <AboutModal bind:open={showAbout} />
+
+{#if showSaveModal}
+  <div class="modal-overlay" onclick={closeSaveModal} onkeydown={(e) => e.key === 'Escape' && closeSaveModal()} role="presentation">
+    <div class="modal" onclick={(e) => e.stopPropagation()} onkeydown={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+      {#if showOverwriteConfirm}
+        <div class="modal-title">Overwrite Project?</div>
+        <div class="modal-message">A project named "{saveNameInput}" already exists.</div>
+        <div class="modal-buttons">
+          <button class="modal-button" onclick={() => showOverwriteConfirm = false}>Cancel</button>
+          <button class="modal-button confirm" onclick={doSave}>Overwrite</button>
+        </div>
+      {:else}
+        <div class="modal-title">Save Snapshot</div>
+        <input
+          bind:this={saveInputElement}
+          type="text"
+          class="modal-input"
+          placeholder="Project name..."
+          bind:value={saveNameInput}
+          onkeydown={handleSaveKeydown}
+        />
+        <div class="modal-buttons">
+          <button class="modal-button" onclick={closeSaveModal}>Cancel</button>
+          <button class="modal-button confirm" onclick={handleSaveSubmit}>Save</button>
+        </div>
+      {/if}
+    </div>
+  </div>
+{/if}
 
 <style>
   .topbar {
@@ -490,5 +566,100 @@
     font-family: monospace;
     font-size: 11px;
     font-weight: 500;
+  }
+
+  .save-btn {
+    background: none;
+    border: none;
+    color: var(--colors-text-secondary, #888);
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    transition: color 0.2s;
+  }
+
+  .save-btn:hover {
+    color: var(--colors-accent, #0e639c);
+  }
+
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal {
+    background: var(--colors-background, #1e1e1e);
+    border: 1px solid var(--colors-border, #333);
+    padding: 20px;
+    min-width: 300px;
+  }
+
+  .modal-title {
+    font-family: monospace;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--colors-text, #fff);
+    margin-bottom: 16px;
+  }
+
+  .modal-message {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--colors-text-secondary, #888);
+    margin-bottom: 16px;
+  }
+
+  .modal-input {
+    width: 100%;
+    box-sizing: border-box;
+    font-family: monospace;
+    font-size: 13px;
+    padding: 8px;
+    background: var(--colors-surface, #2d2d2d);
+    border: 1px solid var(--colors-border, #333);
+    color: var(--colors-text, #fff);
+    margin-bottom: 16px;
+  }
+
+  .modal-input:focus {
+    outline: none;
+    border-color: var(--colors-accent, #0e639c);
+  }
+
+  .modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .modal-button {
+    font-family: monospace;
+    font-size: 12px;
+    padding: 6px 12px;
+    background: none;
+    border: 1px solid var(--colors-border, #333);
+    color: var(--colors-text-secondary, #888);
+    cursor: pointer;
+  }
+
+  .modal-button:hover {
+    border-color: var(--colors-accent, #0e639c);
+    color: var(--colors-text, #fff);
+  }
+
+  .modal-button.confirm {
+    background: var(--colors-accent, #0e639c);
+    border-color: var(--colors-accent, #0e639c);
+    color: var(--colors-background, #1e1e1e);
+  }
+
+  .modal-button.confirm:hover {
+    opacity: 0.9;
   }
 </style>

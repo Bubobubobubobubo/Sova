@@ -131,7 +131,7 @@
 		if (!state) return 'none';
 		if (state === 'NotCompiled') return 'none';
 		if (state === 'Compiling') return 'compiling';
-		if (state === 'Compiled') return 'compiled';
+		if (state === 'Compiled' || state === 'Parsed') return 'compiled';
 		if (typeof state === 'object' && 'Error' in state) return 'error';
 		return 'none';
 	}
@@ -378,6 +378,8 @@
 		font-size: 10px;
 		font-family: monospace;
 		padding: 2px 4px;
+		user-select: text;
+		-webkit-user-select: text;
 	}
 
 	.prop-input.name {
@@ -488,5 +490,7 @@
 
 	:global(.editor-container .cm-editor) {
 		height: 100%;
+		user-select: text;
+		-webkit-user-select: text;
 	}
 </style>

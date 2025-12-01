@@ -50,6 +50,7 @@ export type CompilationState =
 	| 'NotCompiled'
 	| 'Compiling'
 	| 'Compiled'
+	| 'Parsed'
 	| { Error: CompilationError };
 
 // Script

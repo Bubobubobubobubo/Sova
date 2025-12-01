@@ -277,10 +277,18 @@
 		const frame = line.frames[frameIdx];
 		if (!frame) return;
 		const duration = getDuration(frame);
+
+		// Get the clip's actual edge position, not the mouse click position
+		// This prevents "teleportation" when clicking within the resize handle area
+		const clipElement = timelineContainer?.querySelector(`[data-clip="${lineIdx}-${frameIdx}"]`);
+		if (!clipElement) return;
+		const clipRect = clipElement.getBoundingClientRect();
+		const edgePos = isVertical ? clipRect.bottom : clipRect.right;
+
 		resizing = {
 			lineIdx,
 			frameIdx,
-			startPos: isVertical ? event.clientY : event.clientX,
+			startPos: edgePos,
 			startDuration: duration,
 			previewDuration: duration
 		};

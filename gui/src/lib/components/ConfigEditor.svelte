@@ -158,5 +158,7 @@
 
   :global(.cm-editor) {
     height: 100%;
+    user-select: text;
+    -webkit-user-select: text;
   }
 </style>
