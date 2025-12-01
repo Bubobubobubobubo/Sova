@@ -30,7 +30,7 @@ pub use action_timing::ActionTiming;
 pub use message::SchedulerMessage;
 pub use notification::SovaNotification;
 
-pub const SCHEDULED_DRIFT: SyncTime = 15_000;
+pub const SCHEDULED_DRIFT: SyncTime = 20_000;
 pub const SCHEDULER_ACTIVE_WAITING_SWITCH: SyncTime = 100;
 
 pub struct Scheduler {
