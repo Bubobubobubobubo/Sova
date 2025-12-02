@@ -48,21 +48,21 @@
             </button>
 
             <div class="content">
-                <img src="/logo.png" alt="Sova logo" class="logo" />
+                <img src="/sova_logo.jpg" alt="Sova logo" class="logo" />
 
                 <h1 id="about-title" class="title">Sova</h1>
                 <span class="version">v0.1.0</span>
 
                 <p class="description">
-                    Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed
-                    do eiusmod tempor incididunt ut labore et dolore magna
-                    aliqua.
+                    Sova is a Rust-based live coding environment. Sova is an
+                    instrument that is yours to modify. It is a free and
+                    open-source tool. Live code, have fun!
                 </p>
 
                 <div class="team">
                     <span class="label">Team</span>
                     <div class="names">
-                        <span>Raphaël Maurice Forment</span>
+                        <span>Raphaël Forment</span>
                         <span>Loïg Jezequel</span>
                         <span>Tanguy Dubois</span>
                     </div>
