@@ -151,7 +151,7 @@ jobs:
         working-directory: gui
 
       - name: Build Tauri app
-        run: pnpm tauri build --target ${{ matrix.target }} --ci
+        run: pnpm tauri build --target ${{ matrix.target }} --config src-tauri/tauri.ci.conf.json
         working-directory: gui
 
       - name: Upload macOS DMG
