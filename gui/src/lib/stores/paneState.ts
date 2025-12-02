@@ -51,6 +51,17 @@ export const paneDragState = {
   },
 };
 
+const {
+  subscribe: activePaneSubscribe,
+  set: setActivePaneId,
+  update: updateActivePaneId,
+} = writable<string | null>(null);
+
+export const activePaneId = {
+  subscribe: activePaneSubscribe,
+  set: setActivePaneId,
+};
+
 function generateId(): string {
   return crypto.randomUUID();
 }

@@ -7,6 +7,7 @@
     import TopBar from "$lib/components/TopBar.svelte";
     import PaneLayout from "$lib/components/panes/PaneLayout.svelte";
     import HelpMode from "$lib/components/HelpMode.svelte";
+    import CommandPalette from "$lib/components/CommandPalette.svelte";
     import {
         initializeApp,
         cleanupApp,
@@ -15,6 +16,7 @@
     } from "$lib/stores";
     import { isConnected } from "$lib/stores/connectionState";
     import type { UnlistenFn } from "@tauri-apps/api/event";
+    import "$lib/commands";
 
     let unlistenCloseRequest: UnlistenFn | null = null;
 
@@ -67,9 +69,9 @@
             <PaneLayout />
         </div>
     </div>
+    <HelpMode />
+    <CommandPalette />
 </ThemeProvider>
-
-<HelpMode />
 
 <style>
     :global(html),

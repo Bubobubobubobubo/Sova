@@ -140,6 +140,14 @@
         userOverride = false;
     }
 
+    // Handle zoom command from command palette
+    function handleSetZoom(event: Event) {
+        const zoom = (event as CustomEvent<number>).detail;
+        if (zoom >= MIN_ZOOM && zoom <= MAX_ZOOM) {
+            viewport.zoom = zoom;
+        }
+    }
+
     onMount(async () => {
         registerToolbar?.(toolbarSnippet);
 
@@ -155,6 +163,7 @@
         resizeObserver.observe(containerEl);
 
         window.addEventListener("project:loaded", handleProjectLoaded);
+        window.addEventListener("command:set-zoom", handleSetZoom);
 
         unlistenFns.push(
             await listen<RemoveFramePayload>(
@@ -194,6 +203,7 @@
         unlistenFns.forEach((fn) => fn());
         resizeObserver?.disconnect();
         window.removeEventListener("project:loaded", handleProjectLoaded);
+        window.removeEventListener("command:set-zoom", handleSetZoom);
     });
 </script>
 

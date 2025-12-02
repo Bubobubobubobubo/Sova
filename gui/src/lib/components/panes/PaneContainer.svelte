@@ -3,6 +3,7 @@
     import {
         paneLayout,
         paneDragState,
+        activePaneId,
         type ViewType,
     } from "$lib/stores/paneState";
     import ViewSelector from "./ViewSelector.svelte";
@@ -29,6 +30,10 @@
 
     // Check if this pane is being dragged
     let isDragSource = $derived($paneDragState?.paneId === paneId);
+
+    function handlePaneClick() {
+        activePaneId.set(paneId);
+    }
 
     const viewTitles: Record<ViewType, string> = {
         LOGIN: "Login",
@@ -163,7 +168,7 @@
     });
 </script>
 
-<div class="pane-container">
+<div class="pane-container" onclick={handlePaneClick}>
     <div
         class="pane-header"
         class:drag-source={isDragSource}

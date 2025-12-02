@@ -45,6 +45,34 @@
             : 0,
     );
 
+    $effect(() => {
+        function handleEditNickname() {
+            if ($isConnected && $runtimeNickname) {
+                startEditingNickname();
+            }
+        }
+
+        function handleOpenSaveModal() {
+            if ($isConnected) {
+                openSaveModal();
+            }
+        }
+
+        window.addEventListener("command:edit-nickname", handleEditNickname);
+        window.addEventListener("command:open-save-modal", handleOpenSaveModal);
+
+        return () => {
+            window.removeEventListener(
+                "command:edit-nickname",
+                handleEditNickname,
+            );
+            window.removeEventListener(
+                "command:open-save-modal",
+                handleOpenSaveModal,
+            );
+        };
+    });
+
     async function handleDisconnect() {
         try {
             await invoke("disconnect_client");
