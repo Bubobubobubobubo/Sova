@@ -1,6 +1,6 @@
-# Tauri + SvelteKit + TypeScript
+# Sova GUI
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+A featureful GUI for the Sova server designed to be the main user facing interface.
 
 ## Recommended IDE Setup
 
