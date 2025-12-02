@@ -1,6 +1,0 @@
-{{- $style := default "default" (.Get "style") -}}
-<span class="book-badge {{ $style }}">
-  {{- with .Get "title" -}}<span class="book-badge-title">{{ . | plainify }}</span>{{- end -}}
-  {{- with .Get "value" -}}<span class="book-badge-value">{{ . | plainify }}</span>{{- end -}}
-</span>
-{{- /* remove whitespaces */ -}}

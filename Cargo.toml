@@ -2,7 +2,6 @@
 members = [
     "core",
     "engine",
-    "relay",
     "gui/src-tauri",
     "solo-tui",
 ]

@@ -1,7 +1,0 @@
-# Languages
-
-The core concept of Sova is that musicians should not be limited to using a single programming language for live coding. They should not be confronted to a language that offers only a single mental model of how music should be structured, thought about, modelled, written, etc. Instead, Sova is designed to be a multi-language environment, where different languages can be designed or used for different purposes, and where new languages can be easily added. Sova is thus a polyglot environment, designed to host multiple compilers and interpreters. These compilers and interpreters should be designed to leverage the runtime offered by Sova.
-
-Think of Sova Core as a virtual machine specialized in executing musical programs with great temporal accuracy and baked-in support for various communication protocols, timing synchronization, multi-user collaboration, etc. Sova Core does not provide a programming language, but a runtime environment for musical programs. It is up to the languages and their designers to provide the syntax, semantics, and abstractions that will be used by musicians to write their code.
-
-There are currently two demonstration languages available in Sova: [BaLi](bali.md) made by Loïg Jezequel and [Boinx](boinx.md) made by Tanguy Dubois.
