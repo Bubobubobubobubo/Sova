@@ -13,6 +13,8 @@ mod boinx_item;
 mod condition;
 mod arithmetic;
 
+pub mod funcs;
+
 pub use compo::*;
 pub use identity::*;
 pub use boinx_item::*;
@@ -157,7 +159,7 @@ impl From<VariableValue> for BoinxProg {
         let Some(VariableValue::Integer(len)) = map.remove("_len") else {
             return Self::default();
         };
-        let mut prog: Vec<BoinxStatement> = Vec::new();
+        let mut prog: Vec<BoinxStatement> = Vec::with_capacity(len as usize);
         for i in 0..len {
             let index = i.to_string();
             let Some(item) = map.remove(&index) else {
