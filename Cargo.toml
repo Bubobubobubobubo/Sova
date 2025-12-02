@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "core",
-    "engine",
     "gui/src-tauri",
     "solo-tui",
 ]
