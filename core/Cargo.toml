@@ -41,15 +41,5 @@ path = "src/lib.rs"
 name = "sova_server"
 path = "src/main.rs"
 
-[profile.release]
-opt-level = 3
-lto = "fat"
-codegen-units = 1
-panic = "unwind"
-strip = true
-
-[profile.dev]
-opt-level = 3
-
 [dev-dependencies]
 tempfile = "3.0"

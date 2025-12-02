@@ -5,3 +5,13 @@ members = [
     "solo-tui",
 ]
 resolver = "3"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "unwind"
+strip = true
+
+[profile.dev]
+opt-level = 3
