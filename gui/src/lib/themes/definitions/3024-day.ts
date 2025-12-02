@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const _3024Day: Theme = {
   "name": "3024 Day",

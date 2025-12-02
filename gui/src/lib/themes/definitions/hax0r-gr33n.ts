@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const HaX0RGr33N: Theme = {
   "name": "HaX0R Gr33N",

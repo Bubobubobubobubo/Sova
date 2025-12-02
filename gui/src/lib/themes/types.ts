@@ -1,3 +1,4 @@
+/** Complete theme definition including UI colors, editor styling, syntax highlighting, and ANSI terminal colors. */
 export interface Theme {
   name: string;
   colors: {
@@ -62,6 +63,7 @@ export interface Theme {
   };
 }
 
+/** Represents a font available for selection in the UI. */
 export interface FontOption {
   value: string;
   label: string;
@@ -69,25 +71,26 @@ export interface FontOption {
 }
 
 export const bundledFonts: FontOption[] = [
-  { value: 'Departure Mono', label: 'Departure Mono', isBundled: true },
-  { value: 'Victor Mono', label: 'Victor Mono', isBundled: true },
-  { value: 'Space Mono', label: 'Space Mono', isBundled: true },
-  { value: 'IBM Plex Mono', label: 'IBM Plex Mono', isBundled: true },
-  { value: 'Comic Mono', label: 'Comic Mono', isBundled: true },
-  { value: 'JGS5', label: 'JGS5 (ASCII Art)', isBundled: true },
-  { value: 'JGS7', label: 'JGS7 (ASCII Art)', isBundled: true },
-  { value: 'PICO-8', label: 'PICO-8', isBundled: true },
-  { value: 'monospace', label: 'System Monospace', isBundled: true },
+  { value: "Departure Mono", label: "Departure Mono", isBundled: true },
+  { value: "Victor Mono", label: "Victor Mono", isBundled: true },
+  { value: "Space Mono", label: "Space Mono", isBundled: true },
+  { value: "IBM Plex Mono", label: "IBM Plex Mono", isBundled: true },
+  { value: "Comic Mono", label: "Comic Mono", isBundled: true },
+  { value: "JGS5", label: "JGS5 (ASCII Art)", isBundled: true },
+  { value: "JGS7", label: "JGS7 (ASCII Art)", isBundled: true },
+  { value: "PICO-8", label: "PICO-8", isBundled: true },
+  { value: "monospace", label: "System Monospace", isBundled: true },
 ];
 
 export const fontFamilies = bundledFonts;
 
+/** Merges bundled fonts with system fonts, excluding duplicates. */
 export function combineWithSystemFonts(systemFonts: string[]): FontOption[] {
-  const bundledFontValues = new Set(bundledFonts.map(f => f.value));
+  const bundledFontValues = new Set(bundledFonts.map((f) => f.value));
 
   const systemFontOptions: FontOption[] = systemFonts
-    .filter(name => !bundledFontValues.has(name))
-    .map(name => ({ value: name, label: name, isBundled: false }));
+    .filter((name) => !bundledFontValues.has(name))
+    .map((name) => ({ value: name, label: name, isBundled: false }));
 
   return [...bundledFonts, ...systemFontOptions];
 }

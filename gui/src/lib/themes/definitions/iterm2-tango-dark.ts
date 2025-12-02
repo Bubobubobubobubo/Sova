@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const iTerm2TangoDark: Theme = {
   "name": "iTerm2 Tango Dark",

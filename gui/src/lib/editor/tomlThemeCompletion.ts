@@ -1,7 +1,12 @@
-import type { CompletionContext, CompletionResult } from '@codemirror/autocomplete';
-import { themes } from '$lib/themes';
+import type {
+  CompletionContext,
+  CompletionResult,
+} from "@codemirror/autocomplete";
+import { themes } from "$lib/themes";
 
-export function tomlThemeCompletion(context: CompletionContext): CompletionResult | null {
+export function tomlThemeCompletion(
+  context: CompletionContext,
+): CompletionResult | null {
   const line = context.state.doc.lineAt(context.pos);
   const textBefore = line.text.slice(0, context.pos - line.from);
 
@@ -13,14 +18,16 @@ export function tomlThemeCompletion(context: CompletionContext): CompletionResul
 
   const themeNames = Object.keys(themes);
   const filtered = typed
-    ? themeNames.filter(name => name.toLowerCase().startsWith(typed.toLowerCase()))
+    ? themeNames.filter((name) =>
+        name.toLowerCase().startsWith(typed.toLowerCase()),
+      )
     : themeNames;
 
   return {
     from: startPos,
-    options: filtered.map(name => ({
+    options: filtered.map((name) => ({
       label: name,
-      type: 'constant'
-    }))
+      type: "constant",
+    })),
   };
 }

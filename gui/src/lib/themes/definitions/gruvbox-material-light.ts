@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const GruvboxMaterialLight: Theme = {
   "name": "Gruvbox Material Light",

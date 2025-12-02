@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const BlackMetalBathory: Theme = {
   "name": "Black Metal (Bathory)",

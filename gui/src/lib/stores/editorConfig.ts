@@ -1,5 +1,5 @@
 export interface EditorConfig {
-  mode: 'vim' | 'normal' | 'emacs';
+  mode: "vim" | "normal" | "emacs";
   font_size: number;
   font_family?: string;
   show_line_numbers: boolean;

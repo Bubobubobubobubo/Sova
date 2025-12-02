@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const IBM5153CGABlack: Theme = {
   "name": "IBM 5153 CGA (Black)",

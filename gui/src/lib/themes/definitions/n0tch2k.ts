@@ -1,4 +1,4 @@
-import type { Theme } from '../../types.js';
+import type { Theme } from '../types';
 
 export const N0Tch2K: Theme = {
   "name": "N0Tch2K",

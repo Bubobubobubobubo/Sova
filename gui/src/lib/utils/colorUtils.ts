@@ -1,15 +1,22 @@
+/**
+ * Converts a hex color to an rgba string with the specified alpha.
+ */
 export function hexToRgba(color: string, alpha: number): string {
-  const hex = color.replace('#', '');
+  const hex = color.replace("#", "");
   const r = parseInt(hex.substring(0, 2), 16);
   const g = parseInt(hex.substring(2, 4), 16);
   const b = parseInt(hex.substring(4, 6), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+/**
+ * Rotates the hue of a hex color by the specified degrees.
+ * Converts hex to HSL, shifts the hue, and converts back to hex.
+ */
 export function rotateHue(hex: string, degrees: number): string {
   if (degrees === 0) return hex;
 
-  const color = hex.replace('#', '');
+  const color = hex.replace("#", "");
   const r = parseInt(color.substring(0, 2), 16) / 255;
   const g = parseInt(color.substring(2, 4), 16) / 255;
   const b = parseInt(color.substring(4, 6), 16) / 255;
@@ -53,18 +60,29 @@ export function rotateHue(hex: string, degrees: number): string {
   const newG = Math.round(hue2rgb(p, q, h) * 255);
   const newB = Math.round(hue2rgb(p, q, h - 1 / 3) * 255);
 
-  return `#${newR.toString(16).padStart(2, '0')}${newG.toString(16).padStart(2, '0')}${newB.toString(16).padStart(2, '0')}`;
+  return `#${newR
+    .toString(16)
+    .padStart(
+      2,
+      "0",
+    )}${newG.toString(16).padStart(2, "0")}${newB.toString(16).padStart(2, "0")}`;
 }
 
+/**
+ * Recursively transforms all hex color strings in an object by rotating their hue.
+ */
 export function transformThemeColors<T>(obj: T, hue: number): T {
   if (hue === 0) return obj;
-  if (typeof obj === 'string' && obj.startsWith('#')) {
+  if (typeof obj === "string" && obj.startsWith("#")) {
     return rotateHue(obj, hue) as T;
   }
-  if (typeof obj === 'object' && obj !== null) {
+  if (typeof obj === "object" && obj !== null) {
     const result: Record<string, unknown> = {};
     for (const key in obj) {
-      result[key] = transformThemeColors((obj as Record<string, unknown>)[key], hue);
+      result[key] = transformThemeColors(
+        (obj as Record<string, unknown>)[key],
+        hue,
+      );
     }
     return result as T;
   }
