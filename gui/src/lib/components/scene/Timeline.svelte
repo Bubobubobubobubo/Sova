@@ -22,7 +22,7 @@
         removeLine,
         addFrame,
         removeFrame,
-        ActionTimingFactory,
+        ActionTiming,
     } from "$lib/api/client";
     import type { Frame, Line } from "$lib/types/protocol";
     import Track from "./Track.svelte";
@@ -220,7 +220,7 @@
 
         if (updates.length > 0) {
             try {
-                await setFrames(updates, ActionTimingFactory.immediate());
+                await setFrames(updates, ActionTiming.immediate());
             } catch (error) {
                 console.error("Failed to apply solo/mute effects:", error);
             }
@@ -408,7 +408,7 @@
             try {
                 await setFrames(
                     [[resizing.lineIdx, resizing.frameIdx, updatedFrame]],
-                    ActionTimingFactory.immediate(),
+                    ActionTiming.immediate(),
                 );
             } catch (error) {
                 console.error("Failed to update frame duration:", error);
@@ -1001,7 +1001,7 @@
         try {
             await setFrames(
                 [[lineIdx, frameIdx, updatedFrame]],
-                ActionTimingFactory.immediate(),
+                ActionTiming.immediate(),
             );
         } catch (error) {
             console.error("Failed to adjust duration:", error);
@@ -1028,7 +1028,7 @@
         try {
             await setFrames(
                 [[lineIdx, frameIdx, updatedFrame]],
-                ActionTimingFactory.immediate(),
+                ActionTiming.immediate(),
             );
         } catch (error) {
             console.error("Failed to toggle enabled:", error);
@@ -1048,7 +1048,7 @@
         }
         if (updates.length > 0) {
             try {
-                await setFrames(updates, ActionTimingFactory.immediate());
+                await setFrames(updates, ActionTiming.immediate());
             } catch (error) {
                 console.error("Failed to re-evaluate scene:", error);
             }
@@ -1104,7 +1104,7 @@
                                     updatedFrame,
                                 ],
                             ],
-                            ActionTimingFactory.immediate(),
+                            ActionTiming.immediate(),
                         );
                     } catch (error) {
                         console.error("Failed to update duration:", error);
@@ -1163,7 +1163,7 @@
                                     updatedFrame,
                                 ],
                             ],
-                            ActionTimingFactory.immediate(),
+                            ActionTiming.immediate(),
                         );
                     } catch (error) {
                         console.error("Failed to update repetitions:", error);
@@ -1219,7 +1219,7 @@
                                 updatedFrame,
                             ],
                         ],
-                        ActionTimingFactory.immediate(),
+                        ActionTiming.immediate(),
                     );
                 } catch (error) {
                     console.error("Failed to update name:", error);

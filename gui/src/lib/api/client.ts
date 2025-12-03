@@ -7,7 +7,7 @@ import type {
   Frame,
 } from "$lib/types/protocol";
 
-export const ActionTimingFactory = {
+export const ActionTiming = {
   immediate: (): ActionTiming => "Immediate",
   endOfLine: (lineId: number): ActionTiming => ({ EndOfLine: lineId }),
   atBeat: (beat: number): ActionTiming => ({ AtBeat: beat }),

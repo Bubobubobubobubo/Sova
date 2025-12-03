@@ -89,8 +89,6 @@
     :global(*) {
         -ms-overflow-style: none;
         scrollbar-width: none;
-        user-select: none;
-        -webkit-user-select: none;
     }
 
     .app {
