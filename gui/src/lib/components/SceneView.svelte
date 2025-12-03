@@ -17,6 +17,7 @@
     import SplitPane from "./SplitPane.svelte";
     import Timeline from "./scene/Timeline.svelte";
     import FrameEditor from "./scene/FrameEditor.svelte";
+    import { snapGranularity, SNAP_OPTIONS } from "$lib/stores/snapGranularity";
 
     const TIMELINE_ORIENTATION_KEY = "sova-timeline-orientation";
 
@@ -240,6 +241,18 @@
                 </button>
             {/if}
         </div>
+        <div class="snap-controls" data-help-id="scene-snap-granularity">
+            {#each SNAP_OPTIONS as opt}
+                <button
+                    class="snap-btn"
+                    class:active={$snapGranularity === opt.value}
+                    onclick={() => snapGranularity.set(opt.value)}
+                    title="Snap to {opt.label} beat"
+                >
+                    {opt.label}
+                </button>
+            {/each}
+        </div>
         <button
             class="toolbar-btn"
             data-help-id="scene-timeline-orientation"
@@ -357,5 +370,37 @@
     .toolbar-btn:disabled {
         opacity: 0.3;
         cursor: not-allowed;
+    }
+
+    .snap-controls {
+        display: flex;
+        align-items: center;
+        gap: 0;
+    }
+
+    .snap-btn {
+        background: none;
+        border: 1px solid var(--colors-border);
+        color: var(--colors-text-secondary);
+        padding: 4px 6px;
+        cursor: pointer;
+        font-size: 10px;
+        font-family: monospace;
+        min-width: 28px;
+    }
+
+    .snap-btn:not(:first-child) {
+        border-left: none;
+    }
+
+    .snap-btn:hover {
+        border-color: var(--colors-accent);
+        color: var(--colors-accent);
+    }
+
+    .snap-btn.active {
+        background-color: var(--colors-accent);
+        border-color: var(--colors-accent);
+        color: var(--colors-background);
     }
 </style>

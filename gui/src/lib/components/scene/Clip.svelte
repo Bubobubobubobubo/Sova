@@ -14,7 +14,7 @@
         editingDuration: { value: string } | null;
         onClick: (e: MouseEvent) => void;
         onDoubleClick: () => void;
-        onResizeStart: (e: MouseEvent) => void;
+        onResizeStart: (e: PointerEvent) => void;
         onDurationEditStart: (e: MouseEvent) => void;
         onDurationInput: (e: Event) => void;
         onDurationKeydown: (e: KeyboardEvent) => void;
@@ -30,6 +30,7 @@
         onNameKeydown: (e: KeyboardEvent) => void;
         onNameBlur: () => void;
         onDragStart?: () => void;
+        onToggleEnabled: () => void;
     }
 
     let {
@@ -60,6 +61,7 @@
         onNameKeydown,
         onNameBlur,
         onDragStart,
+        onToggleEnabled,
     }: Props = $props();
 
     // Drag initiation with threshold
@@ -158,9 +160,21 @@
     {#if isCompact}
         <!-- Compact: stacked centered layout -->
         <div class="clip-content">
-            {#if showLangCompact}
-                <span class="clip-lang">{clipLang}</span>
-            {/if}
+            <div class="compact-header">
+                <input
+                    type="checkbox"
+                    class="enable-checkbox"
+                    checked={frame.enabled !== false}
+                    onclick={(e) => {
+                        e.stopPropagation();
+                        onToggleEnabled();
+                    }}
+                    title="Enable/disable (e)"
+                />
+                {#if showLangCompact}
+                    <span class="clip-lang">{clipLang}</span>
+                {/if}
+            </div>
             {#if editingName}
                 <input
                     class="name-input"
@@ -226,6 +240,16 @@
     {:else}
         <!-- Normal: 4-corners layout -->
         <div class="clip-top">
+            <input
+                type="checkbox"
+                class="enable-checkbox"
+                checked={frame.enabled !== false}
+                onclick={(e) => {
+                    e.stopPropagation();
+                    onToggleEnabled();
+                }}
+                title="Enable/disable (e)"
+            />
             <span class="clip-lang">{clipLang}</span>
         </div>
         <div class="clip-center">
@@ -295,7 +319,7 @@
     <div
         class="resize-handle"
         class:vertical={ctx.isVertical}
-        onmousedown={onResizeStart}
+        onpointerdown={onResizeStart}
     ></div>
 </div>
 
@@ -357,7 +381,7 @@
     /* Normal layout: 4-corners */
     .clip-top {
         display: flex;
-        justify-content: flex-end;
+        justify-content: space-between;
         align-items: center;
         width: 100%;
     }
@@ -387,6 +411,45 @@
         gap: 2px;
         width: 100%;
         overflow: hidden;
+    }
+
+    .compact-header {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .enable-checkbox {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 10px;
+        height: 10px;
+        border: 1px solid var(--colors-border);
+        background-color: var(--colors-background);
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .enable-checkbox:checked {
+        background-color: var(--colors-accent);
+        border-color: var(--colors-accent);
+    }
+
+    .enable-checkbox:checked::after {
+        content: "";
+        position: absolute;
+        left: 2px;
+        top: 0px;
+        width: 3px;
+        height: 6px;
+        border: solid var(--colors-background);
+        border-width: 0 1.5px 1.5px 0;
+        transform: rotate(45deg);
+    }
+
+    .enable-checkbox:hover {
+        border-color: var(--colors-accent);
     }
 
     .clip-name {

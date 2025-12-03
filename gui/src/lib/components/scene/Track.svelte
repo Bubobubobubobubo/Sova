@@ -15,7 +15,7 @@
         onAddClip: () => void;
         onClipClick: (frameIdx: number, e: MouseEvent) => void;
         onClipDoubleClick: (frameIdx: number) => void;
-        onResizeStart: (frameIdx: number, e: MouseEvent) => void;
+        onResizeStart: (frameIdx: number, e: PointerEvent) => void;
         onLineResizeStart: (e: MouseEvent) => void;
         onDurationEditStart: (frameIdx: number, e: MouseEvent) => void;
         editingDuration: { frameIdx: number; value: string } | null;
@@ -40,6 +40,7 @@
         isMuted: boolean;
         dropIndicatorIdx: number | null;
         onClipDragStart: (frameIdx: number) => void;
+        onToggleEnabled: (frameIdx: number) => void;
     }
 
     let {
@@ -78,6 +79,7 @@
         isMuted,
         dropIndicatorIdx,
         onClipDragStart,
+        onToggleEnabled,
     }: Props = $props();
 
     const ctx = getTimelineContext();
@@ -233,6 +235,7 @@
                 {onNameKeydown}
                 {onNameBlur}
                 onDragStart={() => onClipDragStart(frameIdx)}
+                onToggleEnabled={() => onToggleEnabled(frameIdx)}
             />
         {/each}
 

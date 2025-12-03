@@ -1,6 +1,6 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    import { Plus } from "lucide-svelte";
+    import { Plus, RefreshCw } from "lucide-svelte";
     import { scene, framePositions, isPlaying } from "$lib/stores";
     import {
         selection,
@@ -26,6 +26,7 @@
     import type { Frame, Line } from "$lib/types/protocol";
     import Track from "./Track.svelte";
     import { createTimelineContext } from "./context.svelte";
+    import { snapGranularity } from "$lib/stores/snapGranularity";
 
     interface Props {
         viewport: { zoom: number; orientation: "horizontal" | "vertical" };
@@ -49,8 +50,6 @@
     const BASE_PIXELS_PER_BEAT = 60;
     const BASE_TRACK_SIZE = 72;
     const RULER_SIZE = 28;
-    const DURATION_SNAP = 0.25;
-    const DURATION_SNAP_FINE = 0.125;
 
     // Derived dimensions (local for use in this component)
     const pixelsPerBeat = $derived(BASE_PIXELS_PER_BEAT * viewport.zoom);
@@ -333,7 +332,7 @@
     }
 
     // Resize handlers - fully reactive, no DOM manipulation
-    function startResize(lineIdx: number, frameIdx: number, event: MouseEvent) {
+    function startResize(lineIdx: number, frameIdx: number, event: PointerEvent) {
         event.stopPropagation();
         event.preventDefault();
         if (!$scene) return;
@@ -343,34 +342,32 @@
         if (!frame) return;
         const duration = getDuration(frame);
 
-        // Get the clip's actual edge position, not the mouse click position
-        // This prevents "teleportation" when clicking within the resize handle area
-        const clipElement = timelineContainer?.querySelector(
-            `[data-clip="${lineIdx}-${frameIdx}"]`,
-        );
-        if (!clipElement) return;
-        const clipRect = clipElement.getBoundingClientRect();
-        const edgePos = isVertical ? clipRect.bottom : clipRect.right;
+        // Capture mouse position at drag start - delta-based calculation
+        const startPos = isVertical ? event.clientY : event.clientX;
 
         resizing = {
             lineIdx,
             frameIdx,
-            startPos: edgePos,
+            startPos,
             startDuration: duration,
             previewDuration: duration,
         };
-        window.addEventListener("mousemove", handleResizeMove);
-        window.addEventListener("mouseup", handleResizeEnd);
+
+        // Use pointer capture for reliable event tracking
+        (event.target as HTMLElement).setPointerCapture(event.pointerId);
+
+        window.addEventListener("pointermove", handleResizeMove);
+        window.addEventListener("pointerup", handleResizeEnd);
     }
 
-    function handleResizeMove(event: MouseEvent) {
+    function handleResizeMove(event: PointerEvent) {
         if (!resizing || !$scene) return;
         const line = $scene.lines[resizing.lineIdx];
         if (!line) return;
         const frame = line.frames[resizing.frameIdx];
         if (!frame) return;
 
-        const snap = event.shiftKey ? DURATION_SNAP_FINE : DURATION_SNAP;
+        const snap = event.shiftKey ? $snapGranularity / 2 : $snapGranularity;
         const currentPos = isVertical ? event.clientY : event.clientX;
         const delta = currentPos - resizing.startPos;
         const reps = getReps(frame);
@@ -384,9 +381,9 @@
         resizing = { ...resizing, previewDuration: newDuration };
     }
 
-    async function handleResizeEnd(event: MouseEvent) {
-        window.removeEventListener("mousemove", handleResizeMove);
-        window.removeEventListener("mouseup", handleResizeEnd);
+    async function handleResizeEnd(event: PointerEvent) {
+        window.removeEventListener("pointermove", handleResizeMove);
+        window.removeEventListener("pointerup", handleResizeEnd);
 
         if (!resizing || !$scene) {
             resizing = null;
@@ -947,7 +944,7 @@
                 adjustDuration(
                     lineIdx,
                     frameIdx,
-                    event.shiftKey ? DURATION_SNAP_FINE : DURATION_SNAP,
+                    event.shiftKey ? $snapGranularity / 2 : $snapGranularity,
                 );
                 break;
             case "-":
@@ -956,7 +953,7 @@
                 adjustDuration(
                     lineIdx,
                     frameIdx,
-                    event.shiftKey ? -DURATION_SNAP_FINE : -DURATION_SNAP,
+                    event.shiftKey ? -$snapGranularity / 2 : -$snapGranularity,
                 );
                 break;
             case " ":
@@ -975,6 +972,11 @@
                 event.preventDefault();
                 insertNewFrameAfter(lineIdx, frameIdx);
                 break;
+            case "e":
+            case "E":
+                event.preventDefault();
+                toggleEnabled(lineIdx, frameIdx);
+                break;
         }
     }
 
@@ -988,9 +990,9 @@
         if (!frame) return;
 
         const minDuration =
-            Math.abs(delta) < DURATION_SNAP
-                ? DURATION_SNAP_FINE
-                : DURATION_SNAP;
+            Math.abs(delta) < $snapGranularity
+                ? $snapGranularity / 2
+                : $snapGranularity;
         const newDuration = Math.max(minDuration, getDuration(frame) + delta);
         const updatedFrame = { ...frame, duration: newDuration };
         try {
@@ -1008,7 +1010,7 @@
         const frame = $scene.lines[lineIdx]?.frames[frameIdx];
         if (!frame) return;
 
-        const newEnabled = !frame.enabled;
+        const newEnabled = frame.enabled === false ? true : false;
         const updatedFrame = { ...frame, enabled: newEnabled };
 
         // Also update saved state if we have any solo/mute active
@@ -1027,6 +1029,26 @@
             );
         } catch (error) {
             console.error("Failed to toggle enabled:", error);
+        }
+    }
+
+    // Re-evaluate all frames in the scene (triggers server recompilation)
+    async function reEvaluateScene() {
+        if (!$scene) return;
+        const updates: [number, number, Frame][] = [];
+        for (let l = 0; l < $scene.lines.length; l++) {
+            for (let f = 0; f < $scene.lines[l].frames.length; f++) {
+                const frame = $scene.lines[l].frames[f];
+                // Touch the frame to trigger recompilation
+                updates.push([l, f, { ...frame }]);
+            }
+        }
+        if (updates.length > 0) {
+            try {
+                await setFrames(updates, ActionTiming.immediate());
+            } catch (error) {
+                console.error("Failed to re-evaluate scene:", error);
+            }
         }
     }
 
@@ -1057,7 +1079,7 @@
         if (event.key === "Enter") {
             event.preventDefault();
             event.stopPropagation();
-            const snap = event.shiftKey ? DURATION_SNAP_FINE : DURATION_SNAP;
+            const snap = event.shiftKey ? $snapGranularity / 2 : $snapGranularity;
             const parsed = parseFloat(editingDuration.value);
             if (!isNaN(parsed) && parsed > 0) {
                 const newDuration = Math.max(
@@ -1299,7 +1321,15 @@
                     ? `width: ${RULER_SIZE}px`
                     : `height: ${RULER_SIZE}px`}
             >
-                <div class="ruler-header" class:vertical={isVertical}></div>
+                <div class="ruler-header" class:vertical={isVertical}>
+                    <button
+                        class="re-eval-btn"
+                        onclick={reEvaluateScene}
+                        title="Re-evaluate all frames"
+                    >
+                        <RefreshCw size={12} />
+                    </button>
+                </div>
                 <div class="ruler-content">
                     {#each visibleBeatMarkers as beat}
                         <div
@@ -1364,6 +1394,8 @@
                     dropIndicatorIdx={getDropIndicatorIdx(lineIdx)}
                     onClipDragStart={(frameIdx) =>
                         handleClipDragStart(lineIdx, frameIdx)}
+                    onToggleEnabled={(frameIdx) =>
+                        toggleEnabled(lineIdx, frameIdx)}
                 />
             {/each}
 
@@ -1459,6 +1491,9 @@
         min-width: 70px;
         border-right: 1px solid var(--colors-border);
         box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: center;
     }
 
     .ruler-header.vertical {
@@ -1470,6 +1505,24 @@
         border-bottom: 1px solid var(--colors-border);
         box-sizing: border-box;
         padding: 8px 0;
+    }
+
+    .re-eval-btn {
+        background: none;
+        border: 1px solid var(--colors-border);
+        color: var(--colors-text-secondary);
+        padding: 4px;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.5;
+    }
+
+    .re-eval-btn:hover {
+        opacity: 1;
+        border-color: var(--colors-accent);
+        color: var(--colors-accent);
     }
 
     .ruler-content {
