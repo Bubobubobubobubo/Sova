@@ -28,6 +28,7 @@
     import Track from "./Track.svelte";
     import { createTimelineContext } from "./context.svelte";
     import { snapGranularity } from "$lib/stores/snapGranularity";
+    import { timelineUI } from "$lib/stores/timelineUI";
 
     interface Props {
         viewport: { zoom: number; orientation: "horizontal" | "vertical" };
@@ -111,8 +112,7 @@
     const ZOOM_THROTTLE_MS = 50;
     const ZOOM_SENSITIVITY = 0.012;
 
-    // Line width multipliers for resizable tracks (local UI state only)
-    let lineWidthMultipliers = new SvelteMap<number, number>();
+    // Line resize drag state
     let lineResizing: {
         lineIdx: number;
         startPos: number;
@@ -128,14 +128,14 @@
     const LINE_WIDTH_MAX = 3.0;
 
     function getLineWidth(lineIdx: number): number {
-        const multiplier = lineWidthMultipliers.get(lineIdx) ?? 1.0;
+        const multiplier = $timelineUI.lineWidthMultipliers[lineIdx] ?? 1.0;
         return BASE_TRACK_SIZE * viewport.zoom * multiplier;
     }
 
     function handleLineResizeStart(lineIdx: number, event: MouseEvent) {
         event.stopPropagation();
         event.preventDefault();
-        const multiplier = lineWidthMultipliers.get(lineIdx) ?? 1.0;
+        const multiplier = $timelineUI.lineWidthMultipliers[lineIdx] ?? 1.0;
         lineResizing = {
             lineIdx,
             startPos: isVertical ? event.clientX : event.clientY,
@@ -158,10 +158,7 @@
                 lineResizing.startMultiplier + deltaMultiplier,
             ),
         );
-        lineWidthMultipliers = new SvelteMap(lineWidthMultipliers).set(
-            lineResizing.lineIdx,
-            newMultiplier,
-        );
+        timelineUI.setLineWidth(lineResizing.lineIdx, newMultiplier);
     }
 
     function handleLineResizeEnd() {
