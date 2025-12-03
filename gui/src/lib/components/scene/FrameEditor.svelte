@@ -41,8 +41,15 @@
     let editorContainer: HTMLDivElement;
     let editorView: EditorView | null = null;
     let unsubscribe: (() => void) | null = null;
-    let selectedLang = $state<string>("");
     let isEvaluating = $state(false);
+
+    // Derive effective language from localEdits (if dirty) or frame (source of truth)
+    // This mirrors how duration/repetition work - always reflecting current frame
+    const effectiveLang = $derived.by(() => {
+        if (!frameKey) return "bali";
+        const localEdit = $localEdits.get(frameKey);
+        return localEdit?.lang ?? frame?.script?.lang ?? "bali";
+    });
     let evaluationPending = false; // Debounce flag
     let previousFrameKey: string | null = null;
 
@@ -77,7 +84,7 @@
         return EditorView.updateListener.of((update) => {
             if (update.docChanged && frameKey) {
                 const content = update.state.doc.toString();
-                setLocalEdit(frameKey, content, selectedLang);
+                setLocalEdit(frameKey, content, effectiveLang);
             }
         });
     }
@@ -107,7 +114,7 @@
         if (!editorContainer || !$editorConfig) return;
 
         if (!editorView) {
-            const langSupport = getLanguageSupport(selectedLang) ?? [];
+            const langSupport = getLanguageSupport(effectiveLang) ?? [];
             editorView = createEditor(
                 editorContainer,
                 "",
@@ -120,6 +127,7 @@
     });
 
     // Sync script content when frameKey changes (properties are always from server)
+    // Language is now derived via effectiveLang - no manual sync needed
     $effect(() => {
         if (!editorView || !frameKey) return;
 
@@ -131,19 +139,17 @@
             const localEdit = getLocalEdit(frameKey);
             if (localEdit) {
                 syncEditorContent(localEdit.content);
-                selectedLang = localEdit.lang;
             } else {
                 // Use server state
                 syncEditorContent(frame?.script?.content || "");
-                selectedLang = frame?.script?.lang || "bali";
             }
         }
     });
 
-    // Reconfigure language when selectedLang changes
+    // Reconfigure language when effectiveLang changes
     $effect(() => {
         if (!editorView) return;
-        const langSupport = getLanguageSupport(selectedLang) ?? [];
+        const langSupport = getLanguageSupport(effectiveLang) ?? [];
         reconfigureLanguage(editorView, langSupport);
     });
 
@@ -198,7 +204,7 @@
                 script: {
                     ...frame.script,
                     content,
-                    lang: selectedLang,
+                    lang: effectiveLang,
                 },
             };
 
@@ -221,9 +227,9 @@
         if (!frameKey) return;
 
         // Clear local script edit and re-sync from server
+        // Language will automatically derive from frame via effectiveLang
         clearLocalEdit(frameKey);
         syncEditorContent(frame?.script?.content || "");
-        selectedLang = frame?.script?.lang || "bali";
     }
 
     onDestroy(() => {
@@ -250,9 +256,8 @@
             <div class="header-content">
                 <Select
                     options={$availableLanguages}
-                    value={selectedLang}
+                    value={effectiveLang}
                     onchange={(lang) => {
-                        selectedLang = lang;
                         if (frameKey && editorView) {
                             setLocalEdit(
                                 frameKey,
