@@ -175,30 +175,7 @@
                     <span class="clip-lang">{clipLang}</span>
                 {/if}
             </div>
-            {#if editingName}
-                <input
-                    class="name-input"
-                    type="text"
-                    value={editingName.value}
-                    oninput={onNameInput}
-                    onkeydown={onNameKeydown}
-                    onblur={onNameBlur}
-                    onclick={(e) => e.stopPropagation()}
-                    ondblclick={(e) => e.stopPropagation()}
-                    placeholder="F{frameIdx}"
-                    use:focusOnMount
-                />
-            {:else}
-                <span
-                    class="clip-name"
-                    ondblclick={(e) => {
-                        e.stopPropagation();
-                        onNameEditStart(e);
-                    }}
-                    title="Double-click to edit name">{clipLabel}</span
-                >
-            {/if}
-            {#if editingDuration}
+                {#if editingDuration}
                 <input
                     class="info-input"
                     type="text"
