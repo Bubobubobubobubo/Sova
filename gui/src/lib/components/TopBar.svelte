@@ -202,6 +202,14 @@
             closeSaveModal();
         }
     }
+
+    function handlePlayClick() {
+        if ($isPlaying || $isStarting) {
+            stopTransport();
+        } else {
+            startTransport();
+        }
+    }
 </script>
 
 <div class="topbar">
@@ -234,16 +242,14 @@
                 <button
                     class="transport-button play-button"
                     data-help-id="play-button"
-                    onclick={() =>
-                        $isPlaying || $isStarting
-                            ? stopTransport()
-                            : startTransport()}
+                    onclick={handlePlayClick}
                 >
-                    {#if $isPlaying || $isStarting}
-                        <Pause size={16} />
-                    {:else}
+                    <span class="icon" class:hidden={$isPlaying || $isStarting}>
                         <Play size={16} />
-                    {/if}
+                    </span>
+                    <span class="icon" class:hidden={!($isPlaying || $isStarting)}>
+                        <Pause size={16} />
+                    </span>
                 </button>
 
                 <span class="transport-info" data-help-id="beat-display">
@@ -637,6 +643,15 @@
 
     .play-button:hover {
         color: var(--colors-accent, #0e639c);
+    }
+
+    .play-button .icon {
+        display: flex;
+        pointer-events: none;
+    }
+
+    .play-button .icon.hidden {
+        display: none;
     }
 
     .disconnect-button {
