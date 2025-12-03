@@ -2,14 +2,11 @@
     import {
         logs,
         filteredLogs,
-        showFatal,
-        showError,
-        showWarn,
-        showInfo,
-        showDebug,
+        logFilters,
         type LogEntry,
     } from "$lib/stores/logs";
     import type { Severity } from "$lib/types/protocol";
+    import { formatTimeMs } from "$lib/utils/formatting";
     import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
 
     let scrollContainer: HTMLDivElement;
@@ -19,15 +16,6 @@
     // Optimized auto-scroll with RAF debouncing
     let scrollRafId: number | null = null;
     let lastLogCount = 0;
-
-    function formatTimestamp(timestamp: number): string {
-        const date = new Date(timestamp);
-        const hours = String(date.getHours()).padStart(2, "0");
-        const minutes = String(date.getMinutes()).padStart(2, "0");
-        const seconds = String(date.getSeconds()).padStart(2, "0");
-        const ms = String(date.getMilliseconds()).padStart(3, "0");
-        return `${hours}:${minutes}:${seconds}.${ms}`;
-    }
 
     function getSeverityClass(level: Severity | undefined): string {
         if (!level) return "severity-info";
@@ -87,23 +75,23 @@
             <div class="filter-group" data-help-id="logs-filters">
                 <span class="filter-label">Show:</span>
                 <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$showFatal} />
+                    <input type="checkbox" bind:checked={$logFilters.fatal} />
                     Fatal
                 </label>
                 <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$showError} />
+                    <input type="checkbox" bind:checked={$logFilters.error} />
                     Error
                 </label>
                 <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$showWarn} />
+                    <input type="checkbox" bind:checked={$logFilters.warn} />
                     Warn
                 </label>
                 <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$showInfo} />
+                    <input type="checkbox" bind:checked={$logFilters.info} />
                     Info
                 </label>
                 <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$showDebug} />
+                    <input type="checkbox" bind:checked={$logFilters.debug} />
                     Debug
                 </label>
             </div>
@@ -138,7 +126,7 @@
                     <div class="log-entry {getSeverityClass(item.level)}">
                         <span class="log-level">[{getLogLevel(item)}]</span>
                         <span class="log-timestamp"
-                            >{formatTimestamp(item.timestamp)}</span
+                            >{formatTimeMs(item.timestamp)}</span
                         >
                         <span class="log-message">{item.message}</span>
                     </div>

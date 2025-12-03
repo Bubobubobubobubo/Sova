@@ -54,7 +54,6 @@
 
     // Derived dimensions (local for use in this component)
     const pixelsPerBeat = $derived(BASE_PIXELS_PER_BEAT * viewport.zoom);
-    const _trackSize = $derived(BASE_TRACK_SIZE * viewport.zoom);
     const isVertical = $derived(viewport.orientation === "vertical");
 
     // Create reactive context for child components (must be at top level)
@@ -1423,6 +1422,8 @@
         height: 100%;
         overflow: auto;
         outline: none;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .timeline-pane:focus {

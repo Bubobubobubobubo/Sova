@@ -263,6 +263,8 @@
     .track-row {
         display: flex;
         border-bottom: 1px solid var(--colors-border);
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .track-row.vertical {

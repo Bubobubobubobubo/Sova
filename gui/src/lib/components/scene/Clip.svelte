@@ -312,6 +312,8 @@
         padding: 6px 8px;
         box-sizing: border-box;
         overflow: hidden;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .clip.compact {

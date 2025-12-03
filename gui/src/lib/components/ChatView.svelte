@@ -2,10 +2,12 @@
     import { chatMessages } from "$lib/stores/collaboration";
     import { sendChat } from "$lib/api/client";
     import { runtimeNickname } from "$lib/stores/config";
+    import { formatTime } from "$lib/utils/formatting";
     import { Send } from "lucide-svelte";
 
     let messageInput = $state("");
     let messagesContainer: HTMLDivElement;
+    let scrollRafId: number | null = null;
 
     function getUserColor(username: string): string {
         let hash = 0;
@@ -14,13 +16,6 @@
         }
         const hue = Math.abs(hash) % 360;
         return `hsl(${hue}, 70%, 65%)`;
-    }
-
-    function formatTimestamp(timestamp: number): string {
-        const date = new Date(timestamp);
-        const hours = String(date.getHours()).padStart(2, "0");
-        const minutes = String(date.getMinutes()).padStart(2, "0");
-        return `${hours}:${minutes}`;
     }
 
     async function handleSendMessage() {
@@ -46,7 +41,12 @@
 
     $effect(() => {
         $chatMessages;
-        requestAnimationFrame(scrollToBottom);
+        if (scrollRafId === null) {
+            scrollRafId = requestAnimationFrame(() => {
+                scrollRafId = null;
+                scrollToBottom();
+            });
+        }
     });
 </script>
 
@@ -58,7 +58,7 @@
             {#each $chatMessages as msg, i (`${msg.timestamp}-${i}`)}
                 <div class="message">
                     <span class="timestamp"
-                        >{formatTimestamp(msg.timestamp)}</span
+                        >{formatTime(msg.timestamp)}</span
                     >
                     <span
                         class="username"

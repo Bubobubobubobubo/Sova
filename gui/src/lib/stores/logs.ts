@@ -15,28 +15,38 @@ const MAX_LOGS = 10_000;
 export const logs: Writable<LogEntry[]> = writable([]);
 
 // Filter settings - which severity levels to show (default: all except Debug)
-export const showFatal = writable(true);
-export const showError = writable(true);
-export const showWarn = writable(true);
-export const showInfo = writable(true);
-export const showDebug = writable(false);
+export interface LogFilters {
+  fatal: boolean;
+  error: boolean;
+  warn: boolean;
+  info: boolean;
+  debug: boolean;
+}
+
+export const logFilters: Writable<LogFilters> = writable({
+  fatal: true,
+  error: true,
+  warn: true,
+  info: true,
+  debug: false,
+});
 
 // Derived store for filtered logs
 export const filteredLogs: Readable<LogEntry[]> = derived(
-  [logs, showFatal, showError, showWarn, showInfo, showDebug],
-  ([$logs, $showFatal, $showError, $showWarn, $showInfo, $showDebug]) => {
+  [logs, logFilters],
+  ([$logs, $filters]) => {
     return $logs.filter((log) => {
       switch (log.level) {
         case "Fatal":
-          return $showFatal;
+          return $filters.fatal;
         case "Error":
-          return $showError;
+          return $filters.error;
         case "Warn":
-          return $showWarn;
+          return $filters.warn;
         case "Info":
-          return $showInfo;
+          return $filters.info;
         case "Debug":
-          return $showDebug;
+          return $filters.debug;
         default:
           return true;
       }
