@@ -229,11 +229,12 @@ impl Scheduler {
 
     pub fn process_executions(&mut self, date: SyncTime) -> SyncTime {
         let mut partial = PartialContext::default();
+        partial.logic_date = date;
         partial.global_vars = Some(&mut self.global_vars);
         partial.clock = Some(&self.clock);
         partial.device_map = Some(&self.devices);
         partial.structure = Some(&self.scene_structure);
-        let (events, wait) = self.scene.update_executions(date, partial);
+        let (events, wait) = self.scene.update_executions(partial);
         for event in events {
             for msg in self.devices.map_event(event, date, &self.clock) {
                 let _ = self.world_iface.send(msg);
