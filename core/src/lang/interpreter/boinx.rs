@@ -71,6 +71,9 @@ impl BoinxLine {
             BoinxItem::ArgMap(map) => {
                 let mut args = Vec::new();
                 for (key, value) in map.iter() {
+                    if *value == BoinxItem::Placeholder {
+                        continue;
+                    }
                     args.push(VariableValue::Str(key.clone()));
                     args.push(VariableValue::from(value.clone()));
                 }
