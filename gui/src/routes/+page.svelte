@@ -91,6 +91,14 @@
         scrollbar-width: none;
     }
 
+    :global(input),
+    :global(textarea),
+    :global([contenteditable="true"]) {
+        user-select: text;
+        -webkit-user-select: text;
+        cursor: text;
+    }
+
     .app {
         width: 100vw;
         height: 100vh;

@@ -143,6 +143,7 @@
         flex: 1;
         word-break: break-word;
         user-select: text;
+        -webkit-user-select: text;
     }
 
     .input-area {
