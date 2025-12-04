@@ -179,12 +179,15 @@ impl ScriptExecution {
         }
         partial.instance_vars = Some(&mut self.instance_vars);
         partial.stack = Some(&mut self.stack);
+        let prev_date = partial.logic_date;
+        partial.logic_date = self.scheduled_time;
         let Some(mut ctx) = partial.to_context() else {
             return (None, NEVER);
         };
         let (opt_ev, wait) = self.interpreter.execute_next(&mut ctx);
         self.scheduled_time = self.scheduled_time.saturating_add(wait);
-        (opt_ev, wait)
+        let rem = self.scheduled_time.saturating_sub(prev_date);
+        (opt_ev, rem)
     }
 
     #[inline]
