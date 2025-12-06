@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onDestroy } from "svelte";
     import {
         logs,
         filteredLogs,
@@ -58,13 +59,10 @@
         scheduleScrollToBottom();
     });
 
-    // Cleanup RAF on component destroy
-    $effect(() => {
-        return () => {
-            if (scrollRafId !== null) {
-                cancelAnimationFrame(scrollRafId);
-            }
-        };
+    onDestroy(() => {
+        if (scrollRafId !== null) {
+            cancelAnimationFrame(scrollRafId);
+        }
     });
 </script>
 

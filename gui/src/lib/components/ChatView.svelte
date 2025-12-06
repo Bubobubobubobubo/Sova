@@ -47,6 +47,12 @@
                 scrollToBottom();
             });
         }
+        return () => {
+            if (scrollRafId !== null) {
+                cancelAnimationFrame(scrollRafId);
+                scrollRafId = null;
+            }
+        };
     });
 </script>
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import { invoke } from "@tauri-apps/api/core";
     import { isConnected, connectionError } from "$lib/stores/connectionState";
     import {
@@ -20,21 +21,14 @@
     let connecting = $state(false);
     let errorMsg = $state("");
 
-    // Sync form fields with config (reactive - works on load AND when config is saved)
-    // Nickname uses runtimeNickname (instance-specific), falling back to config default
-    $effect(() => {
+    onMount(() => {
         const config = $clientConfig;
         const rn = $runtimeNickname;
         if (config) {
             ip = config.ip;
             port = config.port;
-            // Prefer runtime nickname if set, otherwise use config default
             nickname = rn || config.nickname;
         }
-    });
-
-    // Clear connection error on mount
-    $effect(() => {
         connectionError.set(null);
     });
 
