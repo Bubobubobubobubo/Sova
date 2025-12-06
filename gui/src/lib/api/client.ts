@@ -40,10 +40,6 @@ export async function setTempo(
 }
 
 // Scene operations
-export async function getScene(): Promise<void> {
-  await sendMessage("GetScene");
-}
-
 export async function setScene(
   scene: Scene,
   timing: ActionTiming = ActionTiming.immediate(),
@@ -197,10 +193,6 @@ export async function removeOscDevice(name: string): Promise<void> {
 }
 
 // Queries
-export async function getClock(): Promise<void> {
-  await sendMessage("GetClock");
-}
-
 export async function getSnapshot(): Promise<void> {
   await sendMessage("GetSnapshot");
 }

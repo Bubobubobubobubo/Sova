@@ -1,9 +1,6 @@
-import { writable, derived, get, type Writable, type Readable } from "svelte/store";
+import { writable, derived, type Writable, type Readable } from "svelte/store";
 import { listen } from "@tauri-apps/api/event";
 import type { LinkState, ClockState, FramePosition, PlaybackState } from "$lib/types/protocol";
-import { ticker } from "./ticker";
-import { getClock, getScene } from "$lib/api/client";
-import { isConnected } from "./connectionState";
 import { ListenerGroup } from "./helpers";
 import { SERVER_EVENTS } from "$lib/events";
 
@@ -49,8 +46,6 @@ export function getCurrentFrameForLine(
 }
 
 const listeners = new ListenerGroup();
-let unsubscribeTicker: (() => void) | null = null;
-let tickCount = 0;
 
 export async function initializeTransportStore(): Promise<void> {
   // Listen for playback state changes
@@ -73,31 +68,10 @@ export async function initializeTransportStore(): Promise<void> {
       framePositions.set(event.payload);
     }),
   );
-
-  // Subscribe to ticker for periodic updates
-  // Clock updates every tick (50ms), scene updates every 5 ticks (250ms)
-  unsubscribeTicker = ticker.subscribe(() => {
-    if (!get(isConnected)) return;
-
-    getClock();
-
-    tickCount++;
-    if (tickCount >= 5) {
-      getScene();
-      tickCount = 0;
-    }
-  });
 }
 
 export function cleanupTransportStore(): void {
   listeners.cleanup();
-
-  if (unsubscribeTicker) {
-    unsubscribeTicker();
-    unsubscribeTicker = null;
-  }
-
-  tickCount = 0;
   playbackState.set("Stopped");
   clockState.set(null);
   linkState.set(null);

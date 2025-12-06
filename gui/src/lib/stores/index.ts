@@ -3,7 +3,6 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { SERVER_EVENTS } from "$lib/events";
 import type { HelloPayload } from "$lib/types/protocol";
-import { ticker } from "./ticker";
 
 // Export all stores
 export * from "./scene";
@@ -115,16 +114,10 @@ export async function initializeSovaStores(): Promise<void> {
     initializeLocalEditsStore(),
     initializeProjectsStore(),
   ]);
-
-  // Start the central event loop
-  ticker.start();
 }
 
 // Cleanup all Sova-related stores
 export function cleanupSovaStores(): void {
-  // Stop the central event loop
-  ticker.stop();
-
   if (helloUnlisten) {
     helloUnlisten();
     helloUnlisten = null;
