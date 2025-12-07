@@ -9,37 +9,17 @@
         lineIdx: number;
         visibleBeatMarkers: number[];
         trackWidth: number;
-        previewDuration: number | null;
-        previewFrameIdx: number | null;
         onRemoveTrack: (_e: MouseEvent) => void;
         onAddClip: () => void;
         onClipClick: (_frameIdx: number, _e: MouseEvent) => void;
         onClipDoubleClick: (_frameIdx: number) => void;
-        onResizeStart: (_frameIdx: number, _e: PointerEvent) => void;
         onLineResizeStart: (_e: MouseEvent) => void;
-        onDurationEditStart: (_frameIdx: number, _e: MouseEvent) => void;
-        editingDuration: { frameIdx: number; value: string } | null;
-        onDurationInput: (_e: Event) => void;
-        onDurationKeydown: (_e: KeyboardEvent) => void;
-        onDurationBlur: () => void;
-        onRepsEditStart: (_frameIdx: number, _e: MouseEvent) => void;
-        editingReps: { frameIdx: number; value: string } | null;
-        onRepsInput: (_e: Event) => void;
-        onRepsKeydown: (_e: KeyboardEvent) => void;
-        onRepsBlur: () => void;
-        onNameEditStart: (_frameIdx: number, _e: MouseEvent) => void;
-        editingName: { frameIdx: number; value: string } | null;
-        onNameInput: (_e: Event) => void;
-        onNameKeydown: (_e: KeyboardEvent) => void;
-        onNameBlur: () => void;
         isFrameSelected: (_frameIdx: number) => boolean;
         playingFrameIdx: number | null;
         onSolo: () => void;
         onMute: () => void;
         isSolo: boolean;
         isMuted: boolean;
-        dropIndicatorIdx: number | null;
-        onClipDragStart: (_frameIdx: number) => void;
         onToggleEnabled: (_frameIdx: number) => void;
     }
 
@@ -48,46 +28,26 @@
         lineIdx,
         visibleBeatMarkers,
         trackWidth,
-        previewDuration,
-        previewFrameIdx,
         onRemoveTrack,
         onAddClip,
         onClipClick,
         onClipDoubleClick,
-        onResizeStart,
         onLineResizeStart,
-        onDurationEditStart,
-        editingDuration,
-        onDurationInput,
-        onDurationKeydown,
-        onDurationBlur,
-        onRepsEditStart,
-        editingReps,
-        onRepsInput,
-        onRepsKeydown,
-        onRepsBlur,
-        onNameEditStart,
-        editingName,
-        onNameInput,
-        onNameKeydown,
-        onNameBlur,
         isFrameSelected,
         playingFrameIdx,
         onSolo,
         onMute,
         isSolo,
         isMuted,
-        dropIndicatorIdx,
-        onClipDragStart,
         onToggleEnabled,
     }: Props = $props();
 
     const ctx = getTimelineContext();
 
     function getFrameExtent(frame: Frame, frameIdx: number): number {
-        // Use preview duration if this frame is being resized
+        const previewDuration = ctx.getPreviewDuration(lineIdx, frameIdx);
         const d =
-            previewFrameIdx === frameIdx && previewDuration !== null
+            previewDuration !== null
                 ? previewDuration
                 : typeof frame.duration === "number" &&
                     !isNaN(frame.duration) &&
@@ -103,7 +63,6 @@
         return d * r * ctx.pixelsPerBeat;
     }
 
-    // Pre-compute all clip positions in O(n) - single pass
     const clipPositions = $derived.by(() => {
         const positions: { offset: number; extent: number }[] = [];
         let currentOffset = 0;
@@ -116,7 +75,6 @@
         return positions;
     });
 
-    // Total track length for add button positioning
     const totalLength = $derived(
         clipPositions.length > 0
             ? clipPositions[clipPositions.length - 1].offset +
@@ -134,6 +92,8 @@
             ? `top: ${totalLength}px; left: 4px; width: ${clipSize}px`
             : `left: ${totalLength}px; top: 4px; height: ${clipSize}px`;
     });
+
+    const dropIndicatorIdx = $derived(ctx.getDropIndicatorIdx(lineIdx));
 
     const dropIndicatorStyle = $derived.by(() => {
         if (dropIndicatorIdx === null) return null;
@@ -183,7 +143,6 @@
         ></div>
     </div>
     <div class="track-content">
-        <!-- Line resize handle -->
         <div
             class="line-resize-handle"
             class:vertical={ctx.isVertical}
@@ -209,32 +168,8 @@
                 {trackWidth}
                 selected={isFrameSelected(frameIdx)}
                 playing={playingFrameIdx === frameIdx}
-                editingDuration={editingDuration &&
-                editingDuration.frameIdx === frameIdx
-                    ? editingDuration
-                    : null}
                 onClick={(e) => onClipClick(frameIdx, e)}
                 onDoubleClick={() => onClipDoubleClick(frameIdx)}
-                onResizeStart={(e) => onResizeStart(frameIdx, e)}
-                onDurationEditStart={(e) => onDurationEditStart(frameIdx, e)}
-                {onDurationInput}
-                {onDurationKeydown}
-                {onDurationBlur}
-                editingReps={editingReps && editingReps.frameIdx === frameIdx
-                    ? editingReps
-                    : null}
-                onRepsEditStart={(e) => onRepsEditStart(frameIdx, e)}
-                {onRepsInput}
-                {onRepsKeydown}
-                {onRepsBlur}
-                editingName={editingName && editingName.frameIdx === frameIdx
-                    ? editingName
-                    : null}
-                onNameEditStart={(e) => onNameEditStart(frameIdx, e)}
-                {onNameInput}
-                {onNameKeydown}
-                {onNameBlur}
-                onDragStart={() => onClipDragStart(frameIdx)}
                 onToggleEnabled={() => onToggleEnabled(frameIdx)}
             />
         {/each}
