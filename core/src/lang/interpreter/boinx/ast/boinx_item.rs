@@ -1,6 +1,6 @@
 use std::{cmp, collections::{BTreeSet, HashMap}, iter};
 
-use crate::{clock::{NEVER, SyncTime, TimeSpan}, lang::{Program, evaluation_context::EvaluationContext, interpreter::boinx::{BoinxPosition, ast::{BoinxArithmeticOp, BoinxCondition, BoinxConditionOp, BoinxIdent, BoinxProg, arithmetic_op, funcs::execute_boinx_function}}, variable::VariableValue}};
+use crate::{clock::{SyncTime, TimeSpan, NEVER}, lang::{evaluation_context::EvaluationContext, interpreter::boinx::{ast::{arithmetic_op, funcs::execute_boinx_function, BoinxArithmeticOp, BoinxCondition, BoinxConditionOp, BoinxIdent, BoinxProg}, BoinxPosition}, variable::VariableValue, Program}};
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub enum BoinxItem {
@@ -160,6 +160,9 @@ impl BoinxItem {
     pub fn position(&self, ctx: &EvaluationContext, len: f64, mut date: SyncTime) 
         -> (BoinxPosition, SyncTime)
     {
+        if ctx.clock.beats_to_micros(len) <= date {
+            return (BoinxPosition::Undefined, NEVER);
+        }
         match self {
             BoinxItem::WithDuration(i, t) => {
                 let sub_len = t.as_beats(ctx.clock, len);

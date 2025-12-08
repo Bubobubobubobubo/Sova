@@ -6,7 +6,7 @@ use crate::{
         event::ConcreteEvent,
         interpreter::{Interpreter, InterpreterFactory},
         variable::VariableValue,
-    }, log_println, protocol::osc::OSCMessage, scene::script::Script
+    }, protocol::osc::OSCMessage, scene::script::Script
 };
 
 mod ast;
