@@ -61,7 +61,7 @@
     });
 
     // Layout state - responsive split direction
-    let containerEl: HTMLDivElement;
+    let containerEl = $state<HTMLDivElement | null>(null);
     let containerSize = $state({ width: 0, height: 0 });
     let userOverride = $state(false);
     let userOrientation = $state<"horizontal" | "vertical">("vertical");
@@ -80,7 +80,7 @@
     );
 
     // Derived: get the frame being edited
-    const currentFrame = $derived((): Frame | null => {
+    const currentFrame = $derived.by(() => {
         if (!editingFrame || !$scene) return null;
         const line = $scene.lines[editingFrame.lineIdx];
         if (!line) return null;
@@ -131,10 +131,6 @@
         userOverride = false;
     }
 
-    // Listen for frame/line removal to update editingFrame
-    let unlistenFns: UnlistenFn[] = [];
-    let resizeObserver: ResizeObserver;
-
     // Reset editor when a project is loaded
     function handleProjectLoaded() {
         editingFrame = null;
@@ -149,10 +145,16 @@
         }
     }
 
-    onMount(async () => {
+    // Register/unregister toolbar
+    $effect(() => {
         registerToolbar?.(toolbarSnippet);
+        return () => registerToolbar?.(null);
+    });
 
-        resizeObserver = new ResizeObserver((entries) => {
+    // ResizeObserver for container dimensions
+    $effect(() => {
+        if (!containerEl) return;
+        const observer = new ResizeObserver((entries) => {
             const entry = entries[0];
             if (entry) {
                 containerSize = {
@@ -161,11 +163,24 @@
                 };
             }
         });
-        resizeObserver.observe(containerEl);
+        observer.observe(containerEl);
+        return () => observer.disconnect();
+    });
 
+    // Window event listeners
+    $effect(() => {
         window.addEventListener("project:loaded", handleProjectLoaded);
         window.addEventListener("command:set-zoom", handleSetZoom);
+        return () => {
+            window.removeEventListener("project:loaded", handleProjectLoaded);
+            window.removeEventListener("command:set-zoom", handleSetZoom);
+        };
+    });
 
+    // Tauri event listeners for frame/line removal
+    let unlistenFns: UnlistenFn[] = [];
+
+    onMount(async () => {
         unlistenFns.push(
             await listen<RemoveFramePayload>(
                 SERVER_EVENTS.REMOVE_FRAME,
@@ -200,11 +215,7 @@
     });
 
     onDestroy(() => {
-        registerToolbar?.(null);
         unlistenFns.forEach((fn) => fn());
-        resizeObserver?.disconnect();
-        window.removeEventListener("project:loaded", handleProjectLoaded);
-        window.removeEventListener("command:set-zoom", handleSetZoom);
     });
 </script>
 
@@ -297,7 +308,7 @@
 
                 {#snippet second()}
                     <FrameEditor
-                        frame={currentFrame()}
+                        frame={currentFrame}
                         {frameKey}
                         lineIdx={editingFrame.lineIdx}
                         frameIdx={editingFrame.frameIdx}

@@ -68,16 +68,19 @@
 
     // Derived editing states from context
     const isEditingDuration = $derived(
-        ctx.editingDuration?.lineIdx === lineIdx &&
-        ctx.editingDuration?.frameIdx === frameIdx
+        ctx.editing?.field === 'duration' &&
+        ctx.editing?.lineIdx === lineIdx &&
+        ctx.editing?.frameIdx === frameIdx
     );
     const isEditingReps = $derived(
-        ctx.editingReps?.lineIdx === lineIdx &&
-        ctx.editingReps?.frameIdx === frameIdx
+        ctx.editing?.field === 'reps' &&
+        ctx.editing?.lineIdx === lineIdx &&
+        ctx.editing?.frameIdx === frameIdx
     );
     const isEditingName = $derived(
-        ctx.editingName?.lineIdx === lineIdx &&
-        ctx.editingName?.frameIdx === frameIdx
+        ctx.editing?.field === 'name' &&
+        ctx.editing?.lineIdx === lineIdx &&
+        ctx.editing?.frameIdx === frameIdx
     );
 
     // Pure derived values
@@ -221,7 +224,7 @@
                 <input
                     class="info-input"
                     type="text"
-                    value={ctx.editingDuration?.value ?? ""}
+                    value={ctx.editing?.value ?? ""}
                     oninput={handleDurationInput}
                     onkeydown={handleDurationKeydown}
                     onblur={() => ctx.cancelEdit()}
@@ -240,7 +243,7 @@
                     <input
                         class="info-input"
                         type="text"
-                        value={ctx.editingReps?.value ?? ""}
+                        value={ctx.editing?.value ?? ""}
                         oninput={handleRepsInput}
                         onkeydown={handleRepsKeydown}
                         onblur={() => ctx.cancelEdit()}
@@ -275,7 +278,7 @@
                 <input
                     class="name-input"
                     type="text"
-                    value={ctx.editingName?.value ?? ""}
+                    value={ctx.editing?.value ?? ""}
                     oninput={handleNameInput}
                     onkeydown={handleNameKeydown}
                     onblur={() => ctx.cancelEdit()}
@@ -300,7 +303,7 @@
                 <input
                     class="info-input"
                     type="text"
-                    value={ctx.editingDuration?.value ?? ""}
+                    value={ctx.editing?.value ?? ""}
                     oninput={handleDurationInput}
                     onkeydown={handleDurationKeydown}
                     onblur={() => ctx.cancelEdit()}
@@ -318,7 +321,7 @@
                 <input
                     class="info-input"
                     type="text"
-                    value={ctx.editingReps?.value ?? ""}
+                    value={ctx.editing?.value ?? ""}
                     oninput={handleRepsInput}
                     onkeydown={handleRepsKeydown}
                     onblur={() => ctx.cancelEdit()}

@@ -8,9 +8,12 @@ import { get } from "svelte/store";
 const TIMELINE_CONTEXT_KEY = "timeline";
 
 // Types
+export type EditingField = 'duration' | 'reps' | 'name';
+
 export interface EditingState {
   lineIdx: number;
   frameIdx: number;
+  field: EditingField;
   value: string;
 }
 
@@ -37,9 +40,7 @@ export interface TimelineContext {
   isVertical: boolean;
 
   // Editing state
-  editingDuration: EditingState | null;
-  editingReps: EditingState | null;
-  editingName: EditingState | null;
+  editing: EditingState | null;
 
   // Resize state
   resizing: ResizeState | null;
@@ -51,8 +52,8 @@ export interface TimelineContext {
   startDurationEdit: (lineIdx: number, frameIdx: number) => void;
   startRepsEdit: (lineIdx: number, frameIdx: number) => void;
   startNameEdit: (lineIdx: number, frameIdx: number) => void;
-  updateEditValue: (type: "duration" | "reps" | "name", value: string) => void;
-  commitEdit: (type: "duration" | "reps" | "name", shiftKey?: boolean) => Promise<void>;
+  updateEditValue: (type: EditingField, value: string) => void;
+  commitEdit: (type: EditingField, shiftKey?: boolean) => Promise<void>;
   cancelEdit: () => void;
   isEditing: () => boolean;
 
@@ -86,9 +87,7 @@ export function createTimelineContext(initial: {
   let isVertical = $state(initial.isVertical);
 
   // Editing state
-  let editingDuration = $state<EditingState | null>(null);
-  let editingReps = $state<EditingState | null>(null);
-  let editingName = $state<EditingState | null>(null);
+  let editing = $state<EditingState | null>(null);
 
   // Resize state
   let resizing = $state<ResizeState | null>(null);
@@ -102,9 +101,10 @@ export function createTimelineContext(initial: {
     if (!currentScene) return;
     const frame = currentScene.lines[lineIdx]?.frames[frameIdx];
     if (!frame) return;
-    editingDuration = {
+    editing = {
       lineIdx,
       frameIdx,
+      field: 'duration',
       value: getDuration(frame).toString(),
     };
   }
@@ -114,9 +114,10 @@ export function createTimelineContext(initial: {
     if (!currentScene) return;
     const frame = currentScene.lines[lineIdx]?.frames[frameIdx];
     if (!frame) return;
-    editingReps = {
+    editing = {
       lineIdx,
       frameIdx,
+      field: 'reps',
       value: getReps(frame).toString(),
     };
   }
@@ -126,91 +127,68 @@ export function createTimelineContext(initial: {
     if (!currentScene) return;
     const frame = currentScene.lines[lineIdx]?.frames[frameIdx];
     if (!frame) return;
-    editingName = {
+    editing = {
       lineIdx,
       frameIdx,
+      field: 'name',
       value: frame.name || "",
     };
   }
 
-  function updateEditValue(type: "duration" | "reps" | "name", value: string) {
-    if (type === "duration" && editingDuration) {
-      editingDuration = { ...editingDuration, value };
-    } else if (type === "reps" && editingReps) {
-      editingReps = { ...editingReps, value };
-    } else if (type === "name" && editingName) {
-      editingName = { ...editingName, value };
+  function updateEditValue(type: EditingField, value: string) {
+    if (editing && editing.field === type) {
+      editing = { ...editing, value };
     }
   }
 
-  async function commitEdit(type: "duration" | "reps" | "name", shiftKey = false) {
+  async function commitEdit(type: EditingField, shiftKey = false) {
+    if (!editing || editing.field !== type) return;
     const currentScene = get(scene);
     if (!currentScene) return;
 
-    const snap = get(snapGranularity);
+    const { lineIdx, frameIdx, value } = editing;
+    const frame = currentScene.lines[lineIdx]?.frames[frameIdx];
+    if (!frame) {
+      editing = null;
+      return;
+    }
 
-    if (type === "duration" && editingDuration) {
-      const parsed = parseFloat(editingDuration.value);
+    let updatedFrame: Frame | null = null;
+
+    if (type === 'duration') {
+      const parsed = parseFloat(value);
       if (!isNaN(parsed) && parsed > 0) {
+        const snap = get(snapGranularity);
         const snapValue = shiftKey ? snap / 2 : snap;
         const newDuration = Math.max(snapValue, Math.round(parsed / snapValue) * snapValue);
-        const frame = currentScene.lines[editingDuration.lineIdx]?.frames[editingDuration.frameIdx];
-        if (frame) {
-          const updatedFrame = { ...frame, duration: newDuration };
-          try {
-            await setFrames(
-              [[editingDuration.lineIdx, editingDuration.frameIdx, updatedFrame]],
-              ActionTiming.immediate()
-            );
-          } catch (error) {
-            console.error("Failed to update duration:", error);
-          }
-        }
+        updatedFrame = { ...frame, duration: newDuration };
       }
-      editingDuration = null;
-    } else if (type === "reps" && editingReps) {
-      const parsed = parseInt(editingReps.value, 10);
+    } else if (type === 'reps') {
+      const parsed = parseInt(value, 10);
       if (!isNaN(parsed) && parsed >= 1) {
-        const frame = currentScene.lines[editingReps.lineIdx]?.frames[editingReps.frameIdx];
-        if (frame) {
-          const updatedFrame = { ...frame, repetitions: parsed };
-          try {
-            await setFrames(
-              [[editingReps.lineIdx, editingReps.frameIdx, updatedFrame]],
-              ActionTiming.immediate()
-            );
-          } catch (error) {
-            console.error("Failed to update repetitions:", error);
-          }
-        }
+        updatedFrame = { ...frame, repetitions: parsed };
       }
-      editingReps = null;
-    } else if (type === "name" && editingName) {
-      const frame = currentScene.lines[editingName.lineIdx]?.frames[editingName.frameIdx];
-      if (frame) {
-        const newName = editingName.value.trim() || null;
-        const updatedFrame = { ...frame, name: newName };
-        try {
-          await setFrames(
-            [[editingName.lineIdx, editingName.frameIdx, updatedFrame]],
-            ActionTiming.immediate()
-          );
-        } catch (error) {
-          console.error("Failed to update name:", error);
-        }
-      }
-      editingName = null;
+    } else if (type === 'name') {
+      const newName = value.trim() || null;
+      updatedFrame = { ...frame, name: newName };
     }
+
+    if (updatedFrame) {
+      try {
+        await setFrames([[lineIdx, frameIdx, updatedFrame]], ActionTiming.immediate());
+      } catch (error) {
+        console.error(`Failed to update ${type}:`, error);
+      }
+    }
+    editing = null;
   }
 
   function cancelEdit() {
-    editingDuration = null;
-    editingReps = null;
-    editingName = null;
+    editing = null;
   }
 
   function isEditing(): boolean {
-    return editingDuration !== null || editingReps !== null || editingName !== null;
+    return editing !== null;
   }
 
   // Resize actions
@@ -334,9 +312,7 @@ export function createTimelineContext(initial: {
     set trackSize(v) { trackSize = v; },
     get isVertical() { return isVertical; },
     set isVertical(v) { isVertical = v; },
-    get editingDuration() { return editingDuration; },
-    get editingReps() { return editingReps; },
-    get editingName() { return editingName; },
+    get editing() { return editing; },
     get resizing() { return resizing; },
     set resizing(v) { resizing = v; },
     get dragging() { return dragging; },
