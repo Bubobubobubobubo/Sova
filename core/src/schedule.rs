@@ -210,8 +210,10 @@ impl Scheduler {
     pub fn process_deferred(&mut self, previous_date: SyncTime, date: SyncTime) -> SyncTime {
         let previous_beat = self.clock.beat_at_date(previous_date);
         let beat = self.clock.beat_at_date(date);
+        let quantum = self.clock.quantum();
         let to_apply : Vec<SchedulerMessage> = self.deferred_actions.extract_if(.., |action| {
             action.timing().should_apply(
+                quantum,
                 previous_beat,
                 beat,
                 &self.scene

@@ -4,7 +4,8 @@ use crate::{
     clock::{SyncTime, TimeSpan, NEVER}, compiler::CompilationState, lang::{
         evaluation_context::EvaluationContext,
         event::ConcreteEvent,
-        interpreter::{Interpreter, InterpreterFactory}, variable::VariableValue,
+        interpreter::{Interpreter, InterpreterFactory},
+        variable::VariableValue,
     }, protocol::osc::OSCMessage, scene::script::Script
 };
 
@@ -30,8 +31,11 @@ pub struct BoinxLine {
 }
 
 impl BoinxLine {
-    pub fn new(start_date: SyncTime, time_span: TimeSpan, output: BoinxOutput) -> Self {
+    pub fn new(start_date: SyncTime, time_span: TimeSpan, mut output: BoinxOutput) -> Self {
         let has_vars = output.compo.has_vars();
+        if !has_vars {
+            output.compo = output.compo.flatten().into();
+        }
         BoinxLine {
             start_date,
             time_span,
@@ -62,7 +66,7 @@ impl BoinxLine {
         self.previous = Some(item.clone());
 
         let dur = dur.as_micros(ctx.clock, ctx.frame_len);
-        
+
         match item {
             BoinxItem::Note(n) => {
                 let channel = channel.as_integer(ctx.clock, ctx.frame_len) as u64;
@@ -77,33 +81,46 @@ impl BoinxLine {
                     args.push(VariableValue::Str(key.clone()));
                     args.push(VariableValue::from(value.clone()));
                 }
+                if !map.contains_key("sustain") {
+                    let dur_s = (dur as f64) / 1_000_000.0;
+                    args.push(VariableValue::Str("sustain".to_owned()));
+                    args.push(VariableValue::from(dur_s));
+                }
                 if channel.is_str() {
                     let addr = channel.as_str(ctx.clock, ctx.frame_len);
-                    vec![ConcreteEvent::Osc { 
-                        message: OSCMessage::new(addr, args), 
-                        device_id: device
+                    vec![ConcreteEvent::Osc {
+                        message: OSCMessage::new(addr, args),
+                        device_id: device,
                     }]
                 } else {
-                    vec![ConcreteEvent::Dirt { args, device_id: device }]
+                    vec![ConcreteEvent::Dirt {
+                        args,
+                        device_id: device,
+                    }]
                 }
-                
             }
             _ => Vec::new(),
         }
     }
 
-    pub fn get_targets(&self, ctx: &mut EvaluationContext, len: f64, date: SyncTime) 
-        -> (Vec<usize>, Vec<VariableValue>) 
-    {
+    pub fn get_targets(
+        &self,
+        ctx: &mut EvaluationContext,
+        len: f64,
+        date: SyncTime,
+    ) -> (Vec<usize>, Vec<VariableValue>) {
         let devices = if let Some(dev_item) = &self.output.device {
             let dev_item = dev_item.evaluate(ctx);
             let (pos, _) = dev_item.position(ctx, len, date);
             let items = dev_item.at(ctx, pos, len);
-            items.into_iter().map(|(i,_)| match i {
-                BoinxItem::Note(n) => n as usize,
-                BoinxItem::Str(s) => ctx.device_map.get_slot_for_name(&s).unwrap_or(1),
-                _ => 1
-            }).collect()
+            items
+                .into_iter()
+                .map(|(i, _)| match i {
+                    BoinxItem::Note(n) => n as usize,
+                    BoinxItem::Str(s) => ctx.device_map.get_slot_for_name(&s).unwrap_or(1),
+                    _ => 1,
+                })
+                .collect()
         } else {
             vec![1]
         };
@@ -111,7 +128,10 @@ impl BoinxLine {
             let chan_item = chan_item.evaluate(ctx);
             let (pos, _) = chan_item.position(ctx, len, date);
             let items = chan_item.at(ctx, pos, len);
-            items.into_iter().map(|(i,_)| VariableValue::from(i)).collect()
+            items
+                .into_iter()
+                .map(|(i, _)| VariableValue::from(i))
+                .collect()
         } else {
             vec![0.into()]
         };
@@ -119,11 +139,11 @@ impl BoinxLine {
     }
 
     pub fn start_subprog(
-        &self, 
-        prog: BoinxProg, 
-        ctx: &mut EvaluationContext, 
-        len: TimeSpan, 
-        at: SyncTime
+        &self,
+        prog: BoinxProg,
+        ctx: &mut EvaluationContext,
+        len: TimeSpan,
+        at: SyncTime,
     ) -> Vec<BoinxLine> {
         let mut prog_lines = prog.start(at, len, ctx);
         for line in prog_lines.iter_mut() {
@@ -170,9 +190,7 @@ impl BoinxLine {
                 item => {
                     for device in devices.iter() {
                         for channel in channels.iter() {
-                            let vec = self.execute_item(
-                                ctx, &item, dur, *device, channel
-                            );
+                            let vec = self.execute_item(ctx, &item, dur, *device, channel);
                             self.out_buffer.append(&mut vec.into());
                         }
                     }
@@ -198,21 +216,14 @@ impl BoinxLine {
 pub struct BoinxInterpreter {
     pub prog: BoinxProg,
     pub execution_lines: Vec<BoinxLine>,
-    pub started: bool
+    pub started: bool,
 }
 
 impl Interpreter for BoinxInterpreter {
-    fn execute_next(
-        &mut self,
-        ctx: &mut EvaluationContext,
-    ) -> (Option<ConcreteEvent>, SyncTime) {
+    fn execute_next(&mut self, ctx: &mut EvaluationContext) -> (Option<ConcreteEvent>, SyncTime) {
         let date = ctx.logic_date;
         if !self.started {
-            self.execution_lines = self.prog.start(
-                date, 
-                TimeSpan::Beats(ctx.frame_len),
-                ctx
-            );
+            self.execution_lines = self.prog.start(date, TimeSpan::Beats(ctx.frame_len), ctx);
             self.started = true;
         }
         let mut new_lines = Vec::new();
@@ -265,18 +276,15 @@ impl InterpreterFactory for BoinxInterpreterFactory {
             return Ok(Box::new(BoinxInterpreter::from(prog)));
         }
         match parse_boinx(script.content()) {
-            Ok(prog) => {
-                Ok(Box::new(BoinxInterpreter::from(prog)))
-            }
-            Err(e) => Err(e.to_string())
-        }
-    }
-    
-    fn check(&self, script: &Script) -> CompilationState {
-        match parse_boinx(script.content()) {
-            Ok(prog) => CompilationState::Parsed(Some(VariableValue::from(prog))),
-            Err(e) => CompilationState::Error(e)
+            Ok(prog) => Ok(Box::new(BoinxInterpreter::from(prog))),
+            Err(e) => Err(e.to_string()),
         }
     }
 
+    fn check(&self, script: &Script) -> CompilationState {
+        match parse_boinx(script.content()) {
+            Ok(prog) => CompilationState::Parsed(Some(VariableValue::from(prog))),
+            Err(e) => CompilationState::Error(e),
+        }
+    }
 }
