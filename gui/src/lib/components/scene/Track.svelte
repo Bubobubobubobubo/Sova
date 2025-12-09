@@ -136,6 +136,7 @@
         >
             <X size={12} />
         </button>
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="line-resize-handle header-handle"
             class:vertical={ctx.isVertical}
@@ -143,6 +144,7 @@
         ></div>
     </div>
     <div class="track-content">
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="line-resize-handle"
             class:vertical={ctx.isVertical}

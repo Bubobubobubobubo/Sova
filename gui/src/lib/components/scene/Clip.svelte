@@ -200,6 +200,7 @@
     onclick={onClick}
     ondblclick={onDoubleClick}
     onmousedown={handleMouseDown}
+    onkeydown={(e) => e.key === 'Enter' && onClick(e as unknown as MouseEvent)}
     role="button"
     tabindex="-1"
 >
@@ -234,6 +235,8 @@
                 <span
                     class="clip-info"
                     ondblclick={handleDurationEditStart}
+                    role="button"
+                    tabindex="-1"
                     title="Duration (double-click to edit)"
                     >{formattedDuration}</span
                 >
@@ -253,6 +256,8 @@
                     <span
                         class="clip-info"
                         ondblclick={handleRepsEditStart}
+                        role="button"
+                        tabindex="-1"
                         title="Repetitions (double-click to edit)"
                         >{formattedReps}</span
                     >
@@ -294,6 +299,8 @@
                         e.stopPropagation();
                         handleNameEditStart(e);
                     }}
+                    role="button"
+                    tabindex="-1"
                     title="Double-click to edit name">{clipLabel}</span
                 >
             {/if}
@@ -313,6 +320,8 @@
                 <span
                     class="clip-info"
                     ondblclick={handleDurationEditStart}
+                    role="button"
+                    tabindex="-1"
                     title="Duration (double-click to edit)"
                     >{formattedDuration}</span
                 >
@@ -331,6 +340,8 @@
                 <span
                     class="clip-info"
                     ondblclick={handleRepsEditStart}
+                    role="button"
+                    tabindex="-1"
                     title="Repetitions (double-click to edit)"
                     >{formattedReps}</span
                 >

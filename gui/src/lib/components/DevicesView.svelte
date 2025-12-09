@@ -152,6 +152,7 @@
                     <div class="device-row">
                         <div class="col-slot">
                             {#if editingSlot === device.name}
+                                <!-- svelte-ignore a11y_autofocus -->
                                 <input
                                     type="text"
                                     class="slot-input"
@@ -212,6 +213,7 @@
                         <div class="col-slot"></div>
                         <div class="col-status">New</div>
                         <div class="col-name">
+                            <!-- svelte-ignore a11y_autofocus -->
                             <input
                                 type="text"
                                 class="name-input"
@@ -263,6 +265,7 @@
                     <div class="device-row">
                         <div class="col-slot">
                             {#if editingSlot === device.name}
+                                <!-- svelte-ignore a11y_autofocus -->
                                 <input
                                     type="text"
                                     class="slot-input"
@@ -316,6 +319,7 @@
                         <div class="col-status">New</div>
                         <div class="col-name">
                             {#if oscStep === 0}
+                                <!-- svelte-ignore a11y_autofocus -->
                                 <input
                                     type="text"
                                     class="name-input"
@@ -332,6 +336,7 @@
                                     >Step 1/3: Name</span
                                 >
                             {:else if oscStep === 1}
+                                <!-- svelte-ignore a11y_autofocus -->
                                 <input
                                     type="text"
                                     class="name-input"
@@ -348,6 +353,7 @@
                                     >Step 2/3: IP Address</span
                                 >
                             {:else}
+                                <!-- svelte-ignore a11y_autofocus -->
                                 <input
                                     type="text"
                                     class="name-input"

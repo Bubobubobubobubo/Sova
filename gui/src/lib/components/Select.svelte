@@ -22,6 +22,7 @@
     let isOpen = $state(false);
     let highlightedIndex = $state(-1);
     let triggerEl: HTMLButtonElement;
+    // svelte-ignore non_reactive_update
     let menuEl: HTMLDivElement;
     let optionEls: HTMLButtonElement[] = [];
     let menuPosition = $state({ top: 0, left: 0, width: 0, flipUp: false });

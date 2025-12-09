@@ -15,6 +15,8 @@
     import { tomlThemeCompletion } from "$lib/editor/tomlThemeCompletion";
     import type { EditorView } from "@codemirror/view";
 
+    const tomlLanguage = StreamLanguage.define(toml);
+
     interface Props {
         registerToolbar?: (_snippet: Snippet | null) => void;
     }
@@ -72,7 +74,7 @@
                 editorView = createEditor(
                     editorContainer,
                     content,
-                    StreamLanguage.define(toml),
+                    tomlLanguage,
                     config,
                     [
                         saveKeymap,

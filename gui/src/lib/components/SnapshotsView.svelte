@@ -231,6 +231,7 @@
                 <div class="table-row">
                     <div class="col-name">
                         {#if $editingName === project.name}
+                            <!-- svelte-ignore a11y_autofocus -->
                             <input
                                 type="text"
                                 class="name-input"
