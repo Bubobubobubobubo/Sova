@@ -8,6 +8,7 @@
     import type { Severity } from "$lib/types/protocol";
     import { formatTimeMs } from "$lib/utils/formatting";
     import SvelteVirtualList from "@humanspeak/svelte-virtual-list";
+    import { Trash2 } from "lucide-svelte";
 
     let virtualList = $state<any>(null);
     let autoScroll = $state(true);
@@ -39,41 +40,40 @@
 
 <div class="logs-view">
     <div class="toolbar">
-        <h2 class="title">LOGS</h2>
+        <div class="filter-group" data-help-id="logs-filters">
+            <label class="filter-toggle">
+                <input type="checkbox" bind:checked={$logFilters.fatal} />
+                Fatal
+            </label>
+            <label class="filter-toggle">
+                <input type="checkbox" bind:checked={$logFilters.error} />
+                Error
+            </label>
+            <label class="filter-toggle">
+                <input type="checkbox" bind:checked={$logFilters.warn} />
+                Warn
+            </label>
+            <label class="filter-toggle">
+                <input type="checkbox" bind:checked={$logFilters.info} />
+                Info
+            </label>
+            <label class="filter-toggle">
+                <input type="checkbox" bind:checked={$logFilters.debug} />
+                Debug
+            </label>
+        </div>
         <div class="toolbar-actions">
-            <div class="filter-group" data-help-id="logs-filters">
-                <span class="filter-label">Show:</span>
-                <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$logFilters.fatal} />
-                    Fatal
-                </label>
-                <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$logFilters.error} />
-                    Error
-                </label>
-                <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$logFilters.warn} />
-                    Warn
-                </label>
-                <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$logFilters.info} />
-                    Info
-                </label>
-                <label class="filter-toggle">
-                    <input type="checkbox" bind:checked={$logFilters.debug} />
-                    Debug
-                </label>
-            </div>
             <label class="auto-scroll-toggle" data-help-id="logs-auto-scroll">
                 <input type="checkbox" bind:checked={autoScroll} />
-                Auto-scroll
+                Auto
             </label>
             <button
                 class="clear-button"
                 onclick={clearLogs}
                 data-help-id="logs-clear"
+                title="Clear logs"
             >
-                Clear
+                <Trash2 size={14} />
             </button>
         </div>
     </div>
@@ -124,34 +124,16 @@
         padding: 0 16px;
     }
 
-    .title {
-        margin: 0;
-        font-size: 13px;
-        font-weight: 600;
-        color: var(--colors-text, #fff);
-        font-family: monospace;
-    }
-
     .toolbar-actions {
         display: flex;
         align-items: center;
-        gap: 16px;
+        gap: 12px;
     }
 
     .filter-group {
         display: flex;
         align-items: center;
-        gap: 8px;
-        padding: 4px 12px;
-        background-color: var(--colors-background, #1e1e1e);
-        border: 1px solid var(--colors-border, #333);
-    }
-
-    .filter-label {
-        font-size: 12px;
-        color: var(--colors-text-secondary, #888);
-        font-family: monospace;
-        font-weight: 600;
+        gap: 12px;
     }
 
     .filter-toggle {
@@ -212,17 +194,18 @@
     }
 
     .clear-button {
-        background-color: var(--colors-accent, #0e639c);
-        color: var(--colors-text, #fff);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: none;
+        color: var(--colors-text-secondary, #888);
         border: none;
-        padding: 4px 12px;
-        font-size: 13px;
+        padding: 4px;
         cursor: pointer;
-        font-family: monospace;
     }
 
     .clear-button:hover {
-        background-color: var(--colors-accent-hover, #1177bb);
+        color: var(--colors-text, #fff);
     }
 
     .logs-content {
