@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import { invoke } from "@tauri-apps/api/core";
     import { config } from "$lib/stores/config";
     import { themes } from "$lib/themes";
@@ -58,7 +59,7 @@
         }));
     }
 
-    $effect(() => {
+    onMount(() => {
         checkServerStatus();
     });
 
@@ -146,7 +147,7 @@
                             (e.target as HTMLSelectElement).value,
                         )}
                 >
-                    {#each themeNames as theme}
+                    {#each themeNames as theme (theme)}
                         <option value={theme}>{theme}</option>
                     {/each}
                 </select>
