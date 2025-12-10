@@ -28,8 +28,6 @@ pub enum ServerMessage {
         is_playing: bool,
         /// List of available languages names.
         available_languages: Vec<String>,
-        /// Map of compiler name to its .sublime-syntax content.
-        syntax_definitions: std::collections::HashMap<String, String>,
     },
     /// Broadcast containing the updated list of connected client names.
     PeersUpdated(Vec<String>),

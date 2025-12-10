@@ -185,7 +185,7 @@ impl ClientManager {
         use ServerMessage::*;
 
         match message {
-            Hello { username, scene, devices, peers, link_state, is_playing, available_languages, syntax_definitions } => {
+            Hello { username, scene, devices, peers, link_state, is_playing, available_languages } => {
                 app_handle.emit("server:hello", serde_json::json!({
                     "username": username,
                     "scene": scene,
@@ -200,7 +200,6 @@ impl ClientManager {
                     },
                     "isPlaying": is_playing,
                     "availableLanguages": available_languages,
-                    "syntaxDefinitions": syntax_definitions,
                 }))?;
             }
 

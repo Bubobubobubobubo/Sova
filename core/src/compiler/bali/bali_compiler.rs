@@ -1,5 +1,4 @@
 use crate::compiler::{CompilationError, Compiler};
-use std::borrow::Cow;
 use std::collections::BTreeMap;
 
 use crate::lang::{Program, debug_print};
@@ -69,11 +68,5 @@ impl Compiler for BaliCompiler {
                 })
             }
         }
-    }
-
-    fn syntax(&self) -> Option<Cow<'static, str>> {
-        Some(Cow::Borrowed(include_str!(
-            "../../static/syntaxes/bali.sublime-syntax"
-        )))
     }
 }

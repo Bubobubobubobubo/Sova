@@ -1,4 +1,4 @@
-use std::{borrow::Cow, collections::BTreeMap};
+use std::collections::BTreeMap;
 
 use crate::{
     compiler::{CompilationError, Compiler},
@@ -20,11 +20,5 @@ impl Compiler for DummyCompiler {
         } else {
             Err(CompilationError::default_error("dummylang".to_string()))
         }
-    }
-
-    fn syntax(&self) -> Option<Cow<'static, str>> {
-        Some(Cow::Borrowed(include_str!(
-            "../../static/syntaxes/dummy.sublime-syntax"
-        )))
     }
 }

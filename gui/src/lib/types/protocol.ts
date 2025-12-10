@@ -136,7 +136,6 @@ export interface HelloPayload {
   linkState: LinkState;
   isPlaying: boolean;
   availableLanguages: string[];
-  syntaxDefinitions: { [key: string]: string };
 }
 
 export interface ChatPayload {

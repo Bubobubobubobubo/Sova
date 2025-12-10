@@ -3,7 +3,6 @@ use client::ClientMessage;
 use crossbeam_channel::{Receiver, Sender};
 use serde::{Deserialize, Serialize};
 use std::{
-    borrow::Cow,
     io::ErrorKind,
     sync::{
         atomic::{AtomicBool, Ordering}, Arc
@@ -852,16 +851,8 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
             );
             let initial_is_playing = state.is_playing.load(Ordering::Relaxed);
 
-            // --- Get available compilers and their syntax definitions ---
+            // --- Get available compilers ---
             let available_languages : Vec<String> = state.languages.languages().map(str::to_owned).collect();
-            let mut syntax_definitions = std::collections::HashMap::new();
-            for lang in available_languages.iter() {
-                if let Some(compiler) = state.languages.transcoder.compilers.get(lang) {
-                    if let Some(Cow::Borrowed(content)) = compiler.syntax() {
-                        syntax_definitions.insert(lang.clone(), content.to_string());
-                    }
-                }
-            }
 
             // --- Construct the Hello message ---
             log_println!(
@@ -878,7 +869,6 @@ async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<Str
                 link_state: initial_link_state,
                 is_playing: initial_is_playing,
                 available_languages,
-                syntax_definitions,
             };
 
             // Send Hello
