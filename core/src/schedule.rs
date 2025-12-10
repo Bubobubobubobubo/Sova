@@ -261,8 +261,11 @@ impl Scheduler {
             let mut date = self.clock.micros();
 
             if let Some(wait) = self.next_wait {
-                while date < previous_date + wait {
-                    date = self.clock.micros();
+                let target_date = previous_date + wait;
+                if target_date.saturating_sub(date) <= ACTIVE_WAITING_SWITCH_MICROS {
+                    while date < target_date {
+                        date = self.clock.micros();
+                    }
                 }
             }
 
