@@ -19,6 +19,7 @@ export * from "./languages";
 export * from "./localEdits";
 export * from "./projects";
 export * from "./projectsUI";
+export * from "./serverState";
 
 // Import initialization functions
 import { initializeSceneStore, cleanupSceneStore, scene } from "./scene";
@@ -74,6 +75,11 @@ import {
 } from "./connectionState";
 
 import { initializeLogsStore, cleanupLogsStore } from "./logs";
+
+import {
+  initializeServerStateListener,
+  cleanupServerStateListener,
+} from "./serverState";
 
 import { initializeLanguages } from "../../languages";
 
@@ -143,11 +149,12 @@ export function cleanupSovaStores(): void {
   sovaStoresInitialized = false;
 }
 
-// Initialize app-level stores (config, connection, logs)
+// Initialize app-level stores (config, connection, logs, server state)
 export async function initializeApp(): Promise<void> {
   initializeLanguages();
   await initializeConfig();
   await initializeConnectionListener();
+  await initializeServerStateListener();
   await initializeLogsStore();
 }
 
@@ -155,5 +162,6 @@ export async function initializeApp(): Promise<void> {
 export function cleanupApp(): void {
   cleanupConfig();
   cleanupConnectionListener();
+  cleanupServerStateListener();
   cleanupLogsStore();
 }

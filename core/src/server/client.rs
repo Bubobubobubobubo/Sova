@@ -208,7 +208,9 @@ impl SovaClient {
     /// Stores the resulting `TcpStream` if successful and sets `connected` to true.
     pub async fn connect(&mut self) -> io::Result<()> {
         let addr = format!("{}:{}", self.ip, self.port);
-        self.stream = Some(TcpStream::connect(&addr).await?);
+        let stream = TcpStream::connect(&addr).await?;
+        stream.set_nodelay(true)?;
+        self.stream = Some(stream);
         self.connected = true;
         Ok(())
     }

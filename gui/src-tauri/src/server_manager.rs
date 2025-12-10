@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use tauri::{AppHandle, Emitter};
 use tauri_plugin_shell::{ShellExt, process::{CommandChild, CommandEvent}};
 
@@ -7,6 +9,7 @@ pub struct ServerManager {
     port: u16,
     ip: String,
     app_handle: AppHandle,
+    is_alive: Arc<AtomicBool>,
 }
 
 impl ServerManager {
@@ -17,6 +20,7 @@ impl ServerManager {
             port: 8080,
             ip: "127.0.0.1".to_string(),
             app_handle,
+            is_alive: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -62,8 +66,10 @@ impl ServerManager {
         self.child = Some(child);
         self.port = port;
         self.ip = ip;
+        self.is_alive.store(true, Ordering::SeqCst);
 
         let app_handle = self.app_handle.clone();
+        let is_alive = self.is_alive.clone();
         tauri::async_runtime::spawn(async move {
             while let Some(event) = rx.recv().await {
                 match event {
@@ -76,6 +82,7 @@ impl ServerManager {
                         let _ = app_handle.emit("server:error", msg);
                     }
                     CommandEvent::Terminated(payload) => {
+                        is_alive.store(false, Ordering::SeqCst);
                         let _ = app_handle.emit("server:terminated", payload.code);
                         break;
                     }
@@ -88,6 +95,7 @@ impl ServerManager {
     }
 
     pub async fn stop_server(&mut self) -> Result<(), String> {
+        self.is_alive.store(false, Ordering::SeqCst);
         if let Some(child) = self.child.take() {
             let _ = child.kill();
         }
@@ -98,7 +106,7 @@ impl ServerManager {
     }
 
     pub fn is_running(&self) -> bool {
-        self.child.is_some()
+        self.child.is_some() && self.is_alive.load(Ordering::SeqCst)
     }
 }
 
