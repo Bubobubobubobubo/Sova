@@ -765,6 +765,7 @@ impl SovaCoreServer {
 /// # Returns
 /// An `io::Result` containing the final name of the client upon disconnection, or an `io::Error`.
 async fn process_client(socket: TcpStream, state: ServerState) -> io::Result<String> {
+    socket.set_nodelay(true)?;
     let client_addr = socket.peer_addr()?;
     let client_addr_str = client_addr.to_string(); // For logging before name is set
     let (reader, writer) = socket.into_split(); // Split into read/write halves
