@@ -242,6 +242,15 @@ impl Scheduler {
         wait
     }
 
+    pub fn active_wait(&self, date: &mut SyncTime, target: SyncTime) {
+        if target.saturating_sub(*date) > ACTIVE_WAITING_SWITCH_MICROS {
+            return;
+        }
+        while *date < target {
+            *date = self.clock.micros();
+        }
+    }
+
     pub fn do_your_thing(&mut self) {
         let start_date = self.clock.micros();
         let mut previous_date = start_date;
@@ -258,12 +267,7 @@ impl Scheduler {
             let mut date = self.clock.micros();
 
             if let Some(wait) = self.next_wait {
-                let target_date = previous_date + wait;
-                if target_date.saturating_sub(date) <= ACTIVE_WAITING_SWITCH_MICROS {
-                    while date < target_date {
-                        date = self.clock.micros();
-                    }
-                }
+                self.active_wait(&mut date, previous_date + wait);
             }
 
             // Process deferred actions
