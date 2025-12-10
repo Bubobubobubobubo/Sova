@@ -16,7 +16,12 @@ export const ActionTiming = {
 
 // Core send function
 async function sendMessage(message: ClientMessage): Promise<void> {
-  await invoke("send_client_message", { message });
+  try {
+    await invoke("send_client_message", { message });
+  } catch (error) {
+    console.error("[sova] Failed to send message:", message, error);
+    throw error;
+  }
 }
 
 // Transport controls

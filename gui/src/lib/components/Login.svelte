@@ -63,12 +63,12 @@
         errorMsg = "";
 
         try {
+            // Initialize Sova stores BEFORE connecting to ensure listeners are ready
+            await initializeSovaStores();
+
             await invoke("connect_client", { ip, port, username: nicknameValue });
             saveLoginFields({ ip, port, nickname: nicknameValue });
             nicknameStore.set(nicknameValue);
-
-            // Initialize Sova stores to listen for server messages
-            await initializeSovaStores();
 
             isConnected.set(true);
             connectionError.set(null);

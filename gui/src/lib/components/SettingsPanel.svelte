@@ -1,33 +1,23 @@
 <script lang="ts">
-    import { onMount } from "svelte";
     import { invoke } from "@tauri-apps/api/core";
     import { config } from "$lib/stores/config";
+    import { serverRunning, serverError, syncServerStatus } from "$lib/stores/serverState";
     import { themes } from "$lib/themes";
     import Toggle from "./ui/Toggle.svelte";
     import Slider from "./ui/Slider.svelte";
     import NumberInput from "./ui/NumberInput.svelte";
     import Select from "./Select.svelte";
 
-    let serverRunning = $state(false);
     let serverLoading = $state(false);
-    let serverError = $state("");
-
-    async function checkServerStatus() {
-        try {
-            serverRunning = await invoke<boolean>("is_server_running");
-        } catch {
-            serverRunning = false;
-        }
-    }
 
     async function handleStartServer() {
         serverLoading = true;
-        serverError = "";
+        serverError.set(null);
         try {
             await invoke("start_server", { port: $config.server.port });
-            serverRunning = true;
+            await syncServerStatus();
         } catch (e) {
-            serverError = String(e);
+            serverError.set(String(e));
         } finally {
             serverLoading = false;
         }
@@ -35,12 +25,12 @@
 
     async function handleStopServer() {
         serverLoading = true;
-        serverError = "";
+        serverError.set(null);
         try {
             await invoke("stop_server");
-            serverRunning = false;
+            await syncServerStatus();
         } catch (e) {
-            serverError = String(e);
+            serverError.set(String(e));
         } finally {
             serverLoading = false;
         }
@@ -59,10 +49,6 @@
             },
         }));
     }
-
-    onMount(() => {
-        checkServerStatus();
-    });
 
     const themeNames = Object.keys(themes);
 </script>
@@ -105,21 +91,21 @@
 
             <div class="server-controls">
                 <div class="server-status">
-                    <span class="status-dot" class:running={serverRunning}
+                    <span class="status-dot" class:running={$serverRunning}
                     ></span>
                     <span class="status-text"
-                        >{serverRunning ? "Running" : "Stopped"}</span
+                        >{$serverRunning ? "Running" : "Stopped"}</span
                     >
                 </div>
                 <button
                     class="server-button"
-                    class:stop={serverRunning}
-                    onclick={serverRunning ? handleStopServer : handleStartServer}
+                    class:stop={$serverRunning}
+                    onclick={$serverRunning ? handleStopServer : handleStartServer}
                     disabled={serverLoading}
                 >
                     {#if serverLoading}
                         ...
-                    {:else if serverRunning}
+                    {:else if $serverRunning}
                         Stop Server
                     {:else}
                         Start Server
@@ -127,8 +113,8 @@
                 </button>
             </div>
 
-            {#if serverError}
-                <div class="error-message">{serverError}</div>
+            {#if $serverError}
+                <div class="error-message">{$serverError}</div>
             {/if}
         </div>
     </div>

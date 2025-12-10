@@ -17,7 +17,8 @@ export type ActionTiming =
   | "Immediate"
   | { EndOfLine: number }
   | { AtBeat: number }
-  | "AtNextBeat";
+  | "AtNextBeat"
+  | "AtNextPhase";
 
 // PlaybackState for transport state
 export type PlaybackState =

@@ -13,6 +13,7 @@
         cleanupApp,
         initializeSovaStores,
         cleanupSovaStores,
+        syncServerStatus,
     } from "$lib/stores";
     import { isConnected } from "$lib/stores/connectionState";
     import { config } from "$lib/stores/config";
@@ -37,6 +38,7 @@
                 const alreadyRunning = await invoke<boolean>("is_server_running");
                 if (!alreadyRunning) {
                     await invoke("start_server", { port: cfg.server.port });
+                    await syncServerStatus();
                 }
             } catch (e) {
                 console.error("[sova] Failed to auto-start server:", e);
