@@ -77,7 +77,8 @@ pub enum ControlASM {
     Push(Variable),
     Pop(Variable),
     MapEmpty(Variable),
-    MapInsert(Variable, VariableValue, Variable, Variable),
+    MapInsert(Variable, Variable, Variable, Variable),
+    MapGet(Variable, Variable, Variable),
     // Jumps
     Jump(usize),
     JumpIf(Variable, usize),
@@ -309,10 +310,7 @@ impl ControlASM {
                 let val_value = ctx.evaluate(val);
 
                 if let VariableValue::Map(mut hash_map) = map_value {
-                    let key_as_string = match key {
-                        VariableValue::Str(s) => s.clone(),
-                        _ => format!("{:?}", key),
-                    };
+                    let key_as_string = ctx.evaluate(key).as_str(ctx.clock, ctx.frame_len);
                     hash_map.insert(key_as_string, val_value);
                     ctx.set_var(res, VariableValue::Map(hash_map));
                 } else {
@@ -322,6 +320,20 @@ impl ControlASM {
                     );
                     ctx.set_var(res, VariableValue::Map(HashMap::new()));
                 }
+                ReturnInfo::None
+            }
+            ControlASM::MapGet(map, key, res) => {
+                let map_value = ctx.value_ref(map);
+                let key_value = ctx.evaluate(key).as_str(ctx.clock, ctx.frame_len);
+
+                let value = if let Some(VariableValue::Map(map)) = map_value {
+                    map.get(&key_value).cloned().unwrap_or_default()
+                } else {
+                    log_eprintln!("[!] Runtime Error: MapGet from a variable that is not a map ! {:?}", map_value);
+                    VariableValue::default()
+                };
+
+                ctx.set_var(res, value);
                 ReturnInfo::None
             }
             // Jumps

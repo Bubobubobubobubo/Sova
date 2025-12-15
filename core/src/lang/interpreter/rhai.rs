@@ -15,13 +15,19 @@ use crate::{
 pub struct RhaiInterpreter {
     engine: Engine,
     ast: AST,
+    scope: Scope<'static>,
     watcher_id: Option<usize>
 }
+
+
 
 impl RhaiInterpreter {
 
     pub fn initialize_context_watcher(&mut self, ctx: &mut EvaluationContext) {
-        self.watcher_id = ctx.global_vars.watch();
+        self.watcher_id = Some(ctx.global_vars.watch());
+        for var in ctx.global_vars.iter() {
+            
+        }
     }
     
 }

@@ -20,6 +20,7 @@ mod compilation_state;
 pub use compilation_state::CompilationState;
 
 pub mod bali;
+pub mod lua;
 pub mod dummylang;
 
 /// A trait for types that can compile source code text into a [`Program`].

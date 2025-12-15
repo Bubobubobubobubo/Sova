@@ -10,7 +10,6 @@ mod factory;
 pub mod boinx;
 pub mod external;
 pub mod rhai;
-pub mod lua;
 
 pub use directory::InterpreterDirectory;
 pub use factory::InterpreterFactory;

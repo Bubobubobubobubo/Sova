@@ -33,6 +33,12 @@ pub enum VariableValue {
     Blob(Vec<u8>)
 }
 
+impl Default for VariableValue {
+    fn default() -> Self {
+        Self::Integer(0)
+    }
+}
+
 impl BitAnd for VariableValue {
     type Output = Self;
     fn bitand(self, rhs: Self) -> Self::Output {
@@ -912,6 +918,10 @@ impl VariableStore {
 
     pub fn get(&self, key: &str) -> Option<&VariableValue> {
         self.content.get(key)
+    }
+
+    pub fn get_mut(&self, key: &str) -> Option<&mut VariableValue> {
+        self.content.get_mut(key)
     }
 
     pub fn iter(&self) -> impl Iterator<Item = (&String, &VariableValue)> {

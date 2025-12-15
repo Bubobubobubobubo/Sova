@@ -61,7 +61,28 @@ impl<'a> EvaluationContext<'a> {
                 return x.clone();
             }
         };
-        res.cloned().unwrap_or(false.into())
+        res.cloned().unwrap_or_default()
+    }
+
+    pub fn value_ref<'b>(&'b self, var: &'b Variable) -> Option<&'b VariableValue> {
+        match var {
+            Variable::Global(n) => self.global_vars.get(n),
+            Variable::Line(n) => self.line_vars.get(n),
+            Variable::Frame(n) => self.frame_vars.get(n),
+            Variable::Instance(n) => self.instance_vars.get(n),
+            Variable::Constant(x) => Some(x),
+            Variable::Environment(_) => None,
+        }
+    }
+
+    pub fn value_ref_mut(&mut self, var: &Variable) -> Option<&mut VariableValue> {
+        match var {
+            Variable::Global(n) => self.global_vars.get_mut(n),
+            Variable::Line(n) => self.line_vars.get_mut(n),
+            Variable::Frame(n) => self.frame_vars.get_mut(n),
+            Variable::Instance(n) => self.instance_vars.get_mut(n),
+            Variable::Constant(_) | Variable::Environment(_) => None,
+        }
     }
 }
 
