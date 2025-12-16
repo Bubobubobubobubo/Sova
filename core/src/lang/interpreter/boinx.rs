@@ -106,13 +106,12 @@ impl BoinxLine {
     pub fn get_targets(
         &self,
         ctx: &mut EvaluationContext,
-        len: f64,
         date: SyncTime,
     ) -> (Vec<usize>, Vec<VariableValue>) {
         let devices = if let Some(dev_item) = &self.output.device {
             let dev_item = dev_item.evaluate(ctx);
-            let (pos, _) = dev_item.position(ctx, len, date);
-            let items = dev_item.at(ctx, pos, len);
+            let (pos, _) = dev_item.position(ctx, date);
+            let items = dev_item.at(ctx, pos);
             items
                 .into_iter()
                 .map(|(i, _)| match i {
@@ -126,8 +125,8 @@ impl BoinxLine {
         };
         let channels = if let Some(chan_item) = &self.output.channel {
             let chan_item = chan_item.evaluate(ctx);
-            let (pos, _) = chan_item.position(ctx, len, date);
-            let items = chan_item.at(ctx, pos, len);
+            let (pos, _) = chan_item.position(ctx, date);
+            let items = chan_item.at(ctx, pos);
             items
                 .into_iter()
                 .map(|(i, _)| VariableValue::from(i))
@@ -168,12 +167,13 @@ impl BoinxLine {
             self.output.compo.item.evaluate(ctx)
         };
         let len = self.time_span.as_beats(&ctx.clock, ctx.frame_len);
-        let (devices, channels) = self.get_targets(ctx, len, date);
-        let (pos, next_wait) = item.position(ctx, len, date.saturating_sub(self.start_date));
+        let mut sub_ctx = ctx.with_len(len);
+        let (devices, channels) = self.get_targets(&mut sub_ctx, date);
+        let (pos, next_wait) = item.position(&mut sub_ctx, date.saturating_sub(self.start_date));
         self.next_date = self.next_date.saturating_add(next_wait);
         let old_pos = mem::replace(&mut self.position, pos);
         let delta = old_pos.diff(&self.position);
-        let items = item.at(ctx, delta, len);
+        let items = item.at(&mut sub_ctx, delta);
         let mut new_lines = Vec::new();
         for (item, dur) in items {
             match item {

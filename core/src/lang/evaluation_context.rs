@@ -3,7 +3,6 @@ use serde::Serialize;
 use crate::{clock::SyncTime, device_map::DeviceMap};
 use crate::clock::Clock;
 use std::collections::VecDeque;
-use std::sync::Arc;
 
 use super::variable::{Variable, VariableStore, VariableValue};
 
@@ -21,7 +20,7 @@ pub struct EvaluationContext<'a> {
     pub structure: &'a Vec<Vec<f64>>,
     pub clock: &'a Clock,
     #[serde(skip)]
-    pub device_map: Arc<DeviceMap>,
+    pub device_map: &'a DeviceMap,
 }
 
 impl<'a> EvaluationContext<'a> {
@@ -84,6 +83,27 @@ impl<'a> EvaluationContext<'a> {
             Variable::Constant(_) | Variable::Environment(_) => None,
         }
     }
+
+    pub fn with_len(&'_ mut self, len: f64) -> EvaluationContext<'_> {
+        EvaluationContext {
+            logic_date: self.logic_date,
+            global_vars: self.global_vars,
+            line_vars: self.line_vars,
+            frame_vars: self.frame_vars,
+            instance_vars: self.instance_vars,
+            stack: self.stack,
+            line_index: self.line_index,
+            frame_index: self.frame_index,
+            frame_len: len,
+            structure: self.structure,
+            clock: self.clock,
+            device_map: self.device_map
+        }
+    }
+
+    pub fn with_relative_len(&'a mut self, len: f64) -> EvaluationContext<'a> {
+        self.with_len(self.frame_len * len)
+    }
 }
 
 #[derive(Default)]
@@ -99,7 +119,7 @@ pub struct PartialContext<'a> {
     pub frame_len: Option<f64>,
     pub structure: Option<&'a Vec<Vec<f64>>>,
     pub clock: Option<&'a Clock>,
-    pub device_map: Option<&'a Arc<DeviceMap>>,
+    pub device_map: Option<&'a DeviceMap>,
 }
 
 impl<'a> PartialContext<'a> {
@@ -164,7 +184,7 @@ impl<'a> From<PartialContext<'a>> for EvaluationContext<'a> {
             frame_len: partial.frame_len.unwrap(),
             structure: partial.structure.unwrap(),
             clock: partial.clock.unwrap(), 
-            device_map: Arc::clone(partial.device_map.unwrap()),
+            device_map: partial.device_map.unwrap(),
         }
     }
 }

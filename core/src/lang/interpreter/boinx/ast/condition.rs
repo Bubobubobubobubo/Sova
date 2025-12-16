@@ -64,7 +64,7 @@ impl BoinxCondition {
         .is_true(ctx)
     }
 
-    pub fn evaluate(&self, ctx: &EvaluationContext) -> BoinxCondition {
+    pub fn evaluate(&self, ctx: &mut EvaluationContext) -> BoinxCondition {
         BoinxCondition(
             Box::new(self.0.evaluate(ctx)),
             self.1,

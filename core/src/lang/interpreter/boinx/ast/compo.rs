@@ -145,9 +145,10 @@ impl BoinxCompo {
     }
 
     /// Evaluates the composition, then flattens it into a single item
-    pub fn yield_compiled(&self, ctx: &EvaluationContext) -> BoinxItem {
+    pub fn yield_compiled(&self, ctx: &mut EvaluationContext) -> BoinxItem {
         let mut forbidden = BTreeSet::new();
-        self.evaluate_vars(ctx, &mut forbidden).flatten().evaluate(ctx)
+        let flat = self.evaluate_vars(ctx, &mut forbidden).flatten();
+        flat.evaluate(ctx)
     }
 
     pub fn extract(self) -> BoinxItem {

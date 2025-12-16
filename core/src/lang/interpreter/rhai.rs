@@ -22,7 +22,6 @@ pub struct RhaiInterpreter {
 impl RhaiInterpreter {
     pub fn initialize_context_watcher(&mut self, ctx: &mut EvaluationContext) {
         self.watcher_id = Some(ctx.global_vars.watch());
-        
         for var in ctx.global_vars.iter() {
             
         }

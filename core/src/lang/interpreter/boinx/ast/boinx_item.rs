@@ -46,7 +46,7 @@ pub enum BoinxItem {
 }
 
 impl BoinxItem {
-    pub fn evaluate(&self, ctx: &EvaluationContext) -> BoinxItem {
+    pub fn evaluate(&self, ctx: &mut EvaluationContext) -> BoinxItem {
         match self {
             Self::Identity(x) => x.load_item(ctx, &mut BTreeSet::new()).evaluate(ctx),
             Self::Placeholder => Self::Mute,
@@ -77,10 +77,13 @@ impl BoinxItem {
                 Self::ArgMap(evaluated)
             }
             Self::Arithmetic(i1, op, i2) => {
-                arithmetic_op(ctx, i1.evaluate(ctx), *op, i2.evaluate(ctx))
+                let i1 = i1.evaluate(ctx);
+                let i2 = i2.evaluate(ctx);
+                arithmetic_op(ctx, i1, *op, i2)
             }
             Self::Func(name, args) => {
-                execute_boinx_function(ctx, &name, args.iter().map(|i| i.evaluate(ctx)).collect())
+                let args = args.iter().map(|i| i.evaluate(ctx)).collect();
+                execute_boinx_function(ctx, &name, args)
             }
             _ => self.clone(),
         }
@@ -176,53 +179,26 @@ impl BoinxItem {
 
     pub fn position(
         &self,
-        ctx: &EvaluationContext,
-        len: f64,
+        ctx: &mut EvaluationContext,
         mut date: SyncTime,
     ) -> (BoinxPosition, SyncTime) {
-        if ctx.clock.beats_to_micros(len) <= date {
+        if ctx.clock.beats_to_micros(ctx.frame_len) <= date {
             return (BoinxPosition::Undefined, NEVER);
         }
         match self {
             BoinxItem::WithDuration(i, t) => {
-                let sub_len = t.as_beats(ctx.clock, len);
-                i.position(ctx, sub_len, date)
+                let sub_len = t.as_beats(ctx.clock, ctx.frame_len);
+                let mut sub_ctx = ctx.with_len(sub_len);
+                i.position(&mut sub_ctx, date)
             }
             BoinxItem::Sequence(vec) => {
-                let mut items_no_duration: Vec<usize> = Vec::new();
-                let mut forced_duration: SyncTime = 0;
-                let mut durations: Vec<SyncTime> = vec![0; vec.len()];
-
+                let slices = self.time_slices(ctx);
                 for (i, item) in vec.iter().enumerate() {
-                    if let Some(d) = item.duration() {
-                        let duration = d.as_micros(&ctx.clock, len);
-                        forced_duration += duration;
-                        durations[i] = duration;
-                    } else {
-                        items_no_duration.push(i);
-                    }
-                }
-                let to_share = ctx.clock.beats_to_micros(len);
-                let to_share = to_share.saturating_sub(forced_duration);
-                let part = if items_no_duration.is_empty() {
-                    0
-                } else {
-                    to_share / (items_no_duration.len() as u64)
-                };
-                let mut rem_share = to_share % (items_no_duration.len() as u64);
-                for (i, item) in vec.iter().enumerate() {
-                    let mut dur = if items_no_duration.contains(&i) {
-                        part
-                    } else {
-                        durations[i]
-                    };
-                    if rem_share > 0 {
-                        dur += 1;
-                        rem_share -= 1;
-                    }
+                    let dur = slices[i];
                     if dur > date {
                         let sub_len = ctx.clock.micros_to_beats(dur);
-                        let (sub_pos, sub_rem) = item.position(ctx, sub_len, date);
+                        let mut sub_ctx = ctx.with_len(sub_len);
+                        let (sub_pos, sub_rem) = item.position(&mut sub_ctx, date);
                         return (BoinxPosition::At(i, Box::new(sub_pos)), sub_rem);
                     }
                     date -= dur;
@@ -233,14 +209,14 @@ impl BoinxItem {
                 let mut rem = NEVER;
                 let mut pos = Vec::new();
                 for item in vec.iter() {
-                    let (in_pos, in_rem) = item.position(ctx, len, date);
+                    let (in_pos, in_rem) = item.position(ctx, date);
                     rem = cmp::min(rem, in_rem);
                     pos.push(in_pos);
                 }
                 (BoinxPosition::Parallel(pos), rem)
             }
             _ => {
-                let micros_len = ctx.clock.beats_to_micros(len);
+                let micros_len = ctx.clock.beats_to_micros(ctx.frame_len);
                 let rem = micros_len.saturating_sub(date);
                 (BoinxPosition::This, rem)
             }
@@ -251,50 +227,102 @@ impl BoinxItem {
         &self,
         ctx: &mut EvaluationContext,
         position: BoinxPosition,
-        len: f64,
     ) -> Vec<(BoinxItem, TimeSpan)> {
         use BoinxPosition::*;
         match (self, position) {
             (BoinxItem::WithDuration(item, t), pos) => {
-                item.at(ctx, pos, t.as_beats(ctx.clock, len))
+                let sub_len = t.as_beats(ctx.clock, ctx.frame_len);
+                let mut sub_ctx = ctx.with_len(sub_len);
+                item.at(&mut sub_ctx, pos)
             }
             (BoinxItem::Sequence(vec), BoinxPosition::At(i, inner)) => {
-                let mut items_no_duration: Vec<usize> = Vec::new();
-                let mut forced_duration: SyncTime = 0;
-                let mut durations: Vec<SyncTime> = vec![0; vec.len()];
-
-                for (j, item) in vec.iter().enumerate() {
-                    if let Some(d) = item.duration() {
-                        let duration = d.as_micros(ctx.clock, len);
-                        forced_duration += duration;
-                        durations[j] = duration;
-                    } else {
-                        items_no_duration.push(j);
-                    }
-                }
-                let to_share = ctx.clock.beats_to_micros(len);
-                let to_share = to_share.saturating_sub(forced_duration);
-                let part = to_share / (items_no_duration.len() as u64);
-                let sub_len = if items_no_duration.contains(&i) {
-                    part
-                } else {
-                    durations[i]
-                };
+                let slices = self.time_slices(ctx);
+                let sub_len = slices[i];
                 let sub_len = ctx.clock.micros_to_beats(sub_len);
-
+                let mut sub_ctx = ctx.with_len(sub_len);
                 vec.get(i)
-                    .map(|item| item.at(ctx, *inner, sub_len))
+                    .map(|item| item.at(&mut sub_ctx, *inner))
                     .unwrap_or_default()
             }
             (BoinxItem::Simultaneous(vec), BoinxPosition::Parallel(positions)) => vec
                 .iter()
                 .zip(positions.into_iter())
-                .map(|(item, pos)| item.at(ctx, pos, len))
+                .map(|(item, pos)| item.at(ctx, pos))
                 .flatten()
                 .collect(),
-            (_, This) => vec![(self.clone(), TimeSpan::Beats(len))],
+            (_, This) => vec![(self.clone(), TimeSpan::Beats(ctx.frame_len))],
             (_, Undefined) => Vec::new(),
             _ => Vec::new(),
+        }
+    }
+
+    pub fn untimed_at(
+        &self,
+        position: BoinxPosition,
+    ) -> Vec<BoinxItem> {
+        use BoinxPosition::*;
+        match (self, position) {
+            (BoinxItem::WithDuration(item, _), pos) => {
+                item.untimed_at(pos)
+            }
+            (BoinxItem::Sequence(vec), BoinxPosition::At(i, inner)) => {
+                vec.get(i)
+                    .map(|item| item.untimed_at(*inner))
+                    .unwrap_or_default()
+            }
+            (BoinxItem::Simultaneous(vec), BoinxPosition::Parallel(positions)) => vec
+                .iter()
+                .zip(positions.into_iter())
+                .map(|(item, pos)| item.untimed_at(pos))
+                .flatten()
+                .collect(),
+            (_, This) => vec![self.clone()],
+            (_, Undefined) => Vec::new(),
+            _ => Vec::new(),
+        }
+    }
+
+    pub fn time_slices(&self, ctx: &EvaluationContext) -> Vec<SyncTime> {
+        match self {
+            BoinxItem::WithDuration(_, t) => vec![t.as_micros(ctx.clock, ctx.frame_len)],
+            BoinxItem::Sequence(vec) => {
+                let mut items_no_duration: BTreeSet<usize> = BTreeSet::new();
+                let mut forced_duration: SyncTime = 0;
+                let mut durations: Vec<SyncTime> = vec![0; vec.len()];
+
+                for (i, item) in vec.iter().enumerate() {
+                    if let Some(d) = item.duration() {
+                        let duration = d.as_micros(&ctx.clock, ctx.frame_len);
+                        forced_duration += duration;
+                        durations[i] = duration;
+                    } else {
+                        items_no_duration.insert(i);
+                    }
+                }
+                let to_share = ctx.clock.beats_to_micros(ctx.frame_len);
+                let to_share = to_share.saturating_sub(forced_duration);
+                let part = if items_no_duration.is_empty() {
+                    0
+                } else {
+                    to_share / (items_no_duration.len() as u64)
+                };
+                let mut rem_share = to_share % (items_no_duration.len() as u64);
+                let mut slices = Vec::with_capacity(vec.len());
+                for i in 0..vec.len() {
+                    let mut dur = if items_no_duration.contains(&i) {
+                        part
+                    } else {
+                        durations[i]
+                    };
+                    if rem_share > 0 {
+                        dur += 1;
+                        rem_share -= 1;
+                    }
+                    slices[i] = dur;
+                }
+                slices
+            }
+            _ => vec![ctx.clock.beats_to_micros(ctx.frame_len)]
         }
     }
 
