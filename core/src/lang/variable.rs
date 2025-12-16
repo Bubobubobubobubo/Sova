@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ops::{BitAnd, BitOr, BitXor, Neg, Not, Shl, Shr},
+    ops::{BitAnd, BitOr, BitXor, DerefMut, Neg, Not, Shl, Shr},
 };
 
 use serde::{Deserialize, Serialize};
@@ -30,7 +30,7 @@ pub enum VariableValue {
     Func(Program),
     Map(HashMap<String, VariableValue>),
     Vec(Vec<VariableValue>),
-    Blob(Vec<u8>)
+    Blob(Vec<u8>),
 }
 
 impl Default for VariableValue {
@@ -125,11 +125,13 @@ impl Neg for VariableValue {
             VariableValue::Integer(i) => VariableValue::Integer(-i),
             VariableValue::Float(f) => VariableValue::Float(-f),
             VariableValue::Decimal(s, p, q) => VariableValue::Decimal(-s, p, q),
-            VariableValue::Bool(b) => if b {
-                VariableValue::Integer(-1)
-            } else {
-                VariableValue::Bool(false)
-            },
+            VariableValue::Bool(b) => {
+                if b {
+                    VariableValue::Integer(-1)
+                } else {
+                    VariableValue::Bool(false)
+                }
+            }
             VariableValue::Str(s) => VariableValue::Str(s.chars().rev().collect()),
             _ => panic!("Not or bitwise not with wrong types, this should never happen"),
         }
@@ -269,12 +271,12 @@ impl VariableValue {
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => Self::Map(HashMap::new()),
             VariableValue::Vec(_) => Self::Vec(Vec::new()),
-            VariableValue::Blob(_) => Self::Blob(Vec::new())
+            VariableValue::Blob(_) => Self::Blob(Vec::new()),
         }
     }
 
-
-    pub fn compatible_cast(&mut self, other : &mut VariableValue, ctx: &EvaluationContext) {                // cast to correct types
+    pub fn compatible_cast(&mut self, other: &mut VariableValue, ctx: &EvaluationContext) {
+        // cast to correct types
         match self {
             VariableValue::Integer(_) => {
                 *other = other.cast_as_integer(ctx.clock, ctx.frame_len);
@@ -444,8 +446,8 @@ impl VariableValue {
                 VariableValue::Dur(d1.div(d2, ctx.clock, ctx.frame_len))
             }
             (VariableValue::Map(mut m1), VariableValue::Map(mut m2)) => {
-                let k1 : HashSet<String> = m1.keys().cloned().collect();
-                let k2 : HashSet<String> = m2.keys().cloned().collect();
+                let k1: HashSet<String> = m1.keys().cloned().collect();
+                let k2: HashSet<String> = m2.keys().cloned().collect();
                 let mut res = HashMap::new();
                 for key in k1.symmetric_difference(&k2) {
                     if m1.contains_key(key) {
@@ -517,8 +519,8 @@ impl VariableValue {
                 VariableValue::Dur(d1.mul(d2, ctx.clock, ctx.frame_len))
             }
             (VariableValue::Map(mut m1), VariableValue::Map(m2)) => {
-                let k1 : HashSet<String> = m1.keys().cloned().collect();
-                let k2 : HashSet<String> = m2.keys().cloned().collect();
+                let k1: HashSet<String> = m1.keys().cloned().collect();
+                let k2: HashSet<String> = m2.keys().cloned().collect();
                 let mut res = HashMap::new();
                 for key in k1.intersection(&k2) {
                     res.insert(key.clone(), m1.remove(key).unwrap());
@@ -564,7 +566,9 @@ impl VariableValue {
             (VariableValue::Integer(i1), VariableValue::Integer(i2)) => {
                 VariableValue::Integer(i1.pow(i2 as u32))
             }
-            (VariableValue::Float(f1), VariableValue::Float(f2)) => VariableValue::Float(f1.powf(f2)),
+            (VariableValue::Float(f1), VariableValue::Float(f2)) => {
+                VariableValue::Float(f1.powf(f2))
+            }
             _ => panic!("Power with wrong types, this should never happen"),
         }
     }
@@ -665,7 +669,7 @@ impl VariableValue {
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) | VariableValue::Vec(_) => 0,
             VariableValue::Blob(b) => {
-                let mut arr = [0u8 ; 8];
+                let mut arr = [0u8; 8];
                 for i in 0..std::cmp::min(b.len(), 8) {
                     arr[i] = b[i];
                 }
@@ -691,7 +695,7 @@ impl VariableValue {
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) | VariableValue::Vec(_) => 0.0,
             VariableValue::Blob(b) => {
-                let mut arr = [0u8 ; 8];
+                let mut arr = [0u8; 8];
                 for i in 0..std::cmp::min(b.len(), 8) {
                     arr[i] = b[i];
                 }
@@ -722,7 +726,7 @@ impl VariableValue {
             },
             VariableValue::Dur(d) => (1, d.as_micros(clock, frame_len) as u128, 1),
             VariableValue::Func(_) => todo!(),
-            VariableValue::Map(_) | VariableValue::Blob(_) |VariableValue::Vec(_) => (1, 0, 1),
+            VariableValue::Map(_) | VariableValue::Blob(_) | VariableValue::Vec(_) => (1, 0, 1),
         }
     }
 
@@ -758,7 +762,7 @@ impl VariableValue {
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) => "[map]".to_string(),
             VariableValue::Vec(_) => "[vec]".to_string(),
-            VariableValue::Blob(b) => String::from_utf8(b.clone()).unwrap_or_default()
+            VariableValue::Blob(b) => String::from_utf8(b.clone()).unwrap_or_default(),
         }
     }
 
@@ -772,7 +776,7 @@ impl VariableValue {
             VariableValue::Dur(d) => *d,
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) | VariableValue::Vec(_) => TimeSpan::Micros(0),
-            VariableValue::Blob(b) => TimeSpan::Micros(b.len() as SyncTime)
+            VariableValue::Blob(b) => TimeSpan::Micros(b.len() as SyncTime),
         }
     }
 
@@ -783,7 +787,7 @@ impl VariableValue {
                 let mut map = HashMap::new();
                 map.insert("0".to_owned(), x.clone());
                 map
-            },
+            }
         }
     }
 
@@ -792,19 +796,19 @@ impl VariableValue {
             VariableValue::Integer(i) => Vec::from(i.to_le_bytes()),
             VariableValue::Float(f) => Vec::from(f.to_le_bytes()),
             VariableValue::Decimal(_, _, _) => Vec::new(),
-            VariableValue::Bool(b) => { 
+            VariableValue::Bool(b) => {
                 if *b {
-                    vec![1] 
+                    vec![1]
                 } else {
                     Vec::new()
                 }
-            },
+            }
             VariableValue::Str(s) => Vec::from(s.as_bytes()),
             VariableValue::Dur(_) => Vec::new(),
             VariableValue::Func(_) => Vec::new(),
             VariableValue::Map(_) => Vec::new(),
             VariableValue::Vec(v) => v.iter().map(VariableValue::as_blob).flatten().collect(),
-            VariableValue::Blob(b) => b.clone()
+            VariableValue::Blob(b) => b.clone(),
         }
     }
 
@@ -819,7 +823,7 @@ impl VariableValue {
                 res
             }
             VariableValue::Vec(v) => v.clone(),
-            item => vec![item.clone()]
+            item => vec![item.clone()],
         }
     }
 
@@ -832,7 +836,7 @@ impl VariableValue {
     }
 
     pub fn is_decimal(&self) -> bool {
-        matches!(self, VariableValue::Decimal(_,_,_))
+        matches!(self, VariableValue::Decimal(_, _, _))
     }
 
     pub fn is_bool(&self) -> bool {
@@ -878,7 +882,7 @@ pub enum Variable {
 pub struct VariableStore {
     content: HashMap<String, VariableValue>,
     delta: Vec<String>,
-    watchers: Vec<usize>
+    watchers: Vec<usize>,
 }
 
 impl VariableStore {
@@ -924,6 +928,17 @@ impl VariableStore {
         self.content.get(key)
     }
 
+    pub fn get_create(&mut self, key: &str) -> &VariableValue {
+        match self.content.get(key) {
+            Some(value) => value,
+            None => {
+                self.content
+                    .insert(key.to_owned(), VariableValue::default());
+                self.content.get(key).unwrap()
+            }
+        }
+    }
+
     pub fn get_mut(&mut self, key: &str) -> Option<&mut VariableValue> {
         self.content.get_mut(key)
     }
@@ -937,7 +952,7 @@ impl VariableStore {
     }
 
     pub fn one_letter_vars(&self) -> impl Iterator<Item = (&String, &VariableValue)> {
-        self.iter().filter(|(k,_)| k.len() == 1)
+        self.iter().filter(|(k, _)| k.len() == 1)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -969,7 +984,12 @@ impl VariableStore {
     }
 
     pub fn clean_changes(&mut self) {
-        let min = self.watchers.iter().min().map(|m| *m).unwrap_or(self.delta.len());
+        let min = self
+            .watchers
+            .iter()
+            .min()
+            .map(|m| *m)
+            .unwrap_or(self.delta.len());
         self.delta.drain(0..min);
         for i in self.watchers.iter_mut() {
             *i -= min;
@@ -984,7 +1004,8 @@ impl VariableStore {
     }
 
     pub fn apply_changes<I>(&mut self, watcher: usize, changes: I)
-        where I : Iterator<Item = (String, VariableValue)>
+    where
+        I: Iterator<Item = (String, VariableValue)>,
     {
         let mut changed = 0;
         for (name, value) in changes {
@@ -995,19 +1016,24 @@ impl VariableStore {
             self.watchers[watcher] += changed;
         }
     }
-    
 }
 
 impl From<HashMap<String, VariableValue>> for VariableStore {
     fn from(content: HashMap<String, VariableValue>) -> Self {
-        VariableStore { content, ..Default::default() }
+        VariableStore {
+            content,
+            ..Default::default()
+        }
     }
 }
 
 impl<'a> FromIterator<(&'a String, &'a VariableValue)> for VariableStore {
     fn from_iter<T: IntoIterator<Item = (&'a String, &'a VariableValue)>>(iter: T) -> Self {
         VariableStore {
-            content: iter.into_iter().map(|(k,v)| (k.clone(), v.clone())).collect(),
+            content: iter
+                .into_iter()
+                .map(|(k, v)| (k.clone(), v.clone()))
+                .collect(),
             ..Default::default()
         }
     }

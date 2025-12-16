@@ -1,7 +1,7 @@
-use rhai::{AST, Engine, Scope};
+use rhai::{AST, Engine, Scope, Stmt};
 
 use crate::{
-    clock::SyncTime,
+    clock::{NEVER, SyncTime},
     compiler::{CompilationError, CompilationState},
     lang::{
         EvaluationContext,
@@ -22,20 +22,17 @@ pub struct RhaiInterpreter {
 impl RhaiInterpreter {
     pub fn initialize_context_watcher(&mut self, ctx: &mut EvaluationContext) {
         self.watcher_id = Some(ctx.global_vars.watch());
-        for var in ctx.global_vars.iter() {
-            
-        }
+        for var in ctx.global_vars.iter() {}
     }
 }
 
 impl Interpreter for RhaiInterpreter {
     fn execute_next(&mut self, ctx: &mut EvaluationContext) -> (Option<ConcreteEvent>, SyncTime) {
         let statements = self.ast.statements();
-        let mut scope = Scope::new();
-        for (var, value) in ctx.instance_vars.iter() {
-            scope.push(var, value.clone());
-        }
-        todo!()
+        self.engine
+            .register_fn("global", |name: &str| ctx.global_vars.get_create(name));
+        self.engine.eval_ast(self.ast);
+        (None, NEVER)
     }
 
     fn has_terminated(&self) -> bool {
