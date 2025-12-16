@@ -101,7 +101,7 @@ impl Frame {
         if !self.enabled || self.script().is_empty() {
             return;
         }
-        if self.script().has_compilation_error() {
+        if !self.script().compilation_state().is_ok() {
             return;
         }
         if let Some(interpreter) = interpreters.get_interpreter(self.script()) {
