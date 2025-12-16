@@ -568,19 +568,13 @@ impl ControlASM {
                 let phase_increment = delta_beats * speed_factor;
                 let new_phase = (current_phase + phase_increment).fract();
 
-                let frame_len = ctx.frame_len;
-                let clock = ctx.clock;
                 ctx.line_vars.insert(
                     SINE_PHASE_KEY.to_string(),
-                    VariableValue::Float(new_phase),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(new_phase)
                 );
                 ctx.line_vars.insert(
                     SINE_LAST_BEAT_KEY.to_string(),
-                    VariableValue::Float(current_beat),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(current_beat)
                 );
 
                 let raw_value = (new_phase * 2.0 * PI).sin(); // Raw value [-1, 1]
@@ -605,19 +599,13 @@ impl ControlASM {
                 let phase_increment = delta_beats * speed_factor;
                 let new_phase = (current_phase + phase_increment).fract();
 
-                let frame_len = ctx.frame_len;
-                let clock = ctx.clock;
                 ctx.line_vars.insert(
                     SAW_PHASE_KEY.to_string(),
-                    VariableValue::Float(new_phase),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(new_phase)
                 );
                 ctx.line_vars.insert(
                     SAW_LAST_BEAT_KEY.to_string(),
-                    VariableValue::Float(current_beat),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(current_beat)
                 );
 
                 let raw_value = new_phase * 2.0 - 1.0; // Raw value [-1, 1]
@@ -642,19 +630,13 @@ impl ControlASM {
                 let phase_increment = delta_beats * speed_factor;
                 let new_phase = (current_phase + phase_increment).fract();
 
-                let frame_len = ctx.frame_len;
-                let clock = ctx.clock;
                 ctx.line_vars.insert(
                     TRI_PHASE_KEY.to_string(),
-                    VariableValue::Float(new_phase),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(new_phase)
                 );
                 ctx.line_vars.insert(
                     TRI_LAST_BEAT_KEY.to_string(),
-                    VariableValue::Float(current_beat),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(current_beat)
                 );
 
                 let raw_value = 1.0 - (new_phase * 2.0 - 1.0).abs() * 2.0; // Raw value [-1, 1]
@@ -679,19 +661,13 @@ impl ControlASM {
                 let phase_increment = delta_beats * speed_factor;
                 let new_phase = (current_phase + phase_increment).fract();
 
-                let frame_len = ctx.frame_len;
-                let clock = ctx.clock;
                 ctx.line_vars.insert(
                     ISAW_PHASE_KEY.to_string(),
-                    VariableValue::Float(new_phase),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(new_phase)
                 );
                 ctx.line_vars.insert(
                     ISAW_LAST_BEAT_KEY.to_string(),
-                    VariableValue::Float(current_beat),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(current_beat)
                 );
 
                 let raw_value = 1.0 - (new_phase * 2.0); // Raw value [1, -1] (inverted saw)
@@ -726,29 +702,19 @@ impl ControlASM {
                 if new_phase < current_phase || current_value == 0 {
                     current_value = (rand::random::<u8>() % 127) as i64 + 1; // Generate new random value [1, 127]
 
-                    let frame_len = ctx.frame_len;
-                    let clock = ctx.clock;
                     ctx.line_vars.insert(
                         RANDSTEP_VALUE_KEY.to_string(),
-                        VariableValue::Integer(current_value),
-                        clock,
-                        frame_len,
+                        VariableValue::Integer(current_value)
                     ); // Store it
                 }
 
-                let frame_len = ctx.frame_len;
-                let clock = ctx.clock;
                 ctx.line_vars.insert(
                     RANDSTEP_PHASE_KEY.to_string(),
-                    VariableValue::Float(new_phase),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(new_phase)
                 );
                 ctx.line_vars.insert(
                     RANDSTEP_LAST_BEAT_KEY.to_string(),
-                    VariableValue::Float(current_beat),
-                    clock,
-                    frame_len,
+                    VariableValue::Float(current_beat)
                 );
 
                 ctx.set_var(dest_var, VariableValue::Integer(current_value)); // Return the current held value

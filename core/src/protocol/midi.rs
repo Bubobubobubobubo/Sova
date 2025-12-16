@@ -205,10 +205,9 @@ impl MidiOut {
     /// - The connection Mutex is poisoned.
     /// - The underlying `midir` virtual port creation fails.
     pub fn create_virtual_port(&mut self) -> Result<(), ProtocolError> {
-        let midi_out = self.get_midi_out()?;
-
         #[cfg(not(target_os = "windows"))]
         {
+            let midi_out = self.get_midi_out()?;
             use midir::os::unix::VirtualOutput;
             match midi_out.create_virtual(&self.name) {
                 Ok(connection) => {
@@ -405,14 +404,13 @@ impl MidiIn {
     /// - The connection Mutex is poisoned.
     /// - The underlying `midir` virtual port creation fails.
     pub fn create_virtual_port(&mut self) -> Result<(), ProtocolError> {
-        let midi_in = self.get_midi_in()?;
-        let memory_clone = Arc::clone(&self.memory);
-        // Use a distinct connection name for the virtual input
-        let connection_name = format!("SovaIn-Virtual-{}", self.name);
-        let connection_name_clone = connection_name.clone(); // Clone for the closure
-
         #[cfg(not(target_os = "windows"))] // VirtualInput is usually not on Windows
         {
+            let midi_in = self.get_midi_in()?;
+            let memory_clone = Arc::clone(&self.memory);
+            // Use a distinct connection name for the virtual input
+            let connection_name = format!("SovaIn-Virtual-{}", self.name);
+            let connection_name_clone = connection_name.clone(); // Clone for the closure
             use midir::os::unix::VirtualInput; // Import the trait
             match midi_in.create_virtual(
                 &self.name, // The name other apps will see for this input port

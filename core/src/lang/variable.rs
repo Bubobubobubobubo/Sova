@@ -1,7 +1,7 @@
 use std::{
     cmp::Ordering,
     collections::{HashMap, HashSet},
-    ops::{BitAnd, BitOr, BitXor, DerefMut, Neg, Not, Shl, Shr},
+    ops::{BitAnd, BitOr, BitXor, Neg, Not, Shl, Shr},
 };
 
 use serde::{Deserialize, Serialize};
@@ -893,10 +893,15 @@ impl VariableStore {
     pub fn insert(
         &mut self,
         key: String,
-        mut value: VariableValue,
-        clock: &Clock,
-        frame_len: f64,
+        value: VariableValue
     ) -> Option<VariableValue> {
+        if self.watchers.len() > 0 {
+            self.delta.push(key.clone());
+        }
+        self.content.insert(key, value)
+    }
+
+    pub fn insert_cast(&mut self, key: String, mut value: VariableValue, clock: &Clock, frame_len: f64) -> Option<VariableValue> {
         if let Some(old_value) = self.content.get(&key) {
             match old_value {
                 VariableValue::Integer(_) => value = value.cast_as_integer(clock, frame_len),
@@ -911,17 +916,7 @@ impl VariableStore {
                 VariableValue::Blob(_) => { /* Do nothing, allow overwrite */ }
             }
         }
-        if self.watchers.len() > 0 {
-            self.delta.push(key.clone());
-        }
-        self.content.insert(key, value)
-    }
-
-    pub fn insert_no_cast(&mut self, key: String, value: VariableValue) -> Option<VariableValue> {
-        if self.watchers.len() > 0 {
-            self.delta.push(key.clone());
-        }
-        self.content.insert(key, value)
+        self.insert(key, value)
     }
 
     pub fn get(&self, key: &str) -> Option<&VariableValue> {
@@ -929,14 +924,10 @@ impl VariableStore {
     }
 
     pub fn get_create(&mut self, key: &str) -> &VariableValue {
-        match self.content.get(key) {
-            Some(value) => value,
-            None => {
-                self.content
-                    .insert(key.to_owned(), VariableValue::default());
-                self.content.get(key).unwrap()
-            }
+        if !self.content.contains_key(key) {
+            self.content.insert(key.to_owned(), VariableValue::default());
         }
+        self.content.get(key).unwrap()
     }
 
     pub fn get_mut(&mut self, key: &str) -> Option<&mut VariableValue> {
@@ -1009,7 +1000,7 @@ impl VariableStore {
     {
         let mut changed = 0;
         for (name, value) in changes {
-            self.insert_no_cast(name, value);
+            self.insert(name, value);
             changed += 1;
         }
         if watcher < self.watchers.len() {

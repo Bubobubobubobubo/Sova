@@ -62,7 +62,7 @@ impl EditWidget {
         "
     }
 
-    pub fn process_event(&mut self, state: &mut AppState, event: KeyEvent) { 
+    pub fn process_event(&mut self, state: &mut AppState, mut event: KeyEvent) { 
         match event.code {
             KeyCode::Char('s') if event.modifiers == KeyModifiers::CONTROL => {
                 upload_content(state, self.get_content());
@@ -114,7 +114,12 @@ impl EditWidget {
                 }
                 self.text_area.paste();
             }
-            _ => { 
+            _ => {
+                if cfg!(windows) {
+                    if event.modifiers == (KeyModifiers::CONTROL | KeyModifiers::ALT) {
+                        event.modifiers = KeyModifiers::empty();
+                    }
+                }
                 self.text_area.input(event);
             }
         }

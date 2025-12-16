@@ -1,4 +1,4 @@
-use rhai::{AST, Engine, Scope, Stmt};
+use rhai::{AST, Engine, NativeCallContext, Scope, Stmt};
 
 use crate::{
     clock::{NEVER, SyncTime},
@@ -16,12 +16,10 @@ pub struct RhaiInterpreter {
     engine: Engine,
     ast: AST,
     scope: Scope<'static>,
-    watcher_id: Option<usize>,
 }
 
 impl RhaiInterpreter {
     pub fn initialize_context_watcher(&mut self, ctx: &mut EvaluationContext) {
-        self.watcher_id = Some(ctx.global_vars.watch());
         for var in ctx.global_vars.iter() {}
     }
 }
@@ -29,9 +27,7 @@ impl RhaiInterpreter {
 impl Interpreter for RhaiInterpreter {
     fn execute_next(&mut self, ctx: &mut EvaluationContext) -> (Option<ConcreteEvent>, SyncTime) {
         let statements = self.ast.statements();
-        self.engine
-            .register_fn("global", |name: &str| ctx.global_vars.get_create(name));
-        self.engine.eval_ast(self.ast);
+        self.engine.eval_ast::<i64>(&self.ast);
         (None, NEVER)
     }
 
@@ -66,7 +62,6 @@ impl InterpreterFactory for RhaiInterpreterFactory {
             Ok(ast) => Ok(Box::new(RhaiInterpreter {
                 engine,
                 ast,
-                watcher_id: None,
                 scope: Scope::new(),
             })),
             Err(e) => Err(e.to_string()),

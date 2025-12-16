@@ -301,12 +301,14 @@ impl BoinxItem {
                 }
                 let to_share = ctx.clock.beats_to_micros(ctx.frame_len);
                 let to_share = to_share.saturating_sub(forced_duration);
-                let part = if items_no_duration.is_empty() {
-                    0
+                let (part, mut rem_share) = if items_no_duration.is_empty() {
+                    (0, 0)
                 } else {
-                    to_share / (items_no_duration.len() as u64)
+                    (
+                        to_share / (items_no_duration.len() as u64),
+                        to_share % (items_no_duration.len() as u64)
+                    )
                 };
-                let mut rem_share = to_share % (items_no_duration.len() as u64);
                 let mut slices = Vec::with_capacity(vec.len());
                 for i in 0..vec.len() {
                     let mut dur = if items_no_duration.contains(&i) {
@@ -318,7 +320,7 @@ impl BoinxItem {
                         dur += 1;
                         rem_share -= 1;
                     }
-                    slices[i] = dur;
+                    slices.push(dur);
                 }
                 slices
             }

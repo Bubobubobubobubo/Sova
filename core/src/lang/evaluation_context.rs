@@ -29,19 +29,19 @@ impl<'a> EvaluationContext<'a> {
         match var {
             Variable::Global(n) => {
                 self.global_vars
-                    .insert(n.clone(), value, self.clock, self.frame_len)
+                    .insert(n.clone(), value)
             }
             Variable::Line(n) => {
                 self.line_vars
-                    .insert(n.clone(), value, self.clock, self.frame_len)
+                    .insert(n.clone(), value)
             }
             Variable::Frame(n) => {
                 self.frame_vars
-                    .insert(n.clone(), value, self.clock, self.frame_len)
+                    .insert(n.clone(), value)
             }
             Variable::Instance(n) => {
                 self.instance_vars
-                    .insert(n.clone(), value, self.clock, self.frame_len)
+                    .insert(n.clone(), value)
             }
             _ => None,
         };

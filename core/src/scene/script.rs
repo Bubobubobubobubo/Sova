@@ -155,7 +155,7 @@ pub struct ScriptExecution {
 impl ScriptExecution {
     pub fn execute_at(interpreter: Box<dyn Interpreter>, date: SyncTime) -> Self {
         let mut instance_vars = VariableStore::new();
-        instance_vars.insert_no_cast(
+        instance_vars.insert(
             "_current_midi_device_id".to_string(),
             VariableValue::Integer(1),
         );
