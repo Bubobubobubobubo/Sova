@@ -328,6 +328,10 @@
         overflow: visible;
     }
 
+    .track-row.vertical .track-content {
+        overflow: hidden;
+    }
+
     .grid-lines {
         position: absolute;
         top: 0;
