@@ -98,6 +98,31 @@ export interface DeviceInfo {
   kind: DeviceKind;
   is_connected: boolean;
   address: string | null;
+  is_missing: boolean;
+}
+
+// Device configuration for serialization
+export type DeviceConfig =
+  | "VirtualMidi"
+  | "PhysicalMidi"
+  | { OscOutput: { ip: string; port: number } };
+
+// A single device in serializable form
+export interface SerializableDevice {
+  name: string;
+  config: DeviceConfig;
+}
+
+// Snapshot of the entire device map for serialization/persistence
+export interface DeviceMapSnapshot {
+  devices: SerializableDevice[];
+  slot_assignments: (string | null)[];
+}
+
+// Result of loading a project
+export interface LoadedProject {
+  snapshot: Snapshot;
+  device_config: DeviceMapSnapshot | null;
 }
 
 // Link state
@@ -198,4 +223,6 @@ export type ClientMessage =
   | { CreateOscDevice: [string, string, number] }
   | { RemoveOscDevice: string }
   | "GetClock"
-  | "GetSnapshot";
+  | "GetSnapshot"
+  | "GetDeviceMapSnapshot"
+  | { RestoreDeviceMap: DeviceMapSnapshot };

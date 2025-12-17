@@ -119,7 +119,7 @@
     <div class="devices-content">
         <div class="devices-list">
             {#each $devices as device (device.name)}
-                <div class="device-row">
+                <div class="device-row" class:missing={device.is_missing}>
                     <div class="col-type">{device.kind === "Midi" ? "MIDI" : "OSC"}</div>
                     <div class="col-slot">
                         {#if editingSlot === device.name}
@@ -146,7 +146,10 @@
                         {/if}
                     </div>
                     <div class="col-status">
-                        {#if device.kind === "Midi"}
+                        {#if device.is_missing}
+                            <span class="status-indicator missing"></span>
+                            Missing
+                        {:else if device.kind === "Midi"}
                             <span
                                 class="status-indicator"
                                 class:connected={device.is_connected}
@@ -160,7 +163,9 @@
                     <div class="col-name">{device.name}</div>
                     <div class="col-address">{device.address || ""}</div>
                     <div class="col-action">
-                        {#if device.kind === "Midi"}
+                        {#if device.is_missing}
+                            <!-- No action button for missing devices -->
+                        {:else if device.kind === "Midi"}
                             <button
                                 class="action-button"
                                 class:connect={!device.is_connected}
@@ -336,6 +341,14 @@
 
     .device-row.creating {
         background-color: var(--colors-surface, #2d2d2d);
+    }
+
+    .device-row.missing {
+        opacity: 0.5;
+    }
+
+    .device-row.missing:hover {
+        opacity: 0.7;
     }
 
     .col-type {

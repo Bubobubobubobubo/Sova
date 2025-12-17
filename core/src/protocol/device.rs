@@ -20,6 +20,33 @@ pub struct DeviceInfo {
     pub direction: DeviceDirection,
     pub is_connected: bool,
     pub address: Option<String>,
+    #[serde(default)]
+    pub is_missing: bool,
+}
+
+/// Snapshot of the entire device map for serialization/persistence
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct DeviceMapSnapshot {
+    pub devices: Vec<SerializableDevice>,
+    pub slot_assignments: Vec<Option<String>>,
+}
+
+/// A single device in serializable form
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct SerializableDevice {
+    pub name: String,
+    pub config: DeviceConfig,
+}
+
+/// Configuration for recreating a device
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub enum DeviceConfig {
+    /// Virtual MIDI device - can be recreated with just the name
+    VirtualMidi,
+    /// OSC output device - needs IP and port to recreate
+    OscOutput { ip: String, port: u16 },
+    /// Physical MIDI device - stored for reference, marked missing if unavailable
+    PhysicalMidi,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Default)]

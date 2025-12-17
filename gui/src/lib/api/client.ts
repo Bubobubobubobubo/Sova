@@ -5,6 +5,7 @@ import type {
   Scene,
   Line,
   Frame,
+  DeviceMapSnapshot,
 } from "$lib/types/protocol";
 
 export const ActionTiming = {
@@ -181,4 +182,15 @@ export async function removeOscDevice(name: string): Promise<void> {
 // Queries
 export async function getSnapshot(): Promise<void> {
   await sendMessage("GetSnapshot");
+}
+
+// Device map snapshot (for save/load)
+export async function getDeviceMapSnapshot(): Promise<void> {
+  await sendMessage("GetDeviceMapSnapshot");
+}
+
+export async function restoreDeviceMap(
+  snapshot: DeviceMapSnapshot,
+): Promise<void> {
+  await sendMessage({ RestoreDeviceMap: snapshot });
 }

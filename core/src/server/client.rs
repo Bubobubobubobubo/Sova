@@ -2,6 +2,7 @@
 
 use super::ServerMessage;
 use crate::log_eprintln;
+use crate::protocol::DeviceMapSnapshot;
 use crate::scene::{Frame, Line, Scene};
 use crate::schedule::ActionTiming;
 use crate::schedule::SchedulerMessage;
@@ -91,6 +92,11 @@ pub enum ClientMessage {
     CreateOscDevice(String, String, u16), // name, ip_address, port
     /// Request removal of an OSC output device by its name.
     RemoveOscDevice(String), // name
+    // --- Device Map Snapshot Messages ---
+    /// Request the current device map snapshot for saving.
+    GetDeviceMapSnapshot,
+    /// Restore devices from a saved snapshot.
+    RestoreDeviceMap(DeviceMapSnapshot),
 }
 
 impl ClientMessage {

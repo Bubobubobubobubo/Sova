@@ -547,6 +547,19 @@ async fn on_message(
             // Revert: No longer send immediate status based on atomic
             ServerMessage::Success
         },
+        ClientMessage::GetDeviceMapSnapshot => {
+            let snapshot = state.devices.create_snapshot();
+            ServerMessage::DeviceMapSnapshot(snapshot)
+        },
+        ClientMessage::RestoreDeviceMap(snapshot) => {
+            let missing_devices = state.devices.restore_from_snapshot(snapshot);
+            // Broadcast updated device list after restoration
+            let updated_list = state.devices.device_list();
+            let _ = state
+                .update_sender
+                .send(SovaNotification::DeviceListChanged(updated_list));
+            ServerMessage::DeviceMapRestored { missing_devices }
+        },
     }
 }
 

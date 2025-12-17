@@ -89,15 +89,16 @@ async fn list_projects() -> Result<Vec<disk::ProjectInfo>, String> {
 #[tauri::command]
 async fn save_project(
     snapshot: sova_core::server::Snapshot,
+    device_config: Option<sova_core::protocol::DeviceMapSnapshot>,
     project_name: String,
 ) -> Result<(), String> {
-    disk::save_project(&snapshot, &project_name)
+    disk::save_project(&snapshot, device_config.as_ref(), &project_name)
         .await
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-async fn load_project(project_name: String) -> Result<sova_core::server::Snapshot, String> {
+async fn load_project(project_name: String) -> Result<disk::LoadedProject, String> {
     disk::load_project(&project_name)
         .await
         .map_err(|e| e.to_string())
@@ -127,7 +128,7 @@ async fn open_projects_folder() -> Result<(), String> {
 }
 
 #[tauri::command]
-async fn import_project(path: String) -> Result<sova_core::server::Snapshot, String> {
+async fn import_project(path: String) -> Result<disk::LoadedProject, String> {
     disk::load_project_from_path(std::path::Path::new(&path))
         .await
         .map_err(|e| e.to_string())

@@ -34,6 +34,8 @@ export const SERVER_EVENTS = {
 
   // Devices
   DEVICE_LIST: "server:device-list",
+  DEVICE_MAP_SNAPSHOT: "server:device-map-snapshot",
+  DEVICE_MAP_RESTORED: "server:device-map-restored",
 
   // Collaboration
   PEERS_UPDATED: "server:peers-updated",
