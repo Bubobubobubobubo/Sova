@@ -19,18 +19,24 @@ use crate::util::decimal_operations::{
 use super::{environment_func::EnvironmentFunc, evaluation_context::EvaluationContext};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(untagged)]
 pub enum VariableValue {
-    Integer(i64),
-    Float(f64),
-    Decimal(i8, u128, u128), // sign, numerator, denominator
-    Bool(bool),
-    Str(String),
-    Dur(TimeSpan),
+    Decimal(i8, u64, u64), // sign, numerator, denominator
     Func(Program),
-    Map(HashMap<String, VariableValue>),
-    Vec(Vec<VariableValue>),
     Blob(Vec<u8>),
+    #[serde(untagged)]
+    Integer(i64),
+    #[serde(untagged)]
+    Float(f64),
+    #[serde(untagged)]
+    Bool(bool),
+    #[serde(untagged)]
+    Str(String),
+    #[serde(untagged)]
+    Dur(TimeSpan),
+    #[serde(untagged)]
+    Map(HashMap<String, VariableValue>),
+    #[serde(untagged)]
+    Vec(Vec<VariableValue>),
 }
 
 impl Default for VariableValue {
@@ -188,13 +194,13 @@ impl PartialOrd for VariableValue {
             }
             (VariableValue::Integer(x), VariableValue::Decimal(_, _, _)) => {
                 let x_sign = if *x < 0 { -1 } else { 1 };
-                let x_num = if *x < 0 { (-*x) as u128 } else { *x as u128 };
+                let x_num = if *x < 0 { (-*x) as u64 } else { *x as u64 };
                 let x_den = 1;
                 VariableValue::Decimal(x_sign, x_num, x_den).partial_cmp(other)
             }
             (VariableValue::Decimal(_, _, _), VariableValue::Integer(y)) => {
                 let y_sign = if *y < 0 { -1 } else { 1 };
-                let y_num = if *y < 0 { (-*y) as u128 } else { *y as u128 };
+                let y_num = if *y < 0 { (-*y) as u64 } else { *y as u64 };
                 let y_den = 1;
                 self.partial_cmp(&VariableValue::Decimal(y_sign, y_num, y_den))
             }
@@ -704,11 +710,11 @@ impl VariableValue {
         }
     }
 
-    pub fn as_decimal(&self, clock: &Clock, frame_len: f64) -> (i8, u128, u128) {
+    pub fn as_decimal(&self, clock: &Clock, frame_len: f64) -> (i8, u64, u64) {
         match self {
             VariableValue::Integer(i) => {
                 let sign = if *i < 0 { -1 } else { 1 };
-                let num = if *i < 0 { (-*i) as u128 } else { *i as u128 };
+                let num = if *i < 0 { (-*i) as u64 } else { *i as u64 };
                 (sign, num, 1)
             }
             VariableValue::Float(f) => decimal_from_float64(*f),
@@ -724,7 +730,7 @@ impl VariableValue {
                 Ok(n) => decimal_from_float64(n),
                 Err(_) => (1, 0, 1),
             },
-            VariableValue::Dur(d) => (1, d.as_micros(clock, frame_len) as u128, 1),
+            VariableValue::Dur(d) => (1, d.as_micros(clock, frame_len) as u64, 1),
             VariableValue::Func(_) => todo!(),
             VariableValue::Map(_) | VariableValue::Blob(_) | VariableValue::Vec(_) => (1, 0, 1),
         }
