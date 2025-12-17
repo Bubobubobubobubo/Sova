@@ -33,6 +33,14 @@ export interface DragState {
   currentFrameIdx: number;
 }
 
+export interface MarqueeState {
+  startX: number;
+  startY: number;
+  currentX: number;
+  currentY: number;
+  additive: boolean;
+}
+
 export interface TimelineContext {
   // Layout
   pixelsPerBeat: number;
@@ -48,6 +56,9 @@ export interface TimelineContext {
   // Drag state
   dragging: DragState | null;
 
+  // Marquee state
+  marquee: MarqueeState | null;
+
   // Editing actions
   startEdit: (field: EditingField, lineIdx: number, frameIdx: number) => void;
   updateEditValue: (field: EditingField, value: string) => void;
@@ -62,6 +73,12 @@ export interface TimelineContext {
   // Drag actions
   startDrag: (lineIdx: number, frameIdx: number) => void;
   getDropIndicatorIdx: (lineIdx: number) => number | null;
+
+  // Marquee actions
+  startMarquee: (x: number, y: number, additive: boolean) => void;
+  updateMarquee: (x: number, y: number) => void;
+  endMarquee: () => void;
+  getMarqueeRect: () => { left: number; top: number; width: number; height: number } | null;
 }
 
 export function getDuration(frame: Frame): number {
@@ -92,6 +109,9 @@ export function createTimelineContext(initial: {
 
   // Drag state
   let dragging = $state<DragState | null>(null);
+
+  // Marquee state
+  let marquee = $state<MarqueeState | null>(null);
 
   // Editing actions
   function startEdit(field: EditingField, lineIdx: number, frameIdx: number) {
@@ -282,6 +302,29 @@ export function createTimelineContext(initial: {
     return dragging.currentFrameIdx;
   }
 
+  // Marquee actions
+  function startMarquee(x: number, y: number, additive: boolean) {
+    marquee = { startX: x, startY: y, currentX: x, currentY: y, additive };
+  }
+
+  function updateMarquee(x: number, y: number) {
+    if (!marquee) return;
+    marquee = { ...marquee, currentX: x, currentY: y };
+  }
+
+  function endMarquee() {
+    marquee = null;
+  }
+
+  function getMarqueeRect(): { left: number; top: number; width: number; height: number } | null {
+    if (!marquee) return null;
+    const left = Math.min(marquee.startX, marquee.currentX);
+    const top = Math.min(marquee.startY, marquee.currentY);
+    const width = Math.abs(marquee.currentX - marquee.startX);
+    const height = Math.abs(marquee.currentY - marquee.startY);
+    return { left, top, width, height };
+  }
+
   const ctx: TimelineContext = {
     get pixelsPerBeat() { return pixelsPerBeat; },
     set pixelsPerBeat(v) { pixelsPerBeat = v; },
@@ -294,6 +337,7 @@ export function createTimelineContext(initial: {
     set resizing(v) { resizing = v; },
     get dragging() { return dragging; },
     set dragging(v) { dragging = v; },
+    get marquee() { return marquee; },
     startEdit,
     updateEditValue,
     commitEdit,
@@ -303,6 +347,10 @@ export function createTimelineContext(initial: {
     getPreviewDuration,
     startDrag,
     getDropIndicatorIdx,
+    startMarquee,
+    updateMarquee,
+    endMarquee,
+    getMarqueeRect,
   };
 
   setContext(TIMELINE_CONTEXT_KEY, ctx);

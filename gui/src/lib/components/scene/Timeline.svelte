@@ -7,6 +7,10 @@
         selectFrame,
         extendSelection,
         isFrameInSelection,
+        setSelectedClips,
+        addSelectedClips,
+        toClipId,
+        type ClipId,
     } from "$lib/stores/selection";
     import {
         setFrames,
@@ -45,8 +49,10 @@
     const BASE_PIXELS_PER_BEAT = 60;
     const BASE_TRACK_SIZE = 72;
     const RULER_SIZE = 28;
+    const HEADER_SIZE = 70;
     const LINE_WIDTH_MIN = 0.5;
     const LINE_WIDTH_MAX = 3.0;
+    const MARQUEE_THRESHOLD = 5;
 
     // Derived dimensions
     const pixelsPerBeat = $derived(BASE_PIXELS_PER_BEAT * viewport.zoom);
@@ -85,6 +91,15 @@
         lineIdx: number;
         startPos: number;
         startMultiplier: number;
+    } | null = $state(null);
+
+    // Marquee pre-threshold state
+    let marqueeStartPos: {
+        x: number;
+        y: number;
+        clientX: number;
+        clientY: number;
+        shiftKey: boolean;
     } | null = $state(null);
 
     function getLineWidth(lineIdx: number): number {
@@ -130,6 +145,157 @@
             window.removeEventListener("mouseup", handleLineResizeEnd);
         };
     });
+
+    // Marquee coordinate helper
+    function getContentCoordinates(event: MouseEvent): { x: number; y: number } | null {
+        if (!timelineContainer) return null;
+        const rect = timelineContainer.getBoundingClientRect();
+        const scrollX = timelineContainer.scrollLeft;
+        const scrollY = timelineContainer.scrollTop;
+        const x = event.clientX - rect.left + scrollX;
+        const y = event.clientY - rect.top + scrollY;
+
+        if (isVertical) {
+            if (x < RULER_SIZE || y < HEADER_SIZE) return null;
+        } else {
+            if (x < HEADER_SIZE || y < RULER_SIZE) return null;
+        }
+        return { x, y };
+    }
+
+    // Marquee handlers
+    function handleTimelineMousedown(event: MouseEvent) {
+        if ((event.target as HTMLElement).closest("[data-clip]")) return;
+        if (event.button !== 0) return;
+
+        const coords = getContentCoordinates(event);
+        if (!coords) return;
+
+        marqueeStartPos = {
+            ...coords,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            shiftKey: event.shiftKey,
+        };
+        window.addEventListener("mousemove", handleMarqueeCheck);
+        window.addEventListener("mouseup", handleMarqueeCancel);
+    }
+
+    function handleMarqueeCheck(event: MouseEvent) {
+        if (!marqueeStartPos) return;
+        const dx = Math.abs(event.clientX - marqueeStartPos.clientX);
+        const dy = Math.abs(event.clientY - marqueeStartPos.clientY);
+
+        if (dx > MARQUEE_THRESHOLD || dy > MARQUEE_THRESHOLD) {
+            cleanupMarqueeCheck();
+            ctx.startMarquee(marqueeStartPos.x, marqueeStartPos.y, marqueeStartPos.shiftKey);
+            window.addEventListener("mousemove", handleMarqueeMove);
+            window.addEventListener("mouseup", handleMarqueeEnd);
+        }
+    }
+
+    function handleMarqueeCancel() {
+        cleanupMarqueeCheck();
+        if (marqueeStartPos && !marqueeStartPos.shiftKey) {
+            selection.set(null);
+        }
+        marqueeStartPos = null;
+    }
+
+    function cleanupMarqueeCheck() {
+        window.removeEventListener("mousemove", handleMarqueeCheck);
+        window.removeEventListener("mouseup", handleMarqueeCancel);
+    }
+
+    function handleMarqueeMove(event: MouseEvent) {
+        if (!timelineContainer) return;
+        const rect = timelineContainer.getBoundingClientRect();
+        const scrollX = timelineContainer.scrollLeft;
+        const scrollY = timelineContainer.scrollTop;
+        const x = event.clientX - rect.left + scrollX;
+        const y = event.clientY - rect.top + scrollY;
+        ctx.updateMarquee(x, y);
+    }
+
+    function handleMarqueeEnd() {
+        window.removeEventListener("mousemove", handleMarqueeMove);
+        window.removeEventListener("mouseup", handleMarqueeEnd);
+        marqueeStartPos = null;
+
+        if (!ctx.marquee || !$scene) {
+            ctx.endMarquee();
+            return;
+        }
+
+        const rect = ctx.getMarqueeRect();
+        if (!rect) {
+            ctx.endMarquee();
+            return;
+        }
+
+        const intersecting = computeIntersectingClips(rect);
+
+        if (ctx.marquee.additive) {
+            addSelectedClips(intersecting);
+        } else {
+            setSelectedClips(intersecting);
+        }
+
+        ctx.endMarquee();
+    }
+
+    // Intersection detection for marquee selection
+    function computeIntersectingClips(
+        marqueeRect: { left: number; top: number; width: number; height: number }
+    ): ClipId[] {
+        if (!$scene) return [];
+
+        const intersecting: ClipId[] = [];
+        const mRect = {
+            left: marqueeRect.left,
+            top: marqueeRect.top,
+            right: marqueeRect.left + marqueeRect.width,
+            bottom: marqueeRect.top + marqueeRect.height,
+        };
+
+        let trackOffset = RULER_SIZE;
+
+        for (let lineIdx = 0; lineIdx < $scene.lines.length; lineIdx++) {
+            const line = $scene.lines[lineIdx];
+            const trackSize = getLineWidth(lineIdx);
+            const trackStart = trackOffset;
+            const trackEnd = trackOffset + trackSize;
+            trackOffset = trackEnd;
+
+            const trackOverlaps = isVertical
+                ? mRect.left < trackEnd && mRect.right > trackStart
+                : mRect.top < trackEnd && mRect.bottom > trackStart;
+
+            if (!trackOverlaps) continue;
+
+            let clipOffset = HEADER_SIZE;
+
+            for (let frameIdx = 0; frameIdx < line.frames.length; frameIdx++) {
+                const frame = line.frames[frameIdx];
+                const duration = typeof frame.duration === "number" && frame.duration > 0 ? frame.duration : 1;
+                const reps = typeof frame.repetitions === "number" && frame.repetitions >= 1 ? frame.repetitions : 1;
+                const clipExtent = duration * reps * pixelsPerBeat;
+                const clipStart = clipOffset;
+                const clipEnd = clipOffset + clipExtent;
+                clipOffset = clipEnd;
+
+                const clipOverlaps = isVertical
+                    ? mRect.top < clipEnd && mRect.bottom > clipStart
+                    : mRect.left < clipEnd && mRect.right > clipStart;
+
+                if (clipOverlaps) {
+                    intersecting.push(toClipId(lineIdx, frameIdx));
+                }
+            }
+        }
+
+        return intersecting;
+    }
 
     // Visible beat markers
     const visibleBeatMarkers = $derived.by(() => {
@@ -385,12 +551,14 @@
             </button>
         </div>
     {:else}
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="timeline"
             class:vertical={isVertical}
             style={isVertical
                 ? `min-height: ${timelineExtent}px`
                 : `min-width: ${timelineExtent}px`}
+            onmousedown={handleTimelineMousedown}
         >
             <!-- Ruler row -->
             <div
@@ -455,6 +623,17 @@
                     <span>Add Track</span>
                 </button>
             </div>
+
+            <!-- Marquee selection overlay -->
+            {#if ctx.marquee}
+                {@const rect = ctx.getMarqueeRect()}
+                {#if rect}
+                    <div
+                        class="marquee"
+                        style="left: {rect.left}px; top: {rect.top}px; width: {rect.width}px; height: {rect.height}px"
+                    ></div>
+                {/if}
+            {/if}
         </div>
     {/if}
 </div>
@@ -501,6 +680,7 @@
         display: flex;
         flex-direction: column;
         min-width: 100%;
+        position: relative;
     }
 
     .timeline.vertical {
@@ -645,5 +825,13 @@
 
     .add-track.vertical:hover {
         border-left-color: var(--colors-accent);
+    }
+
+    .marquee {
+        position: absolute;
+        border: 1px dashed var(--colors-accent);
+        background-color: color-mix(in srgb, var(--colors-accent) 10%, transparent);
+        pointer-events: none;
+        z-index: 50;
     }
 </style>
