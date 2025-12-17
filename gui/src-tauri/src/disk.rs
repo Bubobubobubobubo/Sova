@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sova_core::protocol::DeviceMapSnapshot;
 use sova_core::server::Snapshot;
 use std::path::PathBuf;
 use std::{error::Error, fmt, io, path::Path};
@@ -108,17 +107,8 @@ impl Error for DiskError {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ProjectFile {
     pub snapshot: Snapshot,
-    #[serde(default)]
-    pub device_config: Option<DeviceMapSnapshot>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
-}
-
-/// Result of loading a project - contains snapshot and optional device config
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct LoadedProject {
-    pub snapshot: Snapshot,
-    pub device_config: Option<DeviceMapSnapshot>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -152,11 +142,7 @@ fn project_path(projects_dir: &Path, name: &str) -> PathBuf {
     projects_dir.join(format!("{}.sova", name))
 }
 
-pub async fn save_project(
-    snapshot: &Snapshot,
-    device_config: Option<&DeviceMapSnapshot>,
-    name: &str,
-) -> Result<()> {
+pub async fn save_project(snapshot: &Snapshot, name: &str) -> Result<()> {
     let projects_dir = get_projects_dir().await?;
     let path = project_path(&projects_dir, name);
 
@@ -172,7 +158,6 @@ pub async fn save_project(
 
     let file = ProjectFile {
         snapshot: snapshot.clone(),
-        device_config: device_config.cloned(),
         created_at,
         updated_at: now,
     };
@@ -185,7 +170,7 @@ pub async fn save_project(
         .map_err(|e| DiskError::FileWriteFailed { path, source: e })
 }
 
-pub async fn load_project(name: &str) -> Result<LoadedProject> {
+pub async fn load_project(name: &str) -> Result<Snapshot> {
     let projects_dir = get_projects_dir().await?;
     let path = project_path(&projects_dir, name);
 
@@ -208,10 +193,7 @@ pub async fn load_project(name: &str) -> Result<LoadedProject> {
             source: e,
         })?;
 
-    Ok(LoadedProject {
-        snapshot: file.snapshot,
-        device_config: file.device_config,
-    })
+    Ok(file.snapshot)
 }
 
 pub async fn list_projects() -> Result<Vec<ProjectInfo>> {
@@ -305,7 +287,7 @@ pub async fn get_projects_directory() -> Result<String> {
     Ok(projects_dir.to_string_lossy().to_string())
 }
 
-pub async fn load_project_from_path(path: &Path) -> Result<LoadedProject> {
+pub async fn load_project_from_path(path: &Path) -> Result<Snapshot> {
     let content = fs::read_to_string(path).await.map_err(|e| {
         if e.kind() == ErrorKind::NotFound {
             DiskError::ProjectNotFound {
@@ -325,8 +307,5 @@ pub async fn load_project_from_path(path: &Path) -> Result<LoadedProject> {
             source: e,
         })?;
 
-    Ok(LoadedProject {
-        snapshot: file.snapshot,
-        device_config: file.device_config,
-    })
+    Ok(file.snapshot)
 }

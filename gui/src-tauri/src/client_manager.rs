@@ -327,12 +327,8 @@ impl ClientManager {
                 }))?;
             }
 
-            DeviceMapSnapshot(snapshot) => {
-                app_handle.emit("server:device-map-snapshot", snapshot)?;
-            }
-
-            DeviceMapRestored { missing_devices } => {
-                app_handle.emit("server:device-map-restored", serde_json::json!({
+            DevicesRestored { missing_devices } => {
+                app_handle.emit("server:devices-restored", serde_json::json!({
                     "missingDevices": missing_devices,
                 }))?;
             }

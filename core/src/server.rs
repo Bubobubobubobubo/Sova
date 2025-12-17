@@ -118,6 +118,9 @@ pub struct Snapshot {
     pub micros: SyncTime,
     /// The musical quantum (e.g., 4.0 for 4/4 time).
     pub quantum: f64,
+    /// Device configuration for save/restore. Optional for backward compatibility.
+    #[serde(default)]
+    pub devices: Option<Vec<crate::protocol::DeviceInfo>>,
 }
 
 /// Processes a received `ClientMessage` and returns a direct `ServerMessage` response.
@@ -262,15 +265,17 @@ async fn on_message(
             }
         }
         ClientMessage::GetSnapshot => {
-            // Get scene and clock state to build the snapshot
+            // Get scene, clock state, and device configuration to build the snapshot
             let scene = state.scene_image.lock().await.clone();
             let clock = Clock::from(&state.clock_server);
+            let devices = state.devices.create_device_snapshot();
             let snapshot = Snapshot {
                 scene,
                 tempo: clock.tempo(),
                 beat: clock.beat(),
                 micros: clock.micros(),
                 quantum: clock.quantum(),
+                devices: Some(devices),
             };
             ServerMessage::Snapshot(snapshot)
         }
@@ -547,18 +552,14 @@ async fn on_message(
             // Revert: No longer send immediate status based on atomic
             ServerMessage::Success
         },
-        ClientMessage::GetDeviceMapSnapshot => {
-            let snapshot = state.devices.create_snapshot();
-            ServerMessage::DeviceMapSnapshot(snapshot)
-        },
-        ClientMessage::RestoreDeviceMap(snapshot) => {
-            let missing_devices = state.devices.restore_from_snapshot(snapshot);
+        ClientMessage::RestoreDevices(devices) => {
+            let missing_devices = state.devices.restore_from_snapshot(devices);
             // Broadcast updated device list after restoration
             let updated_list = state.devices.device_list();
             let _ = state
                 .update_sender
                 .send(SovaNotification::DeviceListChanged(updated_list));
-            ServerMessage::DeviceMapRestored { missing_devices }
+            ServerMessage::DevicesRestored { missing_devices }
         },
     }
 }

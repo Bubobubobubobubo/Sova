@@ -90,39 +90,24 @@ export interface Scene {
 }
 
 // Device types
-export type DeviceKind = "Midi" | "Osc" | "Log" | "AudioEngine" | "Other";
+export type DeviceKind =
+  | "Midi"
+  | "VirtualMidi"
+  | "Osc"
+  | "Log"
+  | "AudioEngine"
+  | "Other";
+
+export type DeviceDirection = "Input" | "Output";
 
 export interface DeviceInfo {
-  slot_id: number;
+  slot_id: number | null;
   name: string;
   kind: DeviceKind;
+  direction: DeviceDirection;
   is_connected: boolean;
   address: string | null;
   is_missing: boolean;
-}
-
-// Device configuration for serialization
-export type DeviceConfig =
-  | "VirtualMidi"
-  | "PhysicalMidi"
-  | { OscOutput: { ip: string; port: number } };
-
-// A single device in serializable form
-export interface SerializableDevice {
-  name: string;
-  config: DeviceConfig;
-}
-
-// Snapshot of the entire device map for serialization/persistence
-export interface DeviceMapSnapshot {
-  devices: SerializableDevice[];
-  slot_assignments: (string | null)[];
-}
-
-// Result of loading a project
-export interface LoadedProject {
-  snapshot: Snapshot;
-  device_config: DeviceMapSnapshot | null;
 }
 
 // Link state
@@ -152,6 +137,7 @@ export interface Snapshot {
   beat: number;
   micros: SyncTime;
   quantum: number;
+  devices?: DeviceInfo[];
 }
 
 // Server event payloads
@@ -224,5 +210,4 @@ export type ClientMessage =
   | { RemoveOscDevice: string }
   | "GetClock"
   | "GetSnapshot"
-  | "GetDeviceMapSnapshot"
-  | { RestoreDeviceMap: DeviceMapSnapshot };
+  | { RestoreDevices: DeviceInfo[] };

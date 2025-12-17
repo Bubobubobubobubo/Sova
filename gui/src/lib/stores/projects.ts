@@ -2,14 +2,13 @@ import { writable, derived, get } from "svelte/store";
 import { listen } from "@tauri-apps/api/event";
 import { SERVER_EVENTS } from "$lib/events";
 import type { ProjectInfo } from "$lib/types/projects";
-import type { Snapshot, ActionTiming, DeviceMapSnapshot } from "$lib/types/protocol";
+import type { Snapshot, ActionTiming } from "$lib/types/protocol";
 import * as projectsApi from "$lib/api/projects";
 import {
   getSnapshot,
-  getDeviceMapSnapshot,
   setScene,
   setTempo,
-  restoreDeviceMap,
+  restoreDevices,
   ActionTiming as AT,
 } from "$lib/api/client";
 import { isConnected } from "./connectionState";
@@ -41,20 +40,14 @@ export {
   type SortDirection,
 } from "./projectsUI";
 
-interface PendingSave {
-  projectName: string;
-  sceneSnapshot: Snapshot | null;
-  deviceSnapshot: DeviceMapSnapshot | null;
-}
-
 interface ProjectsDataState {
   projects: ProjectInfo[];
-  pendingSave: PendingSave | null;
+  pendingSaveName: string | null;
 }
 
 const initialState: ProjectsDataState = {
   projects: [],
-  pendingSave: null,
+  pendingSaveName: null,
 };
 
 const state = writable<ProjectsDataState>(initialState);
@@ -117,7 +110,7 @@ export const filteredProjects = derived(
   },
 );
 
-export const pendingSave = derived(state, ($state) => $state.pendingSave?.projectName ?? null);
+export const pendingSave = derived(state, ($state) => $state.pendingSaveName);
 
 export async function refreshProjects(): Promise<void> {
   try {
@@ -140,56 +133,20 @@ export async function initiateSave(name: string): Promise<void> {
     return;
   }
 
-  state.update((s) => ({
-    ...s,
-    pendingSave: {
-      projectName: sanitized,
-      sceneSnapshot: null,
-      deviceSnapshot: null,
-    },
-  }));
-  setStatusMessage("Requesting snapshots...");
-
-  // Request both snapshots in parallel
-  await Promise.all([getSnapshot(), getDeviceMapSnapshot()]);
+  state.update((s) => ({ ...s, pendingSaveName: sanitized }));
+  setStatusMessage("Requesting snapshot...");
+  await getSnapshot();
 }
 
-function receiveSceneSnapshot(snapshot: Snapshot): void {
-  state.update((s) => {
-    if (!s.pendingSave) return s;
-    return {
-      ...s,
-      pendingSave: { ...s.pendingSave, sceneSnapshot: snapshot },
-    };
-  });
-  tryCompleteSave();
-}
-
-function receiveDeviceSnapshot(snapshot: DeviceMapSnapshot): void {
-  state.update((s) => {
-    if (!s.pendingSave) return s;
-    return {
-      ...s,
-      pendingSave: { ...s.pendingSave, deviceSnapshot: snapshot },
-    };
-  });
-  tryCompleteSave();
-}
-
-async function tryCompleteSave(): Promise<void> {
+async function completeSave(snapshot: Snapshot): Promise<void> {
   const $state = get(state);
-  if (!$state.pendingSave) return;
+  if (!$state.pendingSaveName) return;
 
-  const { projectName, sceneSnapshot, deviceSnapshot } = $state.pendingSave;
-
-  // Wait until both snapshots are received
-  if (!sceneSnapshot || !deviceSnapshot) return;
-
-  // Clear pending save immediately
-  state.update((s) => ({ ...s, pendingSave: null }));
+  const projectName = $state.pendingSaveName;
+  state.update((s) => ({ ...s, pendingSaveName: null }));
 
   try {
-    await projectsApi.saveProject(sceneSnapshot, deviceSnapshot, projectName);
+    await projectsApi.saveProject(snapshot, projectName);
     setStatusMessage(`Saved "${projectName}"`);
     await refreshProjects();
   } catch (e) {
@@ -214,17 +171,15 @@ async function loadProjectWithTiming(
 ): Promise<void> {
   try {
     setStatusMessage(`Loading "${name}"...`);
-    const loaded = await projectsApi.loadProject(name);
+    const snapshot = await projectsApi.loadProject(name);
 
-    await setTempo(loaded.snapshot.tempo, timing);
-    await setScene(loaded.snapshot.scene, timing);
+    await setTempo(snapshot.tempo, timing);
+    await setScene(snapshot.scene, timing);
 
-    // Restore device map if present
-    if (loaded.device_config) {
-      await restoreDeviceMap(loaded.device_config);
+    if (snapshot.devices) {
+      await restoreDevices(snapshot.devices);
     }
 
-    // Clear stale state from previous session
     clearAllLocalEdits();
     window.dispatchEvent(new CustomEvent("project:loaded"));
 
@@ -275,20 +230,19 @@ export async function openFolder(): Promise<void> {
 export async function importProject(timing: ActionTiming): Promise<void> {
   try {
     setStatusMessage("Select a snapshot to import...");
-    const loaded = await projectsApi.importProject();
+    const snapshot = await projectsApi.importProject();
 
-    if (!loaded) {
+    if (!snapshot) {
       clearStatusMessage();
       return;
     }
 
     setStatusMessage("Importing...");
-    await setTempo(loaded.snapshot.tempo, timing);
-    await setScene(loaded.snapshot.scene, timing);
+    await setTempo(snapshot.tempo, timing);
+    await setScene(snapshot.scene, timing);
 
-    // Restore device map if present
-    if (loaded.device_config) {
-      await restoreDeviceMap(loaded.device_config);
+    if (snapshot.devices) {
+      await restoreDevices(snapshot.devices);
     }
 
     clearAllLocalEdits();
@@ -311,13 +265,7 @@ const listeners = new ListenerGroup();
 export async function initializeProjectsStore(): Promise<void> {
   await listeners.add(() =>
     listen<Snapshot>(SERVER_EVENTS.SNAPSHOT, (event) => {
-      receiveSceneSnapshot(event.payload);
-    }),
-  );
-
-  await listeners.add(() =>
-    listen<DeviceMapSnapshot>(SERVER_EVENTS.DEVICE_MAP_SNAPSHOT, (event) => {
-      receiveDeviceSnapshot(event.payload);
+      completeSave(event.payload);
     }),
   );
 }

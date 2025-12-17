@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::{compiler::CompilationState, lang::variable::VariableValue, protocol::{log::LogMessage, DeviceInfo, DeviceMapSnapshot}, scene::{Frame, Line}, schedule::playback::PlaybackState, server::Snapshot};
+use crate::{compiler::CompilationState, lang::variable::VariableValue, protocol::{log::LogMessage, DeviceInfo}, scene::{Frame, Line}, schedule::playback::PlaybackState, server::Snapshot};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -75,10 +75,8 @@ pub enum ServerMessage {
     GlobalVariablesUpdate(HashMap<String, VariableValue>),
     /// Compilation status update for a frame
     CompilationUpdate(usize, usize, u64, CompilationState),
-    /// Response containing the current device map snapshot for saving.
-    DeviceMapSnapshot(DeviceMapSnapshot),
-    /// Response after restoring devices from a snapshot, with list of missing device names.
-    DeviceMapRestored { missing_devices: Vec<String> },
+    /// Response after restoring devices, with list of missing device names.
+    DevicesRestored { missing_devices: Vec<String> },
 }
 
 impl ServerMessage {
