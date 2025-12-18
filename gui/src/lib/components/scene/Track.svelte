@@ -44,6 +44,58 @@
 
     const ctx = getTimelineContext();
 
+    const displayStartFrame = $derived(
+        line.start_frame != null ? (line.start_frame + 1).toString() : "Start",
+    );
+    const displayEndFrame = $derived(
+        line.end_frame != null ? (line.end_frame + 1).toString() : "End",
+    );
+
+    const isEditingStartFrame = $derived(
+        ctx.editing?.field === "startFrame" &&
+            ctx.editing?.lineIdx === lineIdx &&
+            ctx.editing?.frameIdx === -1,
+    );
+    const isEditingEndFrame = $derived(
+        ctx.editing?.field === "endFrame" &&
+            ctx.editing?.lineIdx === lineIdx &&
+            ctx.editing?.frameIdx === -1,
+    );
+
+    function focusOnMount(node: HTMLInputElement) {
+        node.focus();
+        node.select();
+    }
+
+    function handleLineEditStart(
+        field: "startFrame" | "endFrame",
+        e: MouseEvent,
+    ) {
+        e.stopPropagation();
+        ctx.startLineEdit(field, lineIdx);
+    }
+
+    function handleLineEditInput(e: Event) {
+        const field = ctx.editing?.field;
+        if (field === "startFrame" || field === "endFrame") {
+            ctx.updateEditValue(field, (e.target as HTMLInputElement).value);
+        }
+    }
+
+    function handleLineEditKeydown(
+        field: "startFrame" | "endFrame",
+        e: KeyboardEvent,
+    ) {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            e.stopPropagation();
+            ctx.commitLineEdit(field);
+        } else if (e.key === "Escape") {
+            e.stopPropagation();
+            ctx.cancelEdit();
+        }
+    }
+
     function getFrameExtent(frame: Frame, frameIdx: number): number {
         const previewDuration = ctx.getPreviewDuration(lineIdx, frameIdx);
         const d =
@@ -142,6 +194,55 @@
             class:vertical={ctx.isVertical}
             onmousedown={onLineResizeStart}
         ></div>
+    </div>
+    <div class="frame-range-row" class:vertical={ctx.isVertical}>
+        <div class="frame-range-field">
+            {#if isEditingStartFrame}
+                <input
+                    class="frame-range-input"
+                    type="text"
+                    value={ctx.editing?.value ?? ""}
+                    oninput={handleLineEditInput}
+                    onkeydown={(e) => handleLineEditKeydown("startFrame", e)}
+                    onblur={() => ctx.cancelEdit()}
+                    use:focusOnMount
+                />
+            {:else}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <span
+                    class="frame-range-value"
+                    class:placeholder={line.start_frame == null}
+                    ondblclick={(e) => handleLineEditStart("startFrame", e)}
+                    title="Start frame (double-click to edit)"
+                >
+                    {displayStartFrame}
+                </span>
+            {/if}
+        </div>
+        <span class="frame-range-separator">-</span>
+        <div class="frame-range-field">
+            {#if isEditingEndFrame}
+                <input
+                    class="frame-range-input"
+                    type="text"
+                    value={ctx.editing?.value ?? ""}
+                    oninput={handleLineEditInput}
+                    onkeydown={(e) => handleLineEditKeydown("endFrame", e)}
+                    onblur={() => ctx.cancelEdit()}
+                    use:focusOnMount
+                />
+            {:else}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <span
+                    class="frame-range-value"
+                    class:placeholder={line.end_frame == null}
+                    ondblclick={(e) => handleLineEditStart("endFrame", e)}
+                    title="End frame (double-click to edit)"
+                >
+                    {displayEndFrame}
+                </span>
+            {/if}
+        </div>
     </div>
     <div class="track-content">
         <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -433,5 +534,61 @@
     .drop-indicator.vertical {
         width: auto;
         height: 2px;
+    }
+
+    .frame-range-row {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 4px;
+        padding: 2px 4px;
+        background-color: var(--colors-surface);
+        border-right: 1px solid var(--colors-border);
+        font-size: 10px;
+        min-width: 70px;
+        box-sizing: border-box;
+    }
+
+    .frame-range-row.vertical {
+        flex-direction: row;
+        border-right: none;
+        border-bottom: 1px solid var(--colors-border);
+        min-width: auto;
+        padding: 4px 8px;
+    }
+
+    .frame-range-field {
+        min-width: 24px;
+        text-align: center;
+    }
+
+    .frame-range-value {
+        color: var(--colors-text);
+        cursor: text;
+        padding: 1px 4px;
+    }
+
+    .frame-range-value.placeholder {
+        color: var(--colors-text-secondary);
+        opacity: 0.6;
+    }
+
+    .frame-range-value:hover {
+        color: var(--colors-accent);
+    }
+
+    .frame-range-input {
+        width: 32px;
+        font-size: 10px;
+        padding: 1px 4px;
+        border: 1px solid var(--colors-accent);
+        background-color: var(--colors-background);
+        color: var(--colors-text);
+        text-align: center;
+        outline: none;
+    }
+
+    .frame-range-separator {
+        color: var(--colors-text-secondary);
     }
 </style>

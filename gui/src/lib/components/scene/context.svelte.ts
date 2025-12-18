@@ -1,14 +1,14 @@
 import { getContext, setContext } from "svelte";
 import { scene } from "$lib/stores";
 import { snapGranularity } from "$lib/stores/snapGranularity";
-import { setFrames, ActionTiming } from "$lib/api/client";
-import type { Frame } from "$lib/types/protocol";
+import { setFrames, setLines, ActionTiming } from "$lib/api/client";
+import type { Frame, Line } from "$lib/types/protocol";
 import { get } from "svelte/store";
 
 const TIMELINE_CONTEXT_KEY = "timeline";
 
 // Types
-export type EditingField = 'duration' | 'reps' | 'name';
+export type EditingField = 'duration' | 'reps' | 'name' | 'startFrame' | 'endFrame';
 
 export interface EditingState {
   lineIdx: number;
@@ -65,6 +65,10 @@ export interface TimelineContext {
   commitEdit: (field: EditingField, shiftKey?: boolean) => Promise<void>;
   cancelEdit: () => void;
   isEditing: () => boolean;
+
+  // Line-level editing (startFrame/endFrame)
+  startLineEdit: (field: 'startFrame' | 'endFrame', lineIdx: number) => void;
+  commitLineEdit: (field: 'startFrame' | 'endFrame') => Promise<void>;
 
   // Resize actions
   startResize: (lineIdx: number, frameIdx: number, event: PointerEvent) => void;
@@ -186,6 +190,86 @@ export function createTimelineContext(initial: {
 
   function isEditing(): boolean {
     return editing !== null;
+  }
+
+  // Line-level editing (startFrame/endFrame)
+  function startLineEdit(field: 'startFrame' | 'endFrame', lineIdx: number) {
+    const currentScene = get(scene);
+    if (!currentScene) return;
+    const line = currentScene.lines[lineIdx];
+    if (!line) return;
+
+    let value: string;
+    if (field === 'startFrame') {
+      value = line.start_frame != null ? (line.start_frame + 1).toString() : "";
+    } else {
+      value = line.end_frame != null ? (line.end_frame + 1).toString() : "";
+    }
+
+    editing = { lineIdx, frameIdx: -1, field, value };
+  }
+
+  async function commitLineEdit(field: 'startFrame' | 'endFrame') {
+    if (!editing || editing.frameIdx !== -1 || (editing.field !== 'startFrame' && editing.field !== 'endFrame')) return;
+    const currentScene = get(scene);
+    if (!currentScene) return;
+
+    const { lineIdx, value } = editing;
+    const line = currentScene.lines[lineIdx];
+    if (!line) {
+      editing = null;
+      return;
+    }
+
+    const frameCount = line.frames.length;
+    let newValue: number | null = null;
+
+    if (value.trim() !== "") {
+      const parsed = parseInt(value, 10);
+      if (!isNaN(parsed) && parsed >= 1 && parsed <= frameCount) {
+        newValue = parsed - 1;
+      } else {
+        editing = null;
+        return;
+      }
+    }
+
+    if (field === 'startFrame' && newValue !== null) {
+      const endFrame = line.end_frame ?? (frameCount - 1);
+      if (newValue > endFrame) {
+        editing = null;
+        return;
+      }
+    }
+    if (field === 'endFrame' && newValue !== null) {
+      const startFrame = line.start_frame ?? 0;
+      if (newValue < startFrame) {
+        editing = null;
+        return;
+      }
+    }
+
+    // Clone the line with updated start/end frame, stripping compiled from scripts
+    const updatedLine: Line = {
+      ...line,
+      frames: line.frames.map(frame => ({
+        ...frame,
+        script: {
+          content: frame.script.content,
+          lang: frame.script.lang,
+          args: frame.script.args ?? {},
+        },
+      })),
+      start_frame: field === 'startFrame' ? newValue : (line.start_frame ?? null),
+      end_frame: field === 'endFrame' ? newValue : (line.end_frame ?? null),
+    };
+
+    try {
+      await setLines([[lineIdx, updatedLine]], ActionTiming.endOfLine(lineIdx));
+    } catch (error) {
+      console.error(`Failed to update ${field}:`, error);
+    }
+    editing = null;
   }
 
   // Resize actions
@@ -343,6 +427,8 @@ export function createTimelineContext(initial: {
     commitEdit,
     cancelEdit,
     isEditing,
+    startLineEdit,
+    commitLineEdit,
     startResize,
     getPreviewDuration,
     startDrag,
