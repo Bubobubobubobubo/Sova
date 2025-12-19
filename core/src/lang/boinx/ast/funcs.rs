@@ -2,12 +2,9 @@ use rand::seq::SliceRandom;
 
 use crate::{
     clock::TimeSpan,
-    vm::{
-        EvaluationContext, 
-        variable::VariableValue,
-    },
     lang::boinx::ast::BoinxItem,
     log_warn,
+    vm::{EvaluationContext, variable::VariableValue},
 };
 
 fn unpack_if_one(mut args: Vec<BoinxItem>) -> Vec<BoinxItem> {
@@ -101,6 +98,20 @@ pub fn execute_boinx_function(
                 }
             };
             Sequence(vec![WithDuration(Box::new(Mute), dur), Placeholder])
+        }
+        "secs" => {
+            if args.len() > 1 {
+                log_warn!("Too many arguments for 'secs' function ! Taking only last !");
+            }
+            let dur = match args.pop().unwrap().unescape() {
+                Duration(d) => d,
+                Number(f) => TimeSpan::Frames(f),
+                _ => {
+                    log_warn!("Argument for 'after' is not a duration !");
+                    TimeSpan::default()
+                }
+            };
+            Number(dur.as_secs(ctx.clock, ctx.frame_len))
         }
         _ => {
             log_warn!("Boinx function '{name}' does not exist !");

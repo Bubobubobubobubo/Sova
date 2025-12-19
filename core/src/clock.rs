@@ -46,6 +46,20 @@ impl TimeSpan {
         }
     }
 
+    /// Converts the `TimeSpan` into seconds based on the provided `Clock` context and frame length.
+    ///
+    /// # Arguments
+    ///
+    /// * `clock` - The `Clock` instance providing tempo context.
+    /// * `frame_len` - The length of a frame in beats, used for `Frames` conversion.
+    pub fn as_secs(&self, clock: &Clock, frame_len: f64) -> f64 {
+        match self {
+            TimeSpan::Micros(m) => (*m as f64) / 1_000_000.0,
+            TimeSpan::Beats(b) => (60.0 / clock.tempo()) * b,
+            TimeSpan::Frames(f) => (60.0 / clock.tempo()) * f * frame_len,
+        }
+    }
+
     pub fn as_beats(&self, clock: &Clock, frame_len: f64) -> f64 {
         match self {
             TimeSpan::Micros(m) => clock.micros_to_beats(*m),
