@@ -5,6 +5,7 @@ import type {
   Scene,
   Line,
   Frame,
+  DeviceInfo,
 } from "$lib/types/protocol";
 
 export const ActionTiming = {
@@ -181,4 +182,8 @@ export async function removeOscDevice(name: string): Promise<void> {
 // Queries
 export async function getSnapshot(): Promise<void> {
   await sendMessage("GetSnapshot");
+}
+
+export async function restoreDevices(devices: DeviceInfo[]): Promise<void> {
+  await sendMessage({ RestoreDevices: devices });
 }

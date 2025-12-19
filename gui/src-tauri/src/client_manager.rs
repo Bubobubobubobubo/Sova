@@ -326,6 +326,12 @@ impl ClientManager {
                     "state": state,
                 }))?;
             }
+
+            DevicesRestored { missing_devices } => {
+                app_handle.emit("server:devices-restored", serde_json::json!({
+                    "missingDevices": missing_devices,
+                }))?;
+            }
         }
 
         Ok(())

@@ -3,7 +3,7 @@ use std::fmt::Display;
 use rosc::OscTime;
 use serde::{Deserialize, Serialize};
 
-use crate::{clock::{Clock, SyncTime}, lang::{event::ConcreteEvent, variable::VariableValue}, protocol::{ProtocolPayload, osc::OSCOut}};
+use crate::{clock::{Clock, SyncTime}, vm::{event::ConcreteEvent, variable::VariableValue}, protocol::{ProtocolPayload, osc::OSCOut}};
 
 /// Represents a single OSC message, consisting of an address pattern and a list of arguments.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
@@ -113,7 +113,13 @@ impl OSCMessage {
                 let delta_micros = clock.beats_to_micros(1.0); // Use 1 beat for delta
                 let delta = delta_micros as f64 / 1_000_000.0;
 
-                let dirt_msg = Self::dirt(args, cps, cycle, delta)
+                let mut flat_args = Vec::new();
+                for (key, value) in args.into_iter() {
+                    flat_args.push(VariableValue::Str(key));
+                    flat_args.push(value);
+                }
+
+                let dirt_msg = Self::dirt(flat_args, cps, cycle, delta)
                     .at_date(timetag);
 
                 vec![(dirt_msg.into(), date)]

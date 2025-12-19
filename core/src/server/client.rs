@@ -2,6 +2,7 @@
 
 use super::ServerMessage;
 use crate::log_eprintln;
+use crate::protocol::DeviceInfo;
 use crate::scene::{Frame, Line, Scene};
 use crate::schedule::ActionTiming;
 use crate::schedule::SchedulerMessage;
@@ -91,6 +92,8 @@ pub enum ClientMessage {
     CreateOscDevice(String, String, u16), // name, ip_address, port
     /// Request removal of an OSC output device by its name.
     RemoveOscDevice(String), // name
+    /// Restore devices from a saved configuration.
+    RestoreDevices(Vec<DeviceInfo>),
 }
 
 impl ClientMessage {
