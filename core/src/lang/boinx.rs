@@ -182,6 +182,9 @@ impl BoinxLine {
         let (devices, channels) = self.get_targets(&mut sub_ctx, date);
         let (pos, next_wait) = item.position(&mut sub_ctx, date.saturating_sub(self.start_date));
         self.next_date = self.next_date.saturating_add(next_wait);
+        if self.next_date == NEVER {
+            self.finished = true;
+        }
         let old_pos = mem::replace(&mut self.position, pos);
         let delta = old_pos.diff(&self.position);
         let items = item.at(&mut sub_ctx, delta);
@@ -249,7 +252,7 @@ impl Interpreter for BoinxInterpreter {
             }
             wait = cmp::min(wait, rem);
         }
-        self.execution_lines.retain(|line| line.next_date < NEVER);
+        self.execution_lines.retain(|line| !line.finished);
         self.execution_lines.append(&mut new_lines);
         let wait = if event.is_some() { 0 } else { wait };
         (event, wait)
