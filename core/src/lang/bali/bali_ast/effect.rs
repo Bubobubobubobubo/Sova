@@ -7,12 +7,7 @@ use crate::{
         function::FunctionContent,
         value::Value,
     },
-    vm::{
-        Instruction,
-        control_asm::{ControlASM, DEFAULT_CHAN, DEFAULT_DEVICE},
-        event::Event,
-        variable::Variable,
-    },
+    vm::{Instruction, control_asm::ControlASM, event::Event, variable::Variable},
 };
 
 use std::collections::HashMap;
@@ -64,27 +59,10 @@ impl Effect {
                 res.extend(n.as_asm(functions));
                 res.push(Instruction::Control(ControlASM::Pop(note_var.clone())));
 
-                if let Some(v) = context.velocity {
-                    res.extend(v.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(velocity_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_VELOCITY.into(),
-                        velocity_var.clone(),
-                    )))
-                }
+                res.extend(context.emit_velocity(&velocity_var, DEFAULT_VELOCITY, functions));
+                res.extend(context.emit_channel(&chan_var, functions));
 
-                if let Some(ch) = context.channel {
-                    res.extend(ch.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_CHAN.into(),
-                        chan_var.clone(),
-                    )))
-                }
-
-                if let Some(d) = context.duration {
+                if let Some(ref d) = context.duration {
                     res.extend(d.as_asm(functions));
                 } else {
                     res.extend(
@@ -103,17 +81,7 @@ impl Effect {
                     duration_time_var.clone(),
                 )));
 
-                if let Some(device_id) = context.device {
-                    res.extend(device_id.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
                 res.push(Instruction::Effect(
                     Event::MidiNote(
@@ -131,27 +99,8 @@ impl Effect {
                 res.extend(p.as_asm(functions));
                 res.push(Instruction::Control(ControlASM::Pop(program_var.clone())));
 
-                if let Some(ch) = context.channel {
-                    res.extend(ch.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_CHAN.into(),
-                        chan_var.clone(),
-                    )))
-                }
-
-                if let Some(device_id) = context.device {
-                    res.extend(device_id.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_channel(&chan_var, functions));
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
                 res.push(Instruction::Effect(
                     Event::MidiProgram(
@@ -169,27 +118,8 @@ impl Effect {
                 res.extend(v.as_asm(functions));
                 res.push(Instruction::Control(ControlASM::Pop(value_var.clone())));
 
-                if let Some(ch) = context.channel {
-                    res.extend(ch.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_CHAN.into(),
-                        chan_var.clone(),
-                    )))
-                }
-
-                if let Some(device_id) = context.device {
-                    res.extend(device_id.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_channel(&chan_var, functions));
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
                 res.push(Instruction::Effect(
                     Event::MidiControl(
@@ -203,14 +133,11 @@ impl Effect {
             }
             Effect::Osc(addr, args, osc_context) => {
                 let context = osc_context.update(&context);
-                let target_device_id_var = Variable::Instance("_target_device_id".to_string());
                 let osc_addr_var = Variable::Instance("_osc_addr".to_string());
 
-                // Generate instructions to evaluate the address
                 res.push(addr.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(osc_addr_var.clone())));
 
-                // Generate instructions to evaluate dynamic arguments
                 let mut temp_arg_vars: Vec<Variable> = Vec::new();
                 for (i, arg_expr) in args.iter().enumerate() {
                     let temp_var_name = match arg_expr {
@@ -219,17 +146,14 @@ impl Effect {
                     };
                     let temp_var = Variable::Instance(temp_var_name.to_string());
 
-                    // Optimization: Handle string literals directly without stack operations
                     match arg_expr {
                         Expression::Value(Value::String(s)) => {
-                            // Direct assignment for string literals - avoid unnecessary stack operations
                             res.push(Instruction::Control(ControlASM::Mov(
                                 Variable::Constant(s.clone().into()),
                                 temp_var.clone(),
                             )));
                         }
                         _ => {
-                            // Normal evaluation for non-string expressions
                             res.extend(arg_expr.as_asm(functions));
                             res.push(Instruction::Control(ControlASM::Pop(temp_var.clone())));
                         }
@@ -237,56 +161,36 @@ impl Effect {
                     temp_arg_vars.push(temp_var);
                 }
 
-                // Determine target device ID
-                if let Some(device_id_expr) = context.device {
-                    res.extend(device_id_expr.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
-                // Create the Event::Osc
                 let event = Event::Osc {
                     addr: osc_addr_var.clone(),
                     args: temp_arg_vars,
-                    device_id: target_device_id_var.clone(), // Event::Osc takes Variable
+                    device_id: target_device_id_var.clone(),
                 };
-
-                // Add the final effect instruction using the event directly
                 res.push(Instruction::Effect(event, 0.0.into()));
             }
             Effect::Dirt(sound, params, dirt_context) => {
                 let context = dirt_context.update(&context);
-                let target_device_id_var = Variable::Instance("_target_device_id".to_string());
                 let dirt_sound_var = Variable::Instance("_dirt_sound".to_string());
 
-                // set sound variable
                 res.push(sound.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(
                     dirt_sound_var.clone(),
                 )));
 
-                // Evaluate parameters, create corresponding variables, store them in a map
                 let mut params_map = HashMap::new();
                 for (key, val) in params.iter() {
                     let param_value_var = Variable::Instance(format!("_dirt_param_{}_val", key));
 
-                    // Optimization: Handle string literals directly without stack operations
                     match val.as_ref() {
                         Expression::Value(Value::String(s)) => {
-                            // Direct assignment for string literals - avoid unnecessary stack operations
                             res.push(Instruction::Control(ControlASM::Mov(
                                 Variable::Constant(s.clone().into()),
                                 param_value_var.clone(),
                             )));
                         }
                         _ => {
-                            // Normal evaluation for non-string expressions
                             res.extend(val.as_asm(functions));
                             res.push(Instruction::Control(ControlASM::Pop(
                                 param_value_var.clone(),
@@ -296,65 +200,32 @@ impl Effect {
                     params_map.insert(key.clone(), param_value_var);
                 }
 
-                // evaluate device context
-                if let Some(device_id_expr) = context.device {
-                    res.extend(device_id_expr.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
-                // Create Event::Dirt using the variables created before
                 let event = Event::Dirt {
                     sound: dirt_sound_var,
-                    params: params_map,              // Variable holding the map
-                    device_id: target_device_id_var, // Variable holding the device ID
+                    params: params_map,
+                    device_id: target_device_id_var.clone(),
                 };
-
-                // Add the final effect instruction
                 res.push(Instruction::Effect(event, 0.0.into()));
             }
             Effect::Aftertouch(note_expr, value_expr, c) => {
                 let context = c.update(&context);
-                let note_var = Variable::Instance("_at_note".to_owned());
-                let value_var = Variable::Instance("_at_value".to_owned());
+                let at_note_var = Variable::Instance("_at_note".to_owned());
+                let at_value_var = Variable::Instance("_at_value".to_owned());
 
                 res.extend(note_expr.as_asm(functions));
-                res.push(Instruction::Control(ControlASM::Pop(note_var.clone())));
+                res.push(Instruction::Control(ControlASM::Pop(at_note_var.clone())));
                 res.extend(value_expr.as_asm(functions));
-                res.push(Instruction::Control(ControlASM::Pop(value_var.clone())));
+                res.push(Instruction::Control(ControlASM::Pop(at_value_var.clone())));
 
-                if let Some(ch) = context.channel {
-                    res.extend(ch.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_CHAN.into(),
-                        chan_var.clone(),
-                    )))
-                }
-
-                if let Some(device_id) = context.device {
-                    res.extend(device_id.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_channel(&chan_var, functions));
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
                 res.push(Instruction::Effect(
                     Event::MidiAftertouch(
-                        note_var,
-                        value_var,
+                        at_note_var,
+                        at_value_var,
                         chan_var.clone(),
                         target_device_id_var.clone(),
                     ),
@@ -363,36 +234,19 @@ impl Effect {
             }
             Effect::ChannelPressure(value_expr, c) => {
                 let context = c.update(&context);
-                let value_var = Variable::Instance("_chanpress_value".to_owned());
+                let chanpress_value_var = Variable::Instance("_chanpress_value".to_owned());
 
                 res.extend(value_expr.as_asm(functions));
-                res.push(Instruction::Control(ControlASM::Pop(value_var.clone())));
+                res.push(Instruction::Control(ControlASM::Pop(
+                    chanpress_value_var.clone(),
+                )));
 
-                if let Some(ch) = context.channel {
-                    res.extend(ch.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(chan_var.clone())));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_CHAN.into(),
-                        chan_var.clone(),
-                    )))
-                }
-
-                if let Some(device_id) = context.device {
-                    res.extend(device_id.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_channel(&chan_var, functions));
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
                 res.push(Instruction::Effect(
                     Event::MidiChannelPressure(
-                        value_var,
+                        chanpress_value_var,
                         chan_var.clone(),
                         target_device_id_var.clone(),
                     ),
@@ -401,21 +255,17 @@ impl Effect {
             }
             Effect::AudioEngine(sound, params, audio_context) => {
                 let context = audio_context.update(&context);
-                let target_device_id_var = Variable::Instance("_target_device_id".to_string());
                 let audio_sound_var = Variable::Instance("_audio_sound".to_string());
 
-                // Set sound variable (same as Dirt)
                 res.push(sound.as_asm());
                 res.push(Instruction::Control(ControlASM::Pop(
                     audio_sound_var.clone(),
                 )));
 
-                // Evaluate parameters generically (same as Dirt)
                 let mut params_map = HashMap::new();
                 for (key, val) in params.iter() {
                     let param_value_var = Variable::Instance(format!("_audio_param_{}_val", key));
 
-                    // Handle string literals directly without stack operations
                     match val.as_ref() {
                         Expression::Value(Value::String(s)) => {
                             res.push(Instruction::Control(ControlASM::Mov(
@@ -433,26 +283,13 @@ impl Effect {
                     params_map.insert(key.clone(), param_value_var);
                 }
 
-                // Set device ID from context (same as Dirt)
-                if let Some(device_id_expr) = context.device {
-                    res.extend(device_id_expr.as_asm(functions));
-                    res.push(Instruction::Control(ControlASM::Pop(
-                        target_device_id_var.clone(),
-                    )));
-                } else {
-                    res.push(Instruction::Control(ControlASM::Mov(
-                        DEFAULT_DEVICE.into(),
-                        target_device_id_var.clone(),
-                    )));
-                }
+                res.extend(context.emit_device(&target_device_id_var, functions));
 
-                // Create generic Event::AudioEngine
                 let event = Event::Dirt {
                     sound: audio_sound_var,
-                    params: params_map, // All params including track
-                    device_id: target_device_id_var,
+                    params: params_map,
+                    device_id: target_device_id_var.clone(),
                 };
-
                 res.push(Instruction::Effect(event, 0.0.into()));
             }
         }
