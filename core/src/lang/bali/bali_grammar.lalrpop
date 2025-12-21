@@ -91,13 +91,6 @@ pub ContextElement: BaliContext = {
     "dur:" <e: Expression> => {let mut c = BaliContext::new(); c.duration = Some(*e); c},
 }
 
-/*
-pub StatementSet: Vec<Statement> = {
-    <mut s: StatementSet> <t: Statement> => { s.push(t); s },
-    <t: Statement> => vec![t],
-}
-*/
-
 pub TimingInformation: TimingInformation = {
     <t: ConcreteFraction> => TimingInformation::PositionRelative(t),
     <t: ConcreteFraction> ":f" => TimingInformation::FrameRelative(t),

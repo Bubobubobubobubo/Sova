@@ -65,19 +65,6 @@ pub enum Statement {
 }
 
 impl Statement {
-    /*
-    pub fn set_context(self, c: BaliContext) -> Statement {
-        match self {
-            Statement::AfterFrac(v, es, cc) => Statement::AfterFrac(v, es, cc.update(c)),
-            Statement::BeforeFrac(v, es, cc) => Statement::BeforeFrac(v, es, cc.update(c)),
-            Statement::Loop(it, v, es, cc) => Statement::Loop(it, v, es, cc.update(c)),
-            Statement::After(es, cc) => Statement::After(es, cc.update(c)),
-            Statement::Before(es, cc) => Statement::Before(es, cc.update(c)),
-            Statement::Effect(e, cc) => Statement::Effect(e, cc.update(c)),
-        }
-    }
-    */
-
     fn is_simplifiable(seq: &Vec<Vec<i64>>) -> bool {
         if seq.len() < 2 {
             return false;
@@ -139,8 +126,6 @@ impl Statement {
     }
 
     fn as_time_points(seq: &mut Vec<i64>, context: LoopContext) -> Vec<i64> {
-        //print!("{:?}\n", seq);
-
         if context.reverse {
             seq.reverse();
         }
@@ -153,8 +138,6 @@ impl Statement {
             seq.rotate_right(shift as usize);
         }
 
-        //print!("{:?}\n", seq);
-
         let mut res = Vec::new();
         let mut count = 0;
         for i in 0..seq.len() {
@@ -163,8 +146,6 @@ impl Statement {
             }
             count += 1;
         }
-
-        //print!("{:?}\n", res);
 
         res
     }
@@ -231,9 +212,6 @@ impl Statement {
         pick_vars: &mut LocalChoiceVariableGenerator,
         alt_vars: &mut AltVariableGenerator,
     ) -> Vec<TimeStatement> {
-        /*let c = match self {
-            Statement::AfterFrac(_, _, ref cc) | Statement::BeforeFrac(_, _, ref cc) | Statement::Loop(_, _, _, ref cc) | Statement::After(_, ref cc) | Statement::Before(_, ref cc) | Statement::Effect(_, ref cc) => cc.clone().update(c),
-        };*/
         match self {
             Statement::FunctionDeclaration(
                 _func_name,
