@@ -71,12 +71,15 @@ impl InterpreterFactory for RhaiInterpreterFactory {
     fn check(&self, script: &Script) -> CompilationState {
         match Engine::new_raw().compile(script.content()) {
             Ok(_ast) => CompilationState::Parsed(None),
-            Err(e) => CompilationState::Error(CompilationError {
-                lang: self.name().to_owned(),
-                info: e.to_string(),
-                from: 0,
-                to: 0,
-            }),
+            Err(e) => {
+                let line = e.1.line().unwrap_or(0);
+                CompilationState::Error(CompilationError {
+                    lang: self.name().to_owned(),
+                    info: e.0.to_string(),
+                    from: line,
+                    to: line,
+                })
+            }
         }
     }
 }
