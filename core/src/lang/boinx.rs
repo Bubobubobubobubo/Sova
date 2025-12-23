@@ -56,12 +56,12 @@ impl BoinxLine {
         dur: TimeSpan,
         device: usize,
         channel: &VariableValue,
-    ) -> Vec<ConcreteEvent> {
+    ) -> Option<ConcreteEvent> {
         if let BoinxItem::Previous = item {
             if let Some(prev) = self.previous.clone() {
                 return self.execute_item(ctx, &prev, dur, device, channel);
             }
-            return Vec::new();
+            return None;
         };
         self.previous = Some(item.clone());
 
@@ -70,7 +70,7 @@ impl BoinxLine {
         match item {
             BoinxItem::Note(n) => {
                 let channel = channel.as_integer(ctx.clock, ctx.frame_len) as u64;
-                vec![ConcreteEvent::MidiNote(*n as u64, 90, channel, dur, device)]
+                Some(ConcreteEvent::MidiNote(*n as u64, 90, channel, dur, device))
             }
             BoinxItem::ArgMap(map) => {
                 let mut map : HashMap<String, VariableValue> = 
@@ -90,9 +90,9 @@ impl BoinxLine {
                 } else {
                     String::new()
                 };
-                vec![ConcreteEvent::Generic(map.into(), dur, addr, device)]
+                Some(ConcreteEvent::Generic(map.into(), dur, addr, device))
             }
-            _ => Vec::new(),
+            _ => None,
         }
     }
 
@@ -191,8 +191,9 @@ impl BoinxLine {
                 item => {
                     for device in devices.iter() {
                         for channel in channels.iter() {
-                            let vec = self.execute_item(ctx, &item, dur, *device, channel);
-                            self.out_buffer.append(&mut vec.into());
+                            if let Some(ev) = self.execute_item(ctx, &item, dur, *device, channel) {
+                                self.out_buffer.push_back(ev);
+                            }
                         }
                     }
                 }
