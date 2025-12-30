@@ -117,7 +117,8 @@ impl MIDIMessage {
     /// System messages (Start, Stop, etc.) are sent on channel 0.
     pub fn generate_messages(
         event: ConcreteEvent,
-        date: SyncTime
+        date: SyncTime,
+        epsilon: SyncTime
     ) -> Vec<(ProtocolPayload, SyncTime)> {
         match event {
             ConcreteEvent::MidiNote(note, vel, chan, dur, _device_id) => {
@@ -139,7 +140,7 @@ impl MIDIMessage {
                                 velocity: vel as u8,
                             },
                             channel: midi_chan,
-                        }.into(), date + 1
+                        }.into(), date + epsilon
                     ),
                     // NoteOff
                     (
@@ -149,7 +150,7 @@ impl MIDIMessage {
                                 velocity: 0,
                             },
                             channel: midi_chan,
-                        }.into(), date + dur,
+                        }.into(), date + dur - epsilon,
                     ),
                 ]
             }
@@ -274,7 +275,7 @@ impl MIDIMessage {
                     VariableValue::Integer(i) => {
                         Self::generate_messages(
                             ConcreteEvent::MidiNote(i as u64, 90, midi_chan, duration, _device_id), 
-                            date,
+                            date, epsilon
                         )
                     }
                     VariableValue::Map(mut map) => {
@@ -286,7 +287,10 @@ impl MIDIMessage {
                             VariableValue::Integer(i) => i as u64,
                             _ => 90
                         };
-                        Self::generate_messages(ConcreteEvent::MidiNote(note, velocity, midi_chan, duration, _device_id), date)
+                        Self::generate_messages(
+                            ConcreteEvent::MidiNote(note, velocity, midi_chan, duration, _device_id),
+                            date, epsilon
+                        )
                     },
                     _ => Vec::new()
                 }

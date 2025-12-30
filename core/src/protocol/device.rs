@@ -307,8 +307,8 @@ impl ProtocolDevice {
             ProtocolDevice::DoughOutDevice(_) => {
                 todo!()
             }
-            ProtocolDevice::MIDIOutDevice(_) => {
-                MIDIMessage::generate_messages(event, date)
+            ProtocolDevice::MIDIOutDevice(midi_out) => {
+                MIDIMessage::generate_messages(event, date, midi_out.epsilon)
             }
             ProtocolDevice::Log => {
                 // Should be unreachable due to the initial check, but kept defensively.
