@@ -417,7 +417,9 @@ impl BoinxItem {
             ),
             BoinxItem::Negative(item) => item.atomic_items_mut(),
             BoinxItem::WithDuration(item, _) => item.atomic_items_mut(),
-            BoinxItem::Mute => Box::new(iter::empty()),
+            BoinxItem::Mute 
+            | BoinxItem::Stop 
+            | BoinxItem::Previous => Box::new(iter::empty()),
             _ => Box::new(iter::once(self)),
         }
     }
