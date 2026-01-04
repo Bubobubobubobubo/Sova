@@ -63,6 +63,12 @@ impl Instruction {
     }
 }
 
+impl From<ControlASM> for Instruction {
+    fn from(value: ControlASM) -> Self {
+        Instruction::Control(value)
+    }
+}
+
 /// Represents a sequence of instructions forming a complete program or function body.
 pub type Program = Vec<Instruction>;
 

@@ -941,6 +941,8 @@ pub enum Variable {
     Frame(String),
     Instance(String),
     Constant(VariableValue),
+    StackBack,
+    StackFront
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
