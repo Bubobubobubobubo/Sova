@@ -6,6 +6,7 @@ use std::collections::VecDeque;
 
 use super::variable::{Variable, VariableStore, VariableValue};
 
+/// Context that stores everything necessary for stateful script execution.
 #[derive(Serialize)]
 pub struct EvaluationContext<'a> {
     pub logic_date: SyncTime,
@@ -106,6 +107,7 @@ impl<'a> EvaluationContext<'a> {
     }
 }
 
+/// Used to partially construct a `EvaluationContext` step by step by rafining fields when known.
 #[derive(Default)]
 pub struct PartialContext<'a> {
     pub logic_date: SyncTime,
@@ -146,6 +148,7 @@ impl<'a> PartialContext<'a> {
             self.device_map.is_some()
     }
 
+    /// Creates another partial context sharing the same fields as its parent, but allowing override of some.
     pub fn child<'b>(&'b mut self) -> PartialContext<'b> 
         where 'a : 'b 
     {

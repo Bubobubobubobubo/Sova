@@ -14,6 +14,7 @@ use super::{
     variable::{Variable, VariableValue},
 };
 
+// SOON TO BE DEPRECATED !!!
 // Define public keys for storing oscillator state in line vars
 pub const SINE_PHASE_KEY: &str = "_sine_phase";
 pub const SINE_LAST_BEAT_KEY: &str = "_sine_last_beat";

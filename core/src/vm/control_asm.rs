@@ -24,9 +24,6 @@ use crate::protocol::ProtocolDevice;
 pub const DEFAULT_DEVICE : i64 = 1;
 pub const DEFAULT_CHAN : i64 = 1;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ControlASM {
     // Atomic operations
