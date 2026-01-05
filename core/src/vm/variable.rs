@@ -950,6 +950,12 @@ pub enum Variable {
     StackFront
 }
 
+impl Default for Variable {
+    fn default() -> Self {
+        VariableValue::default().into()
+    }
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub struct VariableStore {
     content: HashMap<String, VariableValue>,

@@ -26,7 +26,7 @@ pub const DEFAULT_CHAN : i64 = 1;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ControlASM {
-    Noop,
+    Nop,
     // Atomic operations
     // Atomic(Vec<ControlASM>) // executes in one step of the scheduler all the instructions in the vector
     // Arithmetic operations
@@ -131,7 +131,7 @@ impl ControlASM {
         current_prog: &Program,
     ) -> ReturnInfo {
         match self {
-            ControlASM::Noop => ReturnInfo::None,
+            ControlASM::Nop => ReturnInfo::None,
             // Arithmetic operations
             ControlASM::Add(x, y, z)
             | ControlASM::Div(x, y, z)

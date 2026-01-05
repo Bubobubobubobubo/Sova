@@ -1,6 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
-use rhai::{AST, Engine, Expr, Stmt, StmtBlock};
+use rhai::{AST, Engine, Expr, FnCallExpr, Stmt, StmtBlock, Token};
 
 use crate::{
     clock::{NEVER, SyncTime}, compiler::{CompilationError, CompilationState, Compiler}, log_debug, log_println, scene::script::Script, vm::{
@@ -13,20 +13,33 @@ pub struct RhaiCompiler;
 
 impl RhaiCompiler {
 
-    pub fn push_expr(compiled: &mut Program, expr: &Expr, lhs: bool) -> Variable {
+    pub fn write_fn_call(compiled: &mut Program, call: &FnCallExpr) {
+        match call.op_token {
+            Some(Token::Plus) => {}
+            _ => {
+                let name = call.name.to_string();
+                for arg in call.args.iter().rev() {
+                    Self::push_expr(compiled, arg, false, true);
+                }
+                compiled.push(ControlASM::CallFunction(Variable::Instance(name)).into());
+            }
+        }
+    }
+
+    pub fn push_expr(compiled: &mut Program, expr: &Expr, lhs: bool, force_push: bool) -> Option<Variable> {
         let mut ret = Variable::StackBack;
         match expr {
             Expr::DynamicConstant(dynamic, _) => todo!(),
-            Expr::BoolConstant(b, _) => ret = Variable::Constant((*b).into()),
-            Expr::IntegerConstant(i, _) => ret = Variable::Constant((*i).into()),
-            Expr::FloatConstant(f, _) => ret = Variable::Constant((**f).into()),
-            Expr::CharConstant(c, _) => ret = Variable::Constant(String::from(*c).into()),
-            Expr::StringConstant(string, _) => ret = Variable::Constant(string.to_string().into()),
+            Expr::BoolConstant(b, _) => ret = (*b).into(),
+            Expr::IntegerConstant(i, _) => ret = (*i).into(),
+            Expr::FloatConstant(f, _) => ret = (**f).into(),
+            Expr::CharConstant(c, _) => ret = String::from(*c).into(),
+            Expr::StringConstant(string, _) => ret = string.to_string().into(),
             Expr::InterpolatedString(thin_vec, _) => todo!(),
             Expr::Array(thin_vec, _) => todo!(),
             Expr::Map(_, _) => todo!(),
             Expr::Unit(_) => 
-                compiled.push(ControlASM::Push(Variable::Constant(Default::default())).into()),
+                compiled.push(ControlASM::Push(Default::default()).into()),
             Expr::Variable(ident, _non_zero, _) => 
                 compiled.push(ControlASM::Push(Variable::Instance(ident.1.to_string())).into()),
             Expr::ThisPtr(_) => todo!(),
@@ -35,7 +48,9 @@ impl RhaiCompiler {
             },
             Expr::MethodCall(fn_call_expr, _) => todo!(),
             Expr::Stmt(stmt_block) => todo!(),
-            Expr::FnCall(fn_call_expr, _) => todo!(),
+            Expr::FnCall(call, _) => {
+                Self::write_fn_call(compiled, call);
+            }
             Expr::Dot(binary_expr, astflags, _) => {
                 if let (Expr::Variable(ident, _, _), Expr::Property(prop, _)) = (&binary_expr.lhs, &binary_expr.rhs) {
                     match ident.1.as_str() {
@@ -55,13 +70,23 @@ impl RhaiCompiler {
             Expr::Custom(custom_expr, _) => todo!(),
             _ => todo!(),
         };
-        ret
+        if ret == Variable::StackBack {
+            None
+        } else {
+            if force_push {
+                compiled.push(ControlASM::Push(ret).into());
+                return None;
+            }
+            Some(ret)
+        }
     }
 
     pub fn write_stmt_block<'a>(compiled: &'a mut Program, block: impl Iterator<Item = &'a Stmt>) {
+        let mut redefinitions : BTreeSet<String> = BTreeSet::new();
+        let mut compiled_block = Program::new();
         for stmt in block {
             match stmt {
-                Stmt::Noop(_) => compiled.push(ControlASM::Noop.into()),
+                Stmt::Noop(_) => compiled_block.push(ControlASM::Nop.into()),
                 Stmt::If(flow_control, _) => todo!(),
                 Stmt::Switch(control, _) => todo!(),
                 Stmt::While(flow_control, _) => todo!(),
@@ -69,31 +94,31 @@ impl RhaiCompiler {
                 Stmt::For(control, _) => todo!(),
                 Stmt::Var(def, _astflags, _) => {
                     let name = def.0.name.to_string();
-                    let res = Self::push_expr(compiled, &def.1, false);
-                    compiled.push(match res {
-                        Variable::StackBack => ControlASM::Pop(Variable::Instance(name)),
-                        res => ControlASM::Mov(res, Variable::Instance(name))
+                    let res = Self::push_expr(&mut compiled_block, &def.1, false, false);
+                    compiled_block.push(match res {
+                        None => ControlASM::Pop(Variable::Instance(name)),
+                        Some(res) => ControlASM::Mov(res, Variable::Instance(name))
                     }.into());
                 }
                 Stmt::Assignment(assign) => todo!(),
-                Stmt::FnCall(fn_call_expr, _) => todo!(),
+                Stmt::FnCall(call, _) => {
+                    Self::write_fn_call(&mut compiled_block, call);
+                }
                 Stmt::Block(stmt_block) => todo!(),
                 Stmt::TryCatch(flow_control, _) => todo!(),
                 Stmt::Expr(expr) => todo!(),
                 Stmt::BreakLoop(expr, astflags, _) => todo!(),
                 Stmt::Return(expr, _astflags, _) => {
                     if let Some(expr) = expr {
-                        let res = Self::push_expr(compiled, &expr, false);
-                        if res != Variable::StackBack {
-                            compiled.push(ControlASM::Push(res).into());
-                        }
+                        Self::push_expr(&mut compiled_block, &expr, false, true);
                     }
-                    compiled.push(ControlASM::Return.into());
+                    compiled_block.push(ControlASM::Return.into());
                 }
                 Stmt::Share(small_vec) => todo!(),
                 _ => todo!(),
             }
         }
+        compiled.append(&mut compiled_block);
     }
 
     pub fn link_calls(compiled: &mut Program, calls: Vec<(usize, String)>, defs: &BTreeMap<String, usize>) 
