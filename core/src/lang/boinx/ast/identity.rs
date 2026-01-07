@@ -100,7 +100,7 @@ pub struct BoinxIdent(pub String, pub BoinxIdentQualif);
 impl BoinxIdent {
     pub fn load_item(
         &self,
-        ctx: &EvaluationContext,
+        ctx: &mut EvaluationContext,
         forbidden: &mut BTreeSet<BoinxIdent>,
     ) -> BoinxItem {
         use BoinxIdentQualif::*;

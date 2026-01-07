@@ -24,11 +24,9 @@ use crate::protocol::ProtocolDevice;
 pub const DEFAULT_DEVICE : i64 = 1;
 pub const DEFAULT_CHAN : i64 = 1;
 
-#[cfg(test)]
-mod tests;
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum ControlASM {
+    Nop,
     // Atomic operations
     // Atomic(Vec<ControlASM>) // executes in one step of the scheduler all the instructions in the vector
     // Arithmetic operations
@@ -74,6 +72,8 @@ pub enum ControlASM {
     // Stack operations
     Push(Variable),
     Pop(Variable),
+    PushFront(Variable),
+    PopFront(Variable),
     MapEmpty(Variable),
     MapInsert(Variable, Variable, Variable, Variable),
     MapGet(Variable, Variable, Variable),
@@ -131,6 +131,7 @@ impl ControlASM {
         current_prog: &Program,
     ) -> ReturnInfo {
         match self {
+            ControlASM::Nop => ReturnInfo::None,
             // Arithmetic operations
             ControlASM::Add(x, y, z)
             | ControlASM::Div(x, y, z)
@@ -300,6 +301,19 @@ impl ControlASM {
                 }
                 ReturnInfo::None
             }
+            ControlASM::PushFront(x) => {
+                let value = ctx.evaluate(x);
+                ctx.stack.push_front(value);
+                ReturnInfo::None
+            }
+            ControlASM::PopFront(x) => {
+                if let Some(value) = ctx.stack.pop_front() {
+                    ctx.set_var(x, value);
+                } else {
+                    log_eprintln!("[!] Runtime Error: Pop from empty stack into Var {:?}", x);
+                }
+                ReturnInfo::None
+            }
             ControlASM::MapEmpty(v) => {
                 let map = VariableValue::Map(HashMap::new());
                 ctx.set_var(v, map);
@@ -323,8 +337,8 @@ impl ControlASM {
                 ReturnInfo::None
             }
             ControlASM::MapGet(map, key, res) => {
-                let map_value = ctx.value_ref(map);
                 let key_value = ctx.evaluate(key).as_str(ctx.clock, ctx.frame_len);
+                let map_value = ctx.value_ref(map);
 
                 let value = if let Some(VariableValue::Map(map)) = map_value {
                     map.get(&key_value).cloned().unwrap_or_default()
@@ -337,8 +351,8 @@ impl ControlASM {
                 ReturnInfo::None
             }
             ControlASM::MapHas(map, key, res) => {
-                let map_value = ctx.value_ref(map);
                 let key_value = ctx.evaluate(key).as_str(ctx.clock, ctx.frame_len);
+                let map_value = ctx.value_ref(map);
 
                 let value = if let Some(VariableValue::Map(map)) = map_value {
                     map.contains_key(&key_value)

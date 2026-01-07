@@ -108,7 +108,7 @@ impl BoinxItem {
 
     pub fn evaluate_vars(
         &self,
-        ctx: &EvaluationContext,
+        ctx: &mut EvaluationContext,
         forbidden: &mut BTreeSet<BoinxIdent>,
     ) -> BoinxItem {
         match self {

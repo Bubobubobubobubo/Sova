@@ -18,6 +18,7 @@ pub use position::*;
 
 pub use parser::parse_boinx;
 
+/// Represents a single Line of execution in Boinx, with a starting date, and a timespan.
 pub struct BoinxLine {
     pub start_date: SyncTime,
     pub time_span: TimeSpan,
@@ -149,6 +150,7 @@ impl BoinxLine {
         prog_lines
     }
 
+    /// Updates the position of the line, and refresh the buffer of events with newly triggered ones.
     pub fn update(&mut self, ctx: &mut EvaluationContext) -> Vec<BoinxLine> {
         let date = ctx.logic_date;
         if !self.ready(date) {
@@ -189,19 +191,31 @@ impl BoinxLine {
                     self.finished = true;
                 }
                 item => {
-                    for device in devices.iter() {
-                        for channel in channels.iter() {
-                            if let Some(ev) = self.execute_item(ctx, &item, dur, *device, channel) {
-                                self.out_buffer.push_back(ev);
-                            }
-                        }
-                    }
+                    self.execute_for_each_target(ctx, item, dur, &devices, &channels);
                 }
             }
         }
         new_lines
     }
 
+    fn execute_for_each_target(
+        &mut self,
+        ctx: &mut EvaluationContext,
+        item: BoinxItem, 
+        dur: TimeSpan,
+        devices: &[usize],
+        channels: &[VariableValue]
+    ) {
+        for device in devices.iter() {
+            for channel in channels.iter() {
+                if let Some(ev) = self.execute_item(ctx, &item, dur, *device, channel) {
+                    self.out_buffer.push_back(ev);
+                }
+            }
+        }
+    }
+
+    /// Pop the next event that should be executed
     pub fn get_event(&mut self) -> Option<ConcreteEvent> {
         self.out_buffer.pop_front()
     }
@@ -215,10 +229,11 @@ impl BoinxLine {
     }
 }
 
+/// Interpreter for a Boinx program.
 pub struct BoinxInterpreter {
-    pub prog: BoinxProg,
-    pub execution_lines: Vec<BoinxLine>,
-    pub started: bool,
+    prog: BoinxProg,
+    execution_lines: Vec<BoinxLine>,
+    started: bool,
 }
 
 impl Interpreter for BoinxInterpreter {
@@ -265,6 +280,7 @@ impl From<BoinxProg> for BoinxInterpreter {
     }
 }
 
+/// Factory to generate BoinxInterpreters from Boinx code.
 pub struct BoinxInterpreterFactory;
 
 impl InterpreterFactory for BoinxInterpreterFactory {
