@@ -147,15 +147,16 @@ impl RhaiCompiler {
         let mut compiled_block = Program::new();
         let mut breaks : Vec<usize> = Vec::new();
         let mut continues : Vec<usize> = Vec::new();
-        compiled_block.push(ControlASM::Mov(Default::default(), Variable::reg(RETURN_REGISTER)).into());
+        let ret = Variable::reg(RETURN_REGISTER);
+        compiled_block.push(ControlASM::Mov(Default::default(), ret.clone()).into());
         for stmt in block {
             match stmt {
                 Stmt::Noop(_) => (),
                 Stmt::If(flow_control, _) => {
                     let mut body = Program::new();
                     let mut branch = Program::new();
-                    let ret1 = Self::write_stmt_block(&mut body, flow_control.body.iter());
-                    let ret2 = Self::write_stmt_block(&mut branch, flow_control.branch.iter());
+                    Self::write_stmt_block(&mut body, flow_control.body.iter());
+                    Self::write_stmt_block(&mut branch, flow_control.branch.iter());
                     let branch_size = branch.len() as i64;
                     body.push(ControlASM::RelJump(branch_size + 1).into());
                     let body_size = body.len() as i64;
@@ -194,15 +195,17 @@ impl RhaiCompiler {
                 Stmt::For(control, _) => todo!(),
                 Stmt::Var(def, _astflags, _) => {
                     let name = def.0.name.to_string();
+                    let target = Variable::Instance(name.clone());
                     if def.2.is_some() { // Redefinition
-                        compiled_block.push(ControlASM::Push(Variable::Instance(name.clone())).into());
-                        redefinitions.push(name.clone());
+                        compiled_block.push(ControlASM::Push(target.clone()).into());
+                        redefinitions.push(name);
                     }
                     let res = Self::push_expr(&mut compiled_block, &def.1, false);
                     compiled_block.push(match res {
-                        Variable::StackBack => ControlASM::Pop(Variable::Instance(name)),
-                        res => ControlASM::Mov(res, Variable::Instance(name))
-                    }.into()); 
+                        Variable::StackBack => ControlASM::Pop(target.clone()),
+                        res => ControlASM::Mov(res, target.clone())
+                    }.into());
+                    compiled_block.push(ControlASM::Mov(target, ret.clone()).into());
                 }
                 Stmt::Assignment(assign) => {
                     let rhs = Self::push_expr(&mut compiled_block, &assign.1.rhs, false);
